@@ -197,7 +197,7 @@ export default function QuotationDetailScreen() {
             const data = await response.json();
             console.log('Workflow Action Response:', data);
 
-            if (response.ok && data.status === 'success') {
+            if (response.ok) {
                 const statusLower = newStatus.toLowerCase();
                 if (statusLower === 'pending' || statusLower === 'approved') {
                     const notifyTitle = statusLower === 'pending' ? "Waiting for Approval" : "Quotation Approved";

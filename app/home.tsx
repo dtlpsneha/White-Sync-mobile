@@ -25,19 +25,37 @@ export default function HomeScreen() {
         clients: 0,
         totalValue: '0'
     });
+    const [lastSeenPendingIds, setLastSeenPendingIds] = useState<string[]>([]);
+
 
     useEffect(() => {
         loadData();
+
+        // Polling for new pending quotations
+        const interval = setInterval(() => {
+            checkForNewPending();
+        }, 60000); // Check every minute
+
+        return () => clearInterval(interval);
     }, []);
+
 
     const loadData = async () => {
         setLoading(true);
         const hasSession = await checkSession();
         if (hasSession) {
+            // Load persisted IDs first
+            const stored = await SecureStore.getItemAsync('last_seen_pending_ids');
+            if (stored) {
+                setLastSeenPendingIds(JSON.parse(stored));
+            }
             await Promise.all([loadUserData(), fetchStats()]);
+            // Run initial check to populate/update IDs
+            await checkForNewPending();
         }
         setLoading(false);
     };
+
 
     const checkSession = async () => {
         const session = await SecureStore.getItemAsync('session_cookies');
@@ -123,6 +141,53 @@ export default function HomeScreen() {
             console.error('Error fetching stats:', error);
         }
     };
+
+    const checkForNewPending = async () => {
+        try {
+            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
+            if (!sessionCookies) return;
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Cookie': sessionCookies
+            };
+
+            // Fetch Pending quotations from server
+            const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=["name","customer_name","grand_total","currency"]&filters=[["workflow_state","=","Pending"]]&limit_page_length=20`;
+            const res = await fetch(url, { headers });
+            const data = await res.json();
+
+            if (data.data && data.data.length > 0) {
+                const currentPendingIds = data.data.map((q: any) => q.name);
+
+                // If we have previous seen IDs, check for new ones
+                if (lastSeenPendingIds.length > 0) {
+                    const newQuotes = data.data.filter((q: any) => !lastSeenPendingIds.includes(q.name));
+
+                    if (newQuotes.length > 0) {
+                        console.log(`[Home] Found ${newQuotes.length} NEW pending quotations!`);
+
+                        for (const quote of newQuotes) {
+                            await notificationService.postLocalNotification(
+                                "New Pending Quotation",
+                                `New quotation ${quote.name} for ${quote.customer_name} requires your approval.`,
+                                { id: quote.name },
+                                "QUOTATION_WORKFLOW"
+                            );
+                        }
+                    }
+                }
+
+                // Update seen IDs and persist
+                setLastSeenPendingIds(currentPendingIds);
+                await SecureStore.setItemAsync('last_seen_pending_ids', JSON.stringify(currentPendingIds));
+            }
+        } catch (error) {
+
+            console.warn('[Home] Background check failed:', error);
+        }
+    };
+
 
     const handleLogout = async () => {
         Alert.alert(
