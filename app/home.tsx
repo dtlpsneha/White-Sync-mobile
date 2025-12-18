@@ -47,9 +47,15 @@ export default function HomeScreen() {
             // Load persisted IDs first
             const stored = await SecureStore.getItemAsync('last_seen_pending_ids');
             if (stored) {
-                setLastSeenPendingIds(JSON.parse(stored));
+                try {
+                    setLastSeenPendingIds(JSON.parse(stored));
+                } catch (e) {
+                    console.warn('[Home] Failed to parse stored IDs:', e);
+                    setLastSeenPendingIds([]);
+                }
             }
             await Promise.all([loadUserData(), fetchStats()]);
+
             // Run initial check to populate/update IDs
             await checkForNewPending();
         }
@@ -152,12 +158,24 @@ export default function HomeScreen() {
                 'Cookie': sessionCookies
             };
 
-            // Fetch Pending quotations from server
-            const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=["name","customer_name","grand_total","currency"]&filters=[["workflow_state","=","Pending"]]&limit_page_length=20`;
+            console.log('[Home-Watcher] Checking for new pending/open quotations...');
+
+            // Fetch both Pending workflow state and Open status
+            // Use or_filters to catch both cases
+            const fields = JSON.stringify(["name", "customer_name", "grand_total", "currency", "workflow_state", "status"]);
+            const filters = JSON.stringify([["docstatus", "=", 0]]); // Drafts
+            const orFilters = JSON.stringify([
+                ["workflow_state", "=", "Pending"],
+                ["status", "=", "Open"]
+            ]);
+
+            const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=${encodeURIComponent(fields)}&filters=${encodeURIComponent(filters)}&or_filters=${encodeURIComponent(orFilters)}&order_by=creation desc&limit_page_length=20`;
+
             const res = await fetch(url, { headers });
             const data = await res.json();
 
             if (data.data && data.data.length > 0) {
+
                 const currentPendingIds = data.data.map((q: any) => q.name);
 
                 // If we have previous seen IDs, check for new ones
