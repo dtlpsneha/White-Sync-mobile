@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "whitesync",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -51,7 +51,7 @@
         {
           "android": {
             "usesCleartextTraffic": true,
-            "kotlinVersion": "2.0.21"
+            "kotlinVersion": "2.1.21"
           }
         }
       ]
