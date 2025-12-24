@@ -6,10 +6,19 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import QuotationList from '@/components/QuotationList';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors } from '@/constants/theme';
+import { FloatingNav } from '@/components/FloatingNav';
+import { s, vs, ms } from '../../utils/responsive';
 
 export default function QuotationListScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
+    const colorScheme = useColorScheme();
+    const theme = colorScheme ?? 'light';
+    const colors = Colors[theme];
+    const styles = getStyles(theme);
+
     const [filter, setFilter] = useState((params.filter as string) || 'All');
     const [searchQuery, setSearchQuery] = useState('');
     const [workflowStates, setWorkflowStates] = useState<string[]>(['All']);
@@ -24,20 +33,57 @@ export default function QuotationListScreen() {
             const headers: HeadersInit = { 'Content-Type': 'application/json' };
             if (sessionCookies) headers['Cookie'] = sessionCookies;
 
-            // Fetch all quotations to get distinct workflow states
-            const fields = JSON.stringify(["workflow_state"]);
-            const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=${encodeURIComponent(fields)}&limit_page_length=500`;
+            const showAllStr = await SecureStore.getItemAsync('show_all_quotes');
+            const showAll = showAllStr === 'true';
 
-            const response = await fetch(url, { headers });
+            // Fetch all quotations to get distinct workflow states via new API
+            const url = `http://13.234.62.39:8080/api/method/get_quote_resource`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    show_quotation_type: showAll ? 'all' : 'respective_user'
+                })
+            });
             const data = await response.json();
 
-            if (response.ok && data.data) {
-                const states = data.data
-                    .map((q: any) => q.workflow_state)
-                    .filter((state: string) => state && state.trim() !== '')
-                    .filter((value: string, index: number, self: string[]) => self.indexOf(value) === index)
+            // Handle different response structures for robustness
+            let quotes: any[] = [];
+            if (Array.isArray(data.message)) quotes = data.message;
+            else if (data.message && Array.isArray(data.message.data)) quotes = data.message.data;
+
+            if (quotes && quotes.length > 0) {
+                const states: string[] = quotes
+                    .reduce((acc: string[], q: any) => {
+                        const ws = q.workflow_state;
+                        const s = q.status === 'Open' ? 'Pending' : q.status;
+                        const displayStatus = ws || s;
+                        if (displayStatus && !acc.includes(displayStatus)) acc.push(displayStatus);
+                        return acc;
+                    }, [])
                     .sort();
-                setWorkflowStates(['All', ...states]);
+
+                // Ensure standard mockup states are always present in the collection if needed
+                const mockupStates = ['Approved', 'Cancelled', 'Draft'];
+                mockupStates.forEach(s => {
+                    if (!states.includes(s)) states.push(s);
+                });
+
+                // Ensure a standard order if possible: All, Pending, Approved...
+                const priority = ['Pending', 'Approved', 'Cancelled', 'Draft', 'Review'];
+                const sortedStates = states.sort((a, b) => {
+                    const indexA = priority.indexOf(a);
+                    const indexB = priority.indexOf(b);
+                    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                    if (indexA !== -1) return -1;
+                    if (indexB !== -1) return 1;
+                    return a.localeCompare(b);
+                });
+
+                setWorkflowStates(['All', ...sortedStates]);
+            } else {
+                // If no quotes at all, show the standard filters from mockup
+                setWorkflowStates(['All', 'Approved', 'Cancelled', 'Draft']);
             }
         } catch (error) {
             console.error('Error fetching workflow states:', error);
@@ -48,43 +94,39 @@ export default function QuotationListScreen() {
         <View style={styles.container}>
             <StatusBar style="dark" />
 
-            {/* Custom Header */}
+            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#1C1C1E" />
+                <TouchableOpacity onPress={() => router.replace('/home')} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color="#000" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Quotations</Text>
-                <View style={{ width: 24 }} />
+                <View style={{ width: 40 }} />
             </View>
 
             {/* Search Bar */}
             <View style={styles.searchContainer}>
-                <Ionicons name="search-outline" size={20} color="#8E8E93" style={styles.searchIcon} />
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search quotations..."
-                    placeholderTextColor="#8E8E93"
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    returnKeyType="search"
-                />
-                {searchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => { setSearchQuery(''); Keyboard.dismiss(); }}>
-                        <Ionicons name="close-circle" size={20} color="#8E8E93" />
-                    </TouchableOpacity>
-                )}
+                <View style={styles.searchInner}>
+                    <Ionicons name="search-outline" size={20} color="#90A4AE" style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search quotations..."
+                        placeholderTextColor="#90A4AE"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
             </View>
 
-            {/* Scrolling Filter Pills */}
-            <View style={styles.filterWrapper}>
-                <FlatList
+            {/* Filter Pills */}
+            <View style={styles.filterBarContainer}>
+                <RNScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    data={workflowStates}
-                    contentContainerStyle={styles.filterContainer}
-                    keyExtractor={item => item}
-                    renderItem={({ item }) => (
+                    contentContainerStyle={styles.filterScrollContent}
+                >
+                    {workflowStates.map((item) => (
                         <TouchableOpacity
+                            key={item}
                             style={[styles.filterPill, filter === item && styles.filterPillActive]}
                             onPress={() => setFilter(item)}
                         >
@@ -92,94 +134,103 @@ export default function QuotationListScreen() {
                                 {item}
                             </Text>
                         </TouchableOpacity>
-                    )}
-                />
+                    ))}
+                </RNScrollView>
             </View>
 
-            {/* Reusable List */}
+            {/* List */}
             <View style={styles.listContainer}>
                 <QuotationList filter={filter} searchQuery={searchQuery} scrollEnabled={true} />
             </View>
+
+            <FloatingNav />
         </View>
     );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F7F8FA',
-    },
-    header: {
-        backgroundColor: '#FFF',
-        paddingTop: 60,
-        paddingBottom: 16,
-        paddingHorizontal: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F5',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1C1C1E',
-    },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF',
-        marginHorizontal: 20,
-        marginBottom: 12,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E9ECEF',
-        height: 48,
-    },
-    searchIcon: {
-        marginRight: 8,
-    },
-    searchInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1C1C1E',
-        height: '100%',
-    },
-    filterWrapper: {
-        backgroundColor: 'transparent', // Changed from #FFF for better flow if needed, or keep #FFF
-        paddingBottom: 12,
-        marginBottom: 8,
-    },
-    filterContainer: {
-        paddingHorizontal: 20,
-        gap: 12,
-    },
-    filterPill: {
-        paddingVertical: 8,
-        paddingHorizontal: 20,
-        borderRadius: 24,
-        backgroundColor: '#F5F7FA',
-        borderWidth: 1,
-        borderColor: '#E9ECEF',
-    },
-    filterPillActive: {
-        backgroundColor: '#0056D2',
-        borderColor: '#0056D2',
-    },
-    filterText: {
-        color: '#666',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    filterTextActive: {
-        color: '#FFF',
-    },
-    listContainer: {
-        flex: 1,
-        paddingHorizontal: 20,
-    }
-});
+import { ScrollView as RNScrollView } from 'react-native';
+
+function getStyles(theme: 'light' | 'dark') {
+    return StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: '#F8F9FA',
+        },
+        header: {
+            backgroundColor: '#FFF',
+            paddingTop: vs(50),
+            paddingBottom: vs(15),
+            paddingHorizontal: s(20),
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+        },
+        backButton: {
+            width: 40,
+            height: 40,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        headerTitle: {
+            fontSize: ms(20),
+            fontWeight: '600',
+            color: '#000',
+        },
+        searchContainer: {
+            backgroundColor: '#FFF',
+            paddingHorizontal: 20,
+            paddingBottom: 15,
+        },
+        searchInner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#FFF',
+            borderRadius: ms(25),
+            borderWidth: 1,
+            borderColor: '#E1E4E8',
+            height: vs(50),
+            paddingHorizontal: s(15),
+        },
+        searchIcon: {
+            marginRight: 10,
+        },
+        searchInput: {
+            flex: 1,
+            fontSize: 16,
+            color: '#000',
+        },
+        filterBarContainer: {
+            backgroundColor: '#FFF',
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderBottomColor: '#F0F0F0',
+        },
+        filterScrollContent: {
+            paddingHorizontal: 20,
+            gap: 10,
+        },
+        filterPill: {
+            paddingVertical: vs(8),
+            paddingHorizontal: s(20),
+            borderRadius: ms(25),
+            backgroundColor: '#F1F3F5',
+            borderWidth: 1,
+            borderColor: '#E9ECEF',
+        },
+        filterPillActive: {
+            backgroundColor: '#0055D4', // Blue from mockup
+            borderColor: '#0055D4',
+        },
+        filterText: {
+            color: '#495057',
+            fontWeight: '500',
+            fontSize: 14,
+        },
+        filterTextActive: {
+            color: '#FFF',
+        },
+        listContainer: {
+            flex: 1,
+        }
+    });
+}

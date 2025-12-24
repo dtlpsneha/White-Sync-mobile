@@ -1,0 +1,16 @@
+﻿Running 17 checks on your project...
+15/17 checks passed. 2 checks failed. Possible issues detected:
+Use the --verbose flag to see more details about passed checks.
+
+Γ£û Check for legacy global CLI installed locally
+EAS CLI should not be installed in your project. Instead, install it globally or use "npx", "pnpx", or "bunx" depending on your preferred package manager.
+Advice:
+Remove eas-cli from your project dependencies.
+
+Γ£û Check that required peer dependencies are installed
+Missing peer dependency: react-native-worklets
+Required by: react-native-reanimated
+Advice:
+Install missing required peer dependency with "npx expo install react-native-worklets"
+Your app may crash outside of Expo Go without this dependency. Native module peer dependencies must be installed directly.
+

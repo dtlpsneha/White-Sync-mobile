@@ -7,6 +7,8 @@ Notifications.setNotificationHandler({
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
     }),
 });
 
@@ -16,12 +18,13 @@ export const notificationService = {
      */
     async postLocalNotification(title: string, body: string, data: any = {}, categoryId: string = "default") {
         try {
-            console.log(`[NotificationService] Posting: "${title}" - "${body}"`);
-
             const finalTitle = String(title || "Quotation Update").trim();
             const finalBody = String(body || "A quotation requires your attention.").trim();
 
-            console.log(`[NotificationService] Posting: "${finalTitle}" - "${finalBody}"`);
+            console.log(`[NotificationService] 🔔 Posting Notification:
+            Title: "${finalTitle}"
+            Body: "${finalBody}"
+            Data: ${JSON.stringify(data)}`);
 
             // Safety: Ensure channels are set up before posting
             await this.setupChannels();
@@ -37,9 +40,9 @@ export const notificationService = {
                 },
                 trigger: Platform.OS === 'android' ? { channelId: 'quotation-alerts' } : null,
             });
-            console.log('[NotificationService] Notification scheduled successfully');
+            console.log('[NotificationService] ✅ Notification scheduled successfully');
         } catch (error) {
-            console.error('[NotificationService] Failed to post local notification:', error);
+            console.error('[NotificationService] ❌ Failed to post local notification:', error);
         }
     },
 

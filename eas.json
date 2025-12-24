@@ -1,17 +1,20 @@
 {
     "cli": {
-        "version": ">= 0.52.0",
-        "appVersionSource": "local"
+        "version": ">= 16.28.0"
     },
     "build": {
         "development": {
             "developmentClient": true,
-            "distribution": "internal"
+            "distribution": "internal",
+            "android": {
+                "image": "latest"
+            }
         },
         "preview": {
             "distribution": "internal",
             "android": {
-                "buildType": "apk"
+                "buildType": "apk",
+                "image": "latest"
             }
         },
         "production": {}

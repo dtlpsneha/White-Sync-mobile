@@ -1,0 +1,43 @@
+[
+  {
+    "id": "753fa7f0-be3b-4849-92a7-324f54b81e72",
+    "status": "IN_PROGRESS",
+    "platform": "ANDROID",
+    "artifacts": {},
+    "fingerprint": {
+      "id": "490b01a0-90e8-4fde-8db3-23f0ed46377b",
+      "hash": "b5ccc3fa123f921967de17684d13a59de5ec3e14"
+    },
+    "initiatingActor": {
+      "id": "2958d5e4-339e-4aaf-abc0-bc4d5cbd359f",
+      "displayName": "sasikumar2005"
+    },
+    "logFiles": [
+      "https://job-logs.eascdn.net/production/753fa7f0-be3b-4849-92a7-324f54b81e72/1766138668144-06b19052-bbb6-4d59-92b5-55de88ab5d1e.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20251219%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20251219T102600Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=af15a4e6f91432fd114c45a62d69e2e17d399b1a742cca0c3b8787786b46e4ac9cc9b9c4b1a2e908f306693f9f9d75584baba0bd10e3a7b0e6692596182d7f72ea6b97124824848d5c4113627208a229cff888a629a27a31668c23d31db3d4ca94f5542e75286a7a2eeed2d134ce8796fda4b7f8dc43ce60e8599e6fee89b2823389b347a61f84d5633193c5ccabc98af8e2400df209bd0d8b358eb64a94cdb949231c00e87930197e0204d3a8148355684677f2917b53e137f700cc417cf183329157e4805246f0a79bc624298656c7b6e318e59e234f6e51a5455b3e44077683f81a49bcaae1e9fe9acbfe8b0eaf58f4b8beac21de8887c5f21cd7ca7f6e84",
+      "https://job-logs.eascdn.net/production/753fa7f0-be3b-4849-92a7-324f54b81e72/1766138926714-ba7ff379-c55b-489e-ae07-44b01d27bbb2.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20251219%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20251219T102600Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=85c322f0c3a3b4955e75d038f72b55f956c9543e427b59f55f6e3e44b3b5086c4da7996ec5101518e79eed151a96adf0f804263351db133637805328db11378efe4752a958be3ddb404a5d4c57fe9cb41372ba87a605b9d6c8e95e97a4c17bc888c0dc6255bc2e03844b40c75dc03122143e392ce74e259bbd7b8d53c6be460ac209161b8752419586736899eed1cf04f210315c815cff70efc585d84ff4cd265420bccbedc5aebae2d5d761645b63d81d035c347e880b450839ca79ed85bead2880b6b4bb2c730ada5b95cc859c62d382363ee290877f3a69d9a2e658f6ab4aae3deca5346682963f0a665abd8c579ef689bac80a7eb4c465257aea2272545d",
+      "https://job-logs.eascdn.net/production/753fa7f0-be3b-4849-92a7-324f54b81e72/1766138926941-d643fbef-f576-4cd7-993d-9469bb5d3da3.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20251219%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20251219T102600Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=0867fc417b8545145fb6578565c8246a4ffb7921d9095e2b418cad13296fd8056f7fcbaae077843066a547b9c5be1e02dc802f34afc912f031b61858f473000ea21cddb7476f0fa335799dde72b020d48224a78cd25f338931475226511aedfd2e9da805deeedf8bc19b5dcf8c660116be88d9f742e216b571241df544aa29b621ddf487ecc9a4936899043fad2f0e29bbcb0e9224194aaa40864cfe4c68d6a7a1c365e485b6d2e9312da8ce7e1d89e80a18707a3fa589dacda56a11b976f0a51129ce1dff0c2e2ac51dca9e7d87a5c0d4e3ea15beeffe401cf14202144bdeb8f5f424c3e78510538b4df2cdff88a489500f2ba8e8cb48d14b652871040e1660",
+      "https://job-logs.eascdn.net/production/753fa7f0-be3b-4849-92a7-324f54b81e72/1766138927134-426e897a-3ce7-4db9-a5d5-5577a0ba3b46.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20251219%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20251219T102600Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=4f0c7da65a14451baa6fe5d7d1dd8a8cf59b63a125a2675d4df700df01a715dc58d0bdaee3831696f07ec3f2655a5b3867269ab0cb7463c663ac8761c1790c620952a03c64d6bbe2681a202eee1b46ec1bcfb16c15a044dd9e87ba3afd6529a3d6d08f7ba6d584a743d20eac4f043979e073c36ba922c7010592abffcd140aa99640350fddf9d6a4683695ff8b77fd307c279085e391ad87b5bd76fd71147c84e0c4808bb9735132b3a1d134b3654f55a440c72125f8152ce8e7cbe1b91378563e16e804398f3f5eba32bf9ab35cafedc9a39e8c999f9262609f773270326972517be4dcc4658be66bf69be681927139cce36defc27faf4e5503af7eeb925b3d"
+    ],
+    "project": {
+      "id": "ed7c614c-e059-4629-a2e2-cae1bc505958",
+      "name": "White_Sync",
+      "slug": "White_Sync",
+      "ownerAccount": {
+        "id": "ba370eec-1ffb-4f59-8e0d-ab48549dac3c",
+        "name": "sasikumar2005"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "preview",
+    "sdkVersion": "54.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "1",
+    "gitCommitHash": "db3c086cbe6ca5eb84245ad198b0afdb963df748",
+    "gitCommitMessage": "Refine pending notification trigger and add more logging",
+    "priority": "NORMAL",
+    "createdAt": "2025-12-19T10:04:27.638Z",
+    "updatedAt": "2025-12-19T10:09:33.908Z",
+    "expirationDate": "2026-01-02T10:04:27.759Z",
+    "isForIosSimulator": false
+  }
+]
