@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "White_Sync",
+    "name": "White Sync",
     "slug": "White_Sync",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "whitesync",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -25,7 +25,6 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true,
       "package": "com.deeptech.whitesync"
     },
     "web": {
@@ -51,21 +50,24 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "kotlinVersion": "2.0.21"
           }
         }
-      ],
-      "expo-notifications"
+      ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e77e496d-4583-4ca7-aaa3-a23162d9185e"
+        "projectId": "f465bea0-2332-4001-9355-ed8059f4b472"
       }
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {}
   }
 }
