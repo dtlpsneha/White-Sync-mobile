@@ -51,7 +51,7 @@
         {
           "android": {
             "usesCleartextTraffic": true,
-            "kotlinVersion": "2.1.21"
+            "kotlinVersion": "2.1.20"
           }
         }
       ]
