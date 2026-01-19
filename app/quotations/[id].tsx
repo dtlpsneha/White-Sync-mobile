@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Defs, LinearGradient, Stop, Rect, Circle as SvgCircle } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import { notificationService } from '../../services/NotificationService';
 import * as Notifications from 'expo-notifications';
-import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeInDown, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { s, vs, ms } from '../../utils/responsive';
+import { useResponsive } from '../../hooks/useResponsive';
 
 interface QuotationDetail {
     name: string;
@@ -74,7 +75,9 @@ export default function QuotationDetailScreen() {
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const styles = getStyles(theme);
+    const isDark = theme === 'dark';
+    const { s, vs, ms } = useResponsive();
+    let styles = getStyles(theme, { s, vs, ms }, '#0288D1');
 
     const [quotation, setQuotation] = useState<QuotationDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -87,8 +90,38 @@ export default function QuotationDetailScreen() {
 
     const normalizedId = Array.isArray(id) ? id[0] : id;
 
-    // Rules from the Transition Image
-    // Rules from the Transition Image
+
+    // Animation
+    const scrollY = useSharedValue(0);
+    const scrollHandler = useAnimatedScrollHandler((event) => {
+        scrollY.value = event.contentOffset.y;
+    });
+
+    const headerTranslateY = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateY: interpolate(scrollY.value, [0, 200], [0, -210], Extrapolation.CLAMP) }],
+            opacity: interpolate(scrollY.value, [200, 250], [1, 0], Extrapolation.CLAMP)
+        };
+    });
+
+    const largeContentStyle = useAnimatedStyle(() => {
+        const opacity = interpolate(scrollY.value, [0, 80], [1, 0], Extrapolation.CLAMP);
+        const translateY = interpolate(scrollY.value, [0, 80], [0, -20], Extrapolation.CLAMP);
+
+        return {
+            opacity,
+            transform: [{ translateY }]
+        };
+    });
+
+    const miniHeaderStyle = useAnimatedStyle(() => {
+        return {
+            opacity: interpolate(scrollY.value, [140, 180], [0, 1], Extrapolation.CLAMP),
+            transform: [{ translateY: interpolate(scrollY.value, [140, 180], [20, 0], Extrapolation.CLAMP) }]
+        };
+    });
+
+    // Workflow Rules
     const WORKFLOW_RULES = [
         { state: 'Draft', action: 'Send To Approval', nextState: 'Pending', allowedRoles: ['Sales User', 'System Manager'], style: 'primary', icon: 'send-outline' },
         { state: 'Pending', action: 'Approve', nextState: 'Approved', allowedRoles: ['Sales Manager', 'System Manager', 'Administrator'], style: 'success', icon: 'checkmark-circle-outline' },
@@ -130,20 +163,12 @@ export default function QuotationDetailScreen() {
             const headers: HeadersInit = { 'Content-Type': 'application/json' };
             if (sessionCookies) headers['Cookie'] = sessionCookies;
 
-            // Fetch list of IDs sorted by creation desc (same as list view)
-            // Using standard resource API for simple ID list navigation for now 
-            // OR should we use get_quote_resource if navigation needs to be scoped? 
-            // Navigation usually is scoped. 
-            // Let's stick to resource API for navigation IDs to minimize risk, valid scopes are filtered in list anyway.
             const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=["name"]&order_by=creation desc&limit_page_length=500`;
             const response = await fetch(url, { headers });
             const data = await response.json();
 
             if (response.ok && data.data) {
                 const allIds = data.data.map((q: any) => q.name);
-                // We'll update neighbors whenever normalizedId changes
-                // But we need the list first. Storing list in ref might be better, or just recalculating here.
-                // For simplicity, let's just trigger updateNeighbors
                 updateNeighbors(allIds, normalizedId);
             }
         } catch (error) {
@@ -151,7 +176,6 @@ export default function QuotationDetailScreen() {
         }
     };
 
-    // Helper to update neighbors
     const updateNeighbors = (allIds: string[], currentId: string) => {
         const index = allIds.indexOf(currentId);
         if (index !== -1) {
@@ -161,22 +185,16 @@ export default function QuotationDetailScreen() {
     };
 
     useEffect(() => {
-        console.log('Quotation Detail Screen - Received ID:', normalizedId);
-        // Prevent fetching if ID is 'index' (happens when navigating to /quotations/index)
         if (normalizedId && normalizedId !== 'index') {
             fetchQuotationDetails(normalizedId);
-            // Re-fetch navigation list only if necessary, or just rely on initial load?
-            // Ideally we re-calculate neighbors
-            fetchQuotationListForNavigation(); // Simple re-fetch to be safe and ensure current context
+            fetchQuotationListForNavigation();
         } else if (normalizedId === 'index') {
-            console.warn('Received "index" as ID. Redirecting.');
             router.replace('/quotations' as any);
         }
     }, [normalizedId]);
 
     const formatDate = (dateString: string) => {
         if (!dateString) return '';
-        // Handle ERPNext formats (yyyy-mm-dd or yyyy-mm-dd HH:mm:ss)
         const date = new Date(dateString.replace(' ', 'T'));
         if (isNaN(date.getTime())) return dateString;
 
@@ -192,10 +210,7 @@ export default function QuotationDetailScreen() {
             const headers: HeadersInit = { 'Content-Type': 'application/json' };
             if (sessionCookies) headers['Cookie'] = sessionCookies;
 
-            // Use Custom API for details
             const url = `http://13.234.62.39:8080/api/method/get_quote_resource`;
-            console.log('Fetching quotation details from custom API:', url);
-
             const response = await fetch(url, {
                 method: 'POST',
                 headers,
@@ -203,8 +218,6 @@ export default function QuotationDetailScreen() {
             });
             const data = await response.json();
 
-            // Handle custom API response structure
-            // Based on log: {"message": {"data": [Object], "message": "Success", ...}}
             let quoteData = null;
             if (data.message) {
                 if (data.message.data) {
@@ -215,19 +228,11 @@ export default function QuotationDetailScreen() {
                     }
                 } else if (data.message.name) {
                     quoteData = data.message;
-                } else if (Array.isArray(data.message) && data.message.length > 0) {
-                    quoteData = data.message[0];
                 }
-            } else if (data.data) {
-                quoteData = data.data; // Fallback
             }
 
             if (response.ok && quoteData) {
                 setQuotation(quoteData);
-            } else {
-                console.warn('Failed to fetch quotation details', data);
-                console.error('Response status:', response.status);
-                // console.error('Error data:', JSON.stringify(data, null, 2)); 
             }
         } catch (error) {
             console.error('Error fetching quotation details:', error);
@@ -251,55 +256,20 @@ export default function QuotationDetailScreen() {
                 workflow_state: newStatus
             });
 
-            console.log(`[Workflow-Debug] Action: "${actionLabel}", newStatus: "${newStatus}"`);
-            console.log(`Executing ${actionLabel}: Updating workflow state...`);
-
             const response = await fetch(url, {
                 method: 'POST',
                 headers,
                 body
             });
 
-            const data = await response.json();
-            console.log('Workflow Action Response:', data);
-
             if (response.ok) {
-                const statusLower = newStatus.toLowerCase();
-                if (statusLower === 'pending' || statusLower === 'approved') {
-                    const icon = statusLower === 'pending' ? '⏳' : '✅';
-                    const formattedAmount = quotation.grand_total ? `${quotation.currency} ${quotation.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '0.00';
-
-                    // Format date from creation
-                    let formattedTime = 'now';
-                    if (quotation.creation) {
-                        const d = new Date(quotation.creation.replace(' ', 'T'));
-                        const day = String(d.getDate()).padStart(2, '0');
-                        const month = String(d.getMonth() + 1).padStart(2, '0');
-                        const year = String(d.getFullYear()).slice(-2);
-                        const hours = String(d.getHours()).padStart(2, '0');
-                        const mins = String(d.getMinutes()).padStart(2, '0');
-                        formattedTime = `${day}:${month}:${year} ${hours}:${mins}`;
-                    }
-
-                    const notifyTitle = `${icon} ${statusLower === 'pending' ? 'New Quotation' : 'Quotation Approved'}`;
-                    const notifyBody = `${quotation.customer_name} quotation of ${formattedAmount} submitted on ${formattedTime} for approval.`;
-
-                    console.log(`[Quote-Detail] Posting notification: ${notifyTitle} - ${notifyBody}`);
-
-                    notificationService.postLocalNotification(
-                        notifyTitle,
-                        notifyBody,
-                        { id: quotation.name },
-                        "QUOTATION_WORKFLOW"
-                    );
-                }
-
                 Alert.alert(
                     'Success',
                     `Action "${actionLabel}" completed successfully.`,
                     [{ text: 'OK', onPress: () => fetchQuotationDetails(normalizedId) }]
                 );
             } else {
+                const data = await response.json();
                 Alert.alert('Error', data.message || 'Failed to update quotation status.');
             }
         } catch (error) {
@@ -308,13 +278,6 @@ export default function QuotationDetailScreen() {
         } finally {
             setActionLoading(false);
         }
-    };
-
-
-
-    const stripHtml = (html: string) => {
-        if (!html) return '';
-        return html.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
     };
 
     if (loading) {
@@ -336,705 +299,940 @@ export default function QuotationDetailScreen() {
     const rawStatus = quotation.workflow_state || quotation.status;
     const displayStatus = rawStatus === 'Open' ? 'Pending' : rawStatus;
 
+    const getStatusColor = (status: string) => {
+        const lower = (status || '').toLowerCase();
+        if (lower.includes('approved') || lower.includes('ordered')) return '#00BFA5';
+        if (lower.includes('pending') || lower.includes('draft')) return '#0277BD';
+        if (lower.includes('resubmit') || lower.includes('re-open')) return '#94A3B8';
+        if (lower.includes('review') || lower.includes('declined') || lower.includes('rejected')) return '#F4511E';
+        if (lower.includes('cancel')) return '#C62828';
+        return '#0288D1'; // Default Blue
+    };
+
+    const statusColor = getStatusColor(displayStatus);
+    styles = getStyles(theme, { s, vs, ms }, statusColor);
+
+    const getStatusIcon = (status: string) => {
+        const lower = (status || '').toLowerCase();
+        if (lower.includes('approved') || lower.includes('ordered')) return 'checkmark-circle';
+        if (lower.includes('pending') || lower.includes('draft')) return 'time';
+        if (lower.includes('review') || lower.includes('declined') || lower.includes('rejected')) return 'search';
+        if (lower.includes('cancel')) return 'close-circle';
+        if (lower.includes('resubmit') || lower.includes('re-open')) return 'refresh';
+        return 'information-circle';
+    };
+
+    const statusIcon = getStatusIcon(displayStatus) as any;
+
+
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={{ flex: 1, backgroundColor: isDark ? colors.background : '#F8FAFC' }}>
             <StatusBar style="light" />
 
-            {/* Solid Blue Header (Unified) */}
-            <View style={styles.headerBlock}>
-                <View style={styles.headerTopRow}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                    <View style={styles.headerStatusBadge}>
-                        <Text style={styles.headerStatusText}>
-                            {displayStatus}
-                        </Text>
-                    </View>
-                </View>
-
-                <View style={styles.headerContent}>
-                    <Text style={styles.headerCustomerName} numberOfLines={2}>{quotation.customer_name}</Text>
-                    <View style={styles.headerInfoRow}>
-                        <View style={styles.headerIconText}>
-                            <Ionicons name="barcode-outline" size={16} color="rgba(255,255,255,0.8)" />
-                            <Text style={styles.headerInfoText}>{quotation.name}</Text>
-                        </View>
-                        <View style={styles.headerIconText}>
-                            <Ionicons name="business-outline" size={16} color="rgba(255,255,255,0.8)" />
-                            <Text style={styles.headerInfoText}>{quotation.company || 'White & Co.'}</Text>
+            <Animated.View style={[styles.headerBlock, headerTranslateY, { backgroundColor: statusColor, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5, height: 320 }]}>
+                <Animated.View style={[styles.headerContent, largeContentStyle, { marginTop: 90, paddingHorizontal: 24 }]}>
+                    <View style={styles.statusRow}>
+                        <View style={styles.whiteStatusPill}>
+                            <Ionicons name={statusIcon} size={14} color={statusColor} />
+                            <Text style={[styles.whiteStatusText, { color: statusColor }]}>{displayStatus}</Text>
                         </View>
                     </View>
-                </View>
-            </View>
 
-            {/* Date & Amount Section */}
-            <View style={styles.dateAmountContainer}>
-                <View style={styles.dateCard}>
-                    <View style={styles.dateItem}>
-                        <View style={styles.dateHeader}>
-                            <Ionicons name="calendar-outline" size={16} color="#90A4AE" />
-                            <Text style={styles.dateLabel}>Date</Text>
-                        </View>
-                        <Text style={styles.dateValue}>{formatDate(quotation.transaction_date)}</Text>
-                    </View>
-                    <View style={styles.dateDivider} />
-                    <View style={styles.dateItem}>
-                        <View style={styles.dateHeader}>
-                            <Ionicons name="time-outline" size={16} color="#90A4AE" />
-                            <Text style={styles.dateLabel}>Valid Till</Text>
-                        </View>
-                        <Text style={styles.dateValue}>{formatDate(quotation.valid_till || quotation.valid_until || '') || 'N/A'}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.amountBanner}>
-                    <View style={styles.amountLeft}>
-                        <View style={styles.walletIconBox}>
-                            <Ionicons name="wallet-outline" size={20} color="#00C853" />
-                        </View>
-                        <Text style={styles.amountLabel}>Total Amount</Text>
-                    </View>
-                    <Text style={styles.amountValue}>{Number(quotation.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                </View>
-            </View>
-
-            {/* Basic Information */}
-            <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                    <Ionicons name="information-circle-outline" size={20} color="#0055D4" />
-                    <Text style={styles.sectionTitle}>Basic Information</Text>
-                </View>
-
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabel}>Title</Text>
-                    <Text style={styles.tableValueBold}>{quotation.customer_name}</Text>
-                </View>
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabel}>Order Type</Text>
-                    <Text style={styles.tableValue}>{quotation.order_type || 'Sales'}</Text>
-                </View>
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabel}>Price List</Text>
-                    <Text style={styles.tableValue}>{quotation.price_list_name || 'Standard Selling'}</Text>
-                </View>
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabel}>Executive</Text>
-                    <Text style={styles.tableValue}>{quotation.executive_person || quotation.sales_executive || quotation.team_member || 'N/A'}</Text>
-                </View>
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabel}>Brand</Text>
-                    <Text style={styles.tableValue}>{quotation.brand || 'WHITE & CO'}</Text>
-                </View>
-            </View>
-
-            {/* Items Section */}
-            <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                    <Ionicons name="cube-outline" size={20} color="#0055D4" />
-                    <Text style={styles.sectionTitle}>Items</Text>
-                    <View style={styles.itemCountBadge}>
-                        <Text style={styles.itemCountText}>{quotation.items.length}</Text>
-                    </View>
-                </View>
-
-                {quotation.items.map((item, index) => (
-                    <View key={index} style={styles.itemCard}>
-                        <View style={styles.itemCardTop}>
-                            <View style={styles.itemIndexCircle}>
-                                <Text style={styles.itemIndexText}>{index + 1}</Text>
-                            </View>
-                            <View style={styles.itemHeaderInfo}>
-                                <Text style={styles.itemName} numberOfLines={2}>{item.item_name}</Text>
-                                <Text style={styles.itemCode}>{item.item_code}</Text>
-                                <Text style={styles.itemDesc} numberOfLines={2}>{stripHtml(item.description)}</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.itemDivider} />
-
-                        <View style={styles.itemGrid}>
-                            <View style={styles.gridBox}>
-                                <View style={styles.gridLabelRow}>
-                                    <Ionicons name="basket-outline" size={14} color="#90A4AE" />
-                                    <Text style={styles.gridLabel}>Quantity</Text>
-                                </View>
-                                <Text style={styles.gridValue}>{item.qty} {item.uom || 'Nos'}</Text>
-                            </View>
-                            <View style={styles.gridBox}>
-                                <View style={styles.gridLabelRow}>
-                                    <Ionicons name="cash-outline" size={14} color="#90A4AE" />
-                                    <Text style={styles.gridLabel}>Rate</Text>
-                                </View>
-                                <Text style={styles.gridValue}>{quotation.currency} {item.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                            </View>
-                            <View style={styles.gridBox}>
-                                <View style={styles.gridLabelRow}>
-                                    <Ionicons name="pricetag-outline" size={14} color="#90A4AE" />
-                                    <Text style={styles.gridLabel}>Brand</Text>
-                                </View>
-                                <Text style={styles.gridValue}>{item.brand || 'WHITE & CO'}</Text>
-                            </View>
-                            <View style={styles.gridBox}>
-                                <View style={styles.gridLabelRow}>
-                                    <Ionicons name="wallet-outline" size={14} color="#90A4AE" />
-                                    <Text style={styles.gridLabel}>Amount</Text>
-                                </View>
-                                <Text style={styles.gridValueBlue}>{Number(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                            </View>
-                        </View>
-                    </View>
-                ))}
-            </View>
-
-            {/* Payment Schedule */}
-            <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                    <Ionicons name="calendar-number-outline" size={20} color="#0055D4" />
-                    <Text style={styles.sectionTitle}>Payment Schedule</Text>
-                </View>
-
-                {quotation.payment_schedule?.map((schedule, idx) => (
-                    <View key={idx} style={styles.paymentTermCard}>
-                        <View style={styles.paymentLine}>
-                            <View style={styles.paymentLeft}>
-                                <Ionicons name="calendar-outline" size={16} color="#90A4AE" />
-                                <Text style={styles.paymentLabel}>Due Date</Text>
-                            </View>
-                            <Text style={styles.paymentValue}>{schedule.due_date}</Text>
-                        </View>
-                        <View style={styles.paymentLine}>
-                            <View style={styles.paymentLeft}>
-                                <Ionicons name="pie-chart-outline" size={16} color="#90A4AE" />
-                                <Text style={styles.paymentLabel}>Invoice Portion</Text>
-                            </View>
-                            <Text style={styles.paymentValue}>{schedule.invoice_portion}%</Text>
-                        </View>
-                        <View style={styles.paymentLine}>
-                            <View style={styles.paymentLeft}>
-                                <Ionicons name="cash-outline" size={16} color="#90A4AE" />
-                                <Text style={styles.paymentLabel}>Payment Amount</Text>
-                            </View>
-                            <Text style={styles.paymentValueBlue}>{schedule.payment_amount.toLocaleString()}</Text>
-                        </View>
-                        <View style={styles.paymentLine}>
-                            <View style={styles.paymentLeft}>
-                                <Ionicons name="alert-circle-outline" size={16} color="#90A4AE" />
-                                <Text style={styles.paymentLabel}>Outstanding</Text>
-                            </View>
-                            <Text style={styles.paymentValueRed}>{schedule.outstanding?.toLocaleString() || schedule.payment_amount.toLocaleString()}</Text>
-                        </View>
-                    </View>
-                ))}
-            </View>
-
-            {/* Contact Details */}
-            <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                    <Ionicons name="person-outline" size={20} color="#0055D4" />
-                    <Text style={styles.sectionTitle}>Contact Details</Text>
-                </View>
-
-                <View style={styles.contactLine}>
-                    <Ionicons name="person-outline" size={18} color="#90A4AE" style={styles.contactIcon} />
-                    <Text style={styles.contactLabel}>Team Member</Text>
-                    <Text style={styles.contactValue}>
-                        {quotation.team_member || quotation.sales_executive || (quotation.owner && !quotation.owner.includes('System') ? quotation.owner.split('@')[0] : 'Consultant')}
+                    <Text style={styles.customerNameMain}>{quotation.customer_name}</Text>
+                    <Text style={styles.companyNameSub}>
+                        {quotation.company || 'White & Co.'}
                     </Text>
-                </View>
-                <View style={styles.contactLine}>
-                    <Ionicons name="briefcase-outline" size={18} color="#90A4AE" style={styles.contactIcon} />
-                    <Text style={styles.contactLabel}>Designation</Text>
-                    <Text style={styles.contactValue}>{quotation.designation || quotation.job_title || 'N/A'}</Text>
-                </View>
-                <View style={styles.contactLine}>
-                    <Ionicons name="call-outline" size={18} color="#90A4AE" style={styles.contactIcon} />
-                    <Text style={styles.contactLabel}>Phone No</Text>
-                    <Text style={styles.contactValue}>{quotation.phone_no || quotation.mobile_no || quotation.contact_mobile || 'N/A'}</Text>
-                </View>
-                <View style={styles.contactLine}>
-                    <Ionicons name="mail-outline" size={18} color="#90A4AE" style={styles.contactIcon} />
-                    <Text style={styles.contactLabel}>Email ID</Text>
-                    <Text style={styles.contactValue}>{quotation.email_id || quotation.owner}</Text>
+                </Animated.View>
+            </Animated.View>
+
+            <View style={styles.stickyHeader}>
+                <Animated.View style={[styles.stickyHeaderBg, miniHeaderStyle]} />
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color="#FFF" />
+                </TouchableOpacity>
+
+                <Animated.View style={[styles.miniHeaderContainer, miniHeaderStyle]}>
+                    <Text style={styles.miniHeaderTitle} numberOfLines={1}>{quotation.name}</Text>
+                    <Text style={styles.miniHeaderSubtitle} numberOfLines={1}>
+                        {quotation.customer_name} • {displayStatus}
+                    </Text>
+                </Animated.View>
+
+                <View style={styles.fixedHeaderActions}>
+                    <TouchableOpacity
+                        onPress={() => router.push(`/quotations/print?id=${normalizedId}`)}
+                        style={styles.backButton}
+                    >
+                        <Ionicons name="print-outline" size={24} color="#FFF" />
+                    </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Financial Summary */}
-            <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                    <Ionicons name="wallet-outline" size={20} color="#0055D4" />
-                    <Text style={styles.sectionTitle}>Financial Summary</Text>
-                </View>
+            <Animated.ScrollView
+                style={[styles.container, { zIndex: 10, backgroundColor: 'transparent' }]}
+                showsVerticalScrollIndicator={false}
+                onScroll={scrollHandler}
+                scrollEventThrottle={16}
+                contentContainerStyle={{ paddingTop: 320, paddingBottom: 100 }}
+            >
+                <View style={[styles.topSectionContainer, { marginTop: -40, gap: 16 }]}>
+                    <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.orderNumberCardRefined}>
+                        <View style={styles.blueLeftAccent} />
+                        <View style={styles.refinedCardPadding}>
+                            <Text style={styles.refinedCardLabel}>ORDER NUMBER</Text>
+                            <Text style={styles.refinedCardValue}>{quotation.name}</Text>
+                        </View>
+                    </Animated.View>
 
-                <View style={[styles.tableRow, { borderBottomWidth: 0 }]}>
-                    <View style={styles.tableRowLeft}>
-                        <Ionicons name="cart-outline" size={20} color="#90A4AE" />
-                        <Text style={styles.tableLabelLarge}>Total Quantity</Text>
+                    <View style={styles.dateCardsRowRefined}>
+                        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.dateCardRefined}>
+                            <View style={styles.blueLeftAccent} />
+                            <View style={styles.refinedCardPadding}>
+                                <View style={styles.refinedLabelRow}>
+                                    <Ionicons name="calendar-outline" size={14} color="#0288D1" />
+                                    <Text style={styles.refinedCardLabel}>DATE</Text>
+                                </View>
+                                <Text style={styles.refinedCardValue}>{formatDate(quotation.transaction_date)}</Text>
+                            </View>
+                        </Animated.View>
+                        <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.dateCardRefined}>
+                            <View style={styles.blueLeftAccent} />
+                            <View style={styles.refinedCardPadding}>
+                                <View style={styles.refinedLabelRow}>
+                                    <Ionicons name="time-outline" size={14} color="#0288D1" />
+                                    <Text style={styles.refinedCardLabel}>VALID TILL</Text>
+                                </View>
+                                <Text style={styles.refinedCardValue}>{formatDate(quotation.valid_till || '')}</Text>
+                            </View>
+                        </Animated.View>
                     </View>
-                    <Text style={styles.tableValueLarge}>{Number(quotation.total_qty ?? quotation.total_items ?? quotation.qty ?? 0)} items</Text>
+
+                    <Animated.View entering={FadeInUp.delay(500).springify()} style={styles.sectionCard}>
+                        <View style={styles.blueLeftAccent} />
+                        <View style={styles.cardContent}>
+                            <View style={styles.sectionHeader}>
+                                <View style={[styles.headerIconBox, { backgroundColor: '#E0F2F1' }]}>
+                                    <Ionicons name="information-circle-outline" size={20} color="#0288D1" />
+                                </View>
+                                <View>
+                                    <Text style={styles.sectionTitle}>Basic Information</Text>
+                                    <Text style={styles.sectionSubtitle}>Primary quotation details</Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.refinedInfoGrid}>
+                                <View style={[styles.infoTile, { borderLeftColor: '#00BFA5' }]}>
+                                    <View style={styles.infoTileHeader}>
+                                        <Ionicons name="cart" size={12} color="#00BFA5" />
+                                        <Text style={styles.infoTileLabel}>Type</Text>
+                                    </View>
+                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.order_type || 'Sales'}</Text>
+                                </View>
+
+                                <View style={[styles.infoTile, { borderLeftColor: '#FF9100' }]}>
+                                    <View style={styles.infoTileHeader}>
+                                        <Ionicons name="pricetag" size={12} color="#FF9100" />
+                                        <Text style={styles.infoTileLabel}>Price List</Text>
+                                    </View>
+                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.price_list_name || 'Standard'}</Text>
+                                </View>
+
+                                <View style={[styles.infoTile, { borderLeftColor: '#2979FF' }]}>
+                                    <View style={styles.infoTileHeader}>
+                                        <Ionicons name="person" size={12} color="#2979FF" />
+                                        <Text style={styles.infoTileLabel}>Executive</Text>
+                                    </View>
+                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.executive_person || quotation.sales_executive || 'N/A'}</Text>
+                                </View>
+
+                                <View style={[styles.infoTile, { borderLeftColor: '#651FFF' }]}>
+                                    <View style={styles.infoTileHeader}>
+                                        <Ionicons name="business" size={12} color="#651FFF" />
+                                        <Text style={styles.infoTileLabel}>Brand</Text>
+                                    </View>
+                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.brand || 'WHITE & CO'}</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </Animated.View>
                 </View>
 
-                <View style={styles.summaryDivider} />
+                <Animated.View entering={FadeInUp.delay(600).springify()} style={styles.sectionCard}>
+                    <View style={styles.blueLeftAccent} />
+                    <View style={styles.cardContent}>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.headerIconBox, { backgroundColor: statusColor + '15' }]}>
+                                <Ionicons name="cube-outline" size={20} color={statusColor} />
+                            </View>
+                            <View>
+                                <Text style={styles.sectionTitle}>Order Items</Text>
+                                <Text style={styles.sectionSubtitle}>Detailed breakdown of products</Text>
+                            </View>
+                            <View style={[styles.itemCountBadge, { backgroundColor: colors.surfaceSecondary, marginLeft: 'auto' }]}>
+                                <Text style={[styles.itemCountText, { color: colors.text }]}>{quotation.items.length}</Text>
+                            </View>
+                        </View>
 
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabelSummary}>Net Total</Text>
-                    <Text style={styles.tableValueSummary}>{Number(quotation.net_total ?? quotation.base_net_total ?? quotation.total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                </View>
-                <View style={styles.tableRow}>
-                    <Text style={styles.tableLabelSummary}>Total Taxes</Text>
-                    <Text style={styles.tableValueSummary}>{(quotation.total_taxes_and_charges || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                </View>
-                {(quotation.discount_amount && quotation.discount_amount > 0) ? (
-                    <View style={styles.tableRow}>
-                        <Text style={styles.tableLabelSummary}>Discount {quotation.discount_percentage ? `(${quotation.discount_percentage}%)` : ''}</Text>
-                        <Text style={styles.tableValueSummaryRed}>- {quotation.discount_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                        {quotation.items.map((item, index) => (
+                            <Animated.View
+                                key={index}
+                                entering={FadeInUp.delay(700 + index * 100).springify()}
+                                style={styles.itemCard}
+                            >
+                                <View style={styles.itemMain}>
+                                    <View style={styles.itemHeader}>
+                                        <View style={styles.itemIndex}>
+                                            <Text style={styles.itemIndexText}>{(index + 1).toString().padStart(2, '0')}</Text>
+                                        </View>
+                                        <View style={styles.itemNameContainer}>
+                                            <Text style={styles.itemName} numberOfLines={2}>{item.item_name}</Text>
+                                            <View style={styles.skuRow}>
+                                                <Text style={styles.skuText}>{item.item_code}</Text>
+                                                {item.brand && (
+                                                    <>
+                                                        <View style={styles.metaDot} />
+                                                        <Text style={styles.brandText}>{item.brand}</Text>
+                                                    </>
+                                                )}
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.itemDetails}>
+                                        <View style={styles.detailBox}>
+                                            <Text style={styles.detailLabel}>Quantity</Text>
+                                            <Text style={styles.detailValue}>{item.qty} {item.uom}</Text>
+                                        </View>
+                                        <View style={styles.detailDivider} />
+                                        <View style={styles.detailBox}>
+                                            <Text style={styles.detailLabel}>Rate</Text>
+                                            <Text style={styles.detailValue}>₹{item.rate.toLocaleString()}</Text>
+                                        </View>
+                                        <View style={styles.detailDivider} />
+                                        <View style={styles.detailBox}>
+                                            <Text style={styles.detailLabel}>Total</Text>
+                                            <Text style={[styles.detailValue, { color: '#0288D1', fontWeight: '900' }]}>
+                                                ₹{item.amount.toLocaleString()}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            </Animated.View>
+                        ))}
                     </View>
-                ) : null}
+                </Animated.View>
 
-                <View style={styles.grandTotalBanner}>
-                    <Text style={styles.grandTotalLabel}>Grand Total</Text>
-                    <Text style={styles.grandTotalValue}>{(quotation.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                </View>
+                <Animated.View entering={FadeInDown.delay(800).springify()} style={styles.sectionCard}>
+                    <View style={styles.blueLeftAccent} />
+                    <View style={styles.cardContent}>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.headerIconBox, { backgroundColor: statusColor + '15' }]}>
+                                <Ionicons name="calendar-number-outline" size={20} color={statusColor} />
+                            </View>
+                            <View>
+                                <Text style={styles.sectionTitle}>Payment Schedule</Text>
+                                <Text style={styles.sectionSubtitle}>Terms and milestones</Text>
+                            </View>
+                        </View>
 
-                {quotation.in_words && (
-                    <Text style={styles.wordAmount}>{quotation.in_words}</Text>
-                )}
-            </View>
+                        {(quotation.payment_schedule || (quotation as any).payment_terms)?.map((schedule: any, idx: number) => (
+                            <View key={idx} style={styles.paymentTermCard}>
+                                <View style={styles.paymentTermHeader}>
+                                    <Text style={styles.paymentTermTitle}>Milestone {idx + 1}</Text>
+                                    <View style={styles.portionBadge}>
+                                        <Text style={styles.portionText}>{schedule.invoice_portion}%</Text>
+                                    </View>
+                                </View>
 
-            {/* Actions */}
-            <View style={styles.actionSection}>
-                {actionLoading ? (
-                    <ActivityIndicator color="#0055D4" />
-                ) : (
-                    <View style={styles.actionGrid}>
-                        {WORKFLOW_RULES
-                            .filter(rule => {
-                                const rawStatus = quotation.workflow_state || quotation.status;
-                                const effectiveState = rawStatus === 'Open' ? 'Pending' : rawStatus;
-                                return rule.state === effectiveState;
-                            })
-                            .filter(rule => {
-                                if (['Approve', 'Reject', 'Review'].includes(rule.action)) {
-                                    return isManager;
+                                <View style={styles.paymentGrid}>
+                                    <View style={styles.paymentGridItem}>
+                                        <Text style={styles.paymentGridLabel}>Due Date</Text>
+                                        <Text style={styles.paymentGridValue}>{schedule.due_date}</Text>
+                                    </View>
+                                    <View style={styles.paymentGridItem}>
+                                        <Text style={styles.paymentGridLabel}>Amount</Text>
+                                        <Text style={[styles.paymentGridValue, { color: '#0288D1' }]}>
+                                            ₹{schedule.payment_amount.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {(schedule.outstanding ?? schedule.payment_amount) > 0 && (
+                                    <View style={styles.outstandingRow}>
+                                        <Text style={styles.outstandingLabel}>Outstanding</Text>
+                                        <Text style={styles.outstandingValue}>
+                                            ₹{(schedule.outstanding ?? schedule.payment_amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                        ))}
+                    </View>
+                </Animated.View>
+
+                <Animated.View entering={FadeInDown.delay(900).springify()} style={styles.sectionCard}>
+                    <View style={styles.blueLeftAccent} />
+                    <View style={styles.cardContent}>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.headerIconBox, { backgroundColor: statusColor + '15' }]}>
+                                <Ionicons name="wallet-outline" size={20} color={statusColor} />
+                            </View>
+                            <View>
+                                <Text style={styles.sectionTitle}>Financial Summary</Text>
+                                <Text style={styles.sectionSubtitle}>Costs and adjustments</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.summaryList}>
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Total Quantity</Text>
+                                <Text style={styles.summaryValue}>
+                                    {Number(quotation.total_qty || (quotation.items?.reduce((sum, item) => sum + item.qty, 0)) || 0)} items
+                                </Text>
+                            </View>
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Net Total</Text>
+                                <Text style={styles.summaryValue}>
+                                    ₹{Number(quotation.net_total || quotation.base_net_total || (quotation.items?.reduce((sum, item) => sum + item.amount, 0)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                </Text>
+                            </View>
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Total Taxes</Text>
+                                <Text style={styles.summaryValue}>
+                                    ₹{Number(quotation.total_taxes_and_charges || (quotation.grand_total - (quotation.net_total || (quotation.items?.reduce((sum, item) => sum + item.amount, 0)))) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                </Text>
+                            </View>
+                            {Number(quotation.discount_amount || 0) > 0 && (
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>Discount {quotation.discount_percentage ? `(${quotation.discount_percentage}%)` : ''}</Text>
+                                    <Text style={[styles.summaryValue, { color: '#EF5350' }]}>
+                                        - ₹{Number(quotation.discount_amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={styles.grandTotalBanner}>
+                            <Svg height="80" width="100%" style={styles.grandTotalSvg}>
+                                <Defs>
+                                    <LinearGradient id="gradRefined" x1="0" y1="0" x2="1" y2="0">
+                                        <Stop offset="0" stopColor={isDark ? '#4F46E5' : '#6366F1'} stopOpacity="1" />
+                                        <Stop offset="1" stopColor={isDark ? '#9333EA' : '#A855F7'} stopOpacity="1" />
+                                    </LinearGradient>
+                                </Defs>
+                                <Rect x="0" y="0" width="100%" height="80" fill="url(#gradRefined)" rx="20" ry="20" />
+                            </Svg>
+                            <View style={styles.grandTotalContent}>
+                                <View>
+                                    <Text style={styles.grandTotalLabel}>GRAND TOTAL</Text>
+                                    <Text style={styles.grandTotalAmount}>
+                                        ₹{(quotation.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                    </Text>
+                                </View>
+                                <View style={styles.grandTotalIcon}>
+                                    <Ionicons name="receipt-outline" size={32} color="rgba(255,255,255,0.4)" />
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                </Animated.View>
+
+                <View style={styles.actionSection}>
+                    {
+                        actionLoading ? (
+                            <ActivityIndicator color="#0277BD" />
+                        ) : (
+                            <View style={styles.actionGrid}>
+                                {
+                                    WORKFLOW_RULES
+                                        .filter(rule => {
+                                            const rawStatus = quotation.workflow_state || quotation.status;
+                                            const effectiveState = rawStatus === 'Open' ? 'Pending' : rawStatus;
+                                            return rule.state === effectiveState;
+                                        })
+                                        .filter(rule => {
+                                            if (['Approve', 'Reject', 'Review'].includes(rule.action)) {
+                                                return isManager;
+                                            }
+                                            if (isManager) return true;
+                                            const salesUserActions = ['Send To Approval', 'Cancel', 'Resubmit', 'Re-open'];
+                                            return salesUserActions.includes(rule.action);
+                                        })
+                                        .map((rule, index) => (
+                                            <TouchableOpacity
+                                                key={index}
+                                                style={[
+                                                    styles.actionBtn,
+                                                    rule.style === 'success' ? styles.btnSuccess :
+                                                        rule.style === 'danger' ? styles.btnDanger :
+                                                            rule.style === 'warning' ? styles.btnWarning :
+                                                                styles.btnPrimary
+                                                ]}
+                                                onPress={() => handleWorkflowAction(rule.action, rule.nextState)}
+                                            >
+                                                <Ionicons name={rule.icon as any} size={20} color="#FFF" style={{ marginRight: 8 }} />
+                                                <Text style={styles.btnText}>{rule.action}</Text>
+                                            </TouchableOpacity>
+                                        ))
                                 }
-                                if (isManager) return true;
-                                const salesUserActions = ['Send To Approval', 'Cancel', 'Resubmit', 'Re-open'];
-                                return salesUserActions.includes(rule.action);
-                            })
-                            .map((rule, index) => (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={[
-                                        styles.actionBtn,
-                                        rule.style === 'success' ? styles.btnSuccess :
-                                            rule.style === 'danger' ? styles.btnDanger :
-                                                styles.btnPrimary
-                                    ]}
-                                    onPress={() => handleWorkflowAction(rule.action, rule.nextState)}
-                                >
-                                    <Ionicons name={rule.icon as any} size={20} color="#FFF" style={{ marginRight: 8 }} />
-                                    <Text style={styles.btnText}>{rule.action}</Text>
-                                </TouchableOpacity>
-                            ))}
-                    </View>
-                )}
-            </View>
+                            </View>
+                        )
+                    }
+                </View>
 
-            <View style={{ height: 100 }} />
-        </ScrollView>
+                <View style={{ height: 100 }} />
+            </Animated.ScrollView >
+        </View >
     );
 }
 
-function getStyles(theme: 'light' | 'dark') {
+function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any, statusColor: string = '#0288D1') {
+    const isDark = theme === 'dark';
+    const colors = Colors[theme];
+
     return StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: '#F5F7FA',
+            backgroundColor: colors.background,
         },
         center: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            backgroundColor: colors.background,
         },
         headerBlock: {
-            backgroundColor: '#01579B',
             paddingTop: 60,
-            paddingBottom: 30,
+            paddingBottom: 40,
             paddingHorizontal: 20,
         },
-        headerTopRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 20,
+        headerContent: {
+            paddingHorizontal: 24,
         },
         backButton: {
-            padding: 4,
-        },
-        headerStatusBadge: {
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.4)',
-            paddingHorizontal: 12,
-            paddingVertical: 4,
-            borderRadius: 12,
-            backgroundColor: 'rgba(255,255,255,0.1)',
-        },
-        headerStatusText: {
-            color: '#FFF',
-            fontSize: 12,
-            fontWeight: '600',
-        },
-        headerContent: {
-            marginTop: 4,
-        },
-        headerCustomerName: {
-            fontSize: 24,
-            fontWeight: '800',
-            color: '#FFF',
-            marginBottom: 12,
-        },
-        headerInfoRow: {
-            flexDirection: 'row',
-            gap: 20,
-        },
-        headerIconText: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-        },
-        headerInfoText: {
-            color: 'rgba(255,255,255,0.8)',
-            fontSize: 13,
-            fontWeight: '500',
-        },
-        dateAmountContainer: {
-            padding: 16,
-            marginTop: -20,
-        },
-        dateCard: {
-            backgroundColor: '#FFF',
-            borderRadius: 20,
-            padding: 16,
-            flexDirection: 'row',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 10,
-            elevation: 3,
-            marginBottom: 16,
-        },
-        dateItem: {
-            flex: 1,
-        },
-        dateHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            marginBottom: 4,
-        },
-        dateLabel: {
-            fontSize: 12,
-            color: '#90A4AE',
-            fontWeight: '600',
-        },
-        dateValue: {
-            fontSize: ms(15),
-            fontWeight: '700',
-            color: '#263238',
-        },
-        dateDivider: {
-            width: 1,
-            backgroundColor: '#ECEFF1',
-            marginHorizontal: 16,
-        },
-        amountBanner: {
-            backgroundColor: '#E8F5E9',
-            borderRadius: 16,
-            padding: 16,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: '#C8E6C9',
-        },
-        amountLeft: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-        },
-        walletIconBox: {
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: '#C8E6C9',
+            backgroundColor: 'rgba(255,255,255,0.15)',
             justifyContent: 'center',
             alignItems: 'center',
         },
-        amountLabel: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: '#2E7D32',
-        },
-        amountValue: {
-            fontSize: ms(18),
-            fontWeight: '800',
-            color: '#2E7D32',
+        topSectionContainer: {
+            paddingHorizontal: 16,
+            marginTop: 0,
+            gap: 16,
         },
         sectionCard: {
-            backgroundColor: '#FFF',
+            backgroundColor: colors.surface,
             borderRadius: 24,
+            marginBottom: 20,
+            flexDirection: 'row',
+            overflow: 'hidden',
+            shadowColor: colors.cardShadow,
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: isDark ? 0.3 : 0.05,
+            shadowRadius: 15,
+            elevation: 4,
+            borderWidth: isDark ? 1 : 0,
+            borderColor: colors.border,
+        },
+        cardContent: {
+            flex: 1,
             padding: 20,
-            marginHorizontal: 16,
-            marginBottom: 16,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.03,
-            shadowRadius: 10,
-            elevation: 2,
         },
         sectionHeader: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 10,
-            marginBottom: 20,
+            gap: 12,
+            marginBottom: 16,
         },
         sectionTitle: {
-            fontSize: ms(16),
-            fontWeight: '700',
-            color: '#263238',
+            fontSize: 18,
+            fontWeight: '800',
+            color: colors.text,
+            letterSpacing: -0.5,
         },
-        tableRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            paddingVertical: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: '#F5F7FA',
-        },
-        tableLabel: {
-            fontSize: ms(14),
-            color: '#90A4AE',
-            fontWeight: '500',
-        },
-        tableValue: {
-            fontSize: ms(14),
-            color: '#263238',
+        sectionSubtitle: {
+            fontSize: 12,
+            color: colors.textSecondary,
             fontWeight: '600',
         },
-        tableValueBold: {
-            fontSize: ms(14),
-            color: '#01579B',
+        infoLabel: {
+            fontSize: 13,
+            color: colors.textSecondary,
+            fontWeight: '600',
+        },
+        infoValue: {
+            fontSize: 14,
+            color: colors.text,
+            fontWeight: '700',
+            textAlign: 'right',
+        },
+        paymentTermCard: {
+            backgroundColor: colors.surfaceSecondary,
+            borderRadius: 20,
+            padding: 16,
+            marginBottom: 12,
+        },
+        paymentTermHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 12,
+        },
+        paymentTermTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text,
+        },
+        portionBadge: {
+            backgroundColor: colors.primary + '15',
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 8,
+        },
+        portionText: {
+            fontSize: 12,
+            fontWeight: '800',
+            color: colors.primary,
+        },
+        paymentGrid: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+        },
+        paymentGridItem: {
+            flex: 1,
+        },
+        paymentGridLabel: {
+            fontSize: 10,
+            color: colors.textSecondary,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            marginBottom: 4,
+        },
+        paymentGridValue: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text,
+        },
+        outstandingRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        outstandingLabel: {
+            fontSize: 12,
+            color: '#EF5350',
+            fontWeight: '700',
+        },
+        outstandingValue: {
+            fontSize: 12,
+            color: '#EF5350',
             fontWeight: '800',
         },
+        // Compact Refined Styles
+        statusRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 16,
+        },
+        whiteStatusPill: {
+            backgroundColor: '#FFF',
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 20,
+            gap: 6,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 2,
+        },
+        whiteStatusText: {
+            color: '#0288D1',
+            fontSize: 13,
+            fontWeight: '800',
+        },
+        customerNameMain: {
+            fontSize: 24,
+            fontWeight: '900',
+            color: '#FFF',
+            marginBottom: 4,
+            letterSpacing: -0.5,
+        },
+        companyNameSub: {
+            fontSize: 15,
+            color: 'rgba(255,255,255,0.9)',
+            fontWeight: '700',
+        },
+        stickyHeader: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 30,
+            height: 110,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: 50,
+            paddingHorizontal: 20,
+        },
+        stickyHeaderBg: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: statusColor,
+        },
+        miniHeaderContainer: {
+            position: 'absolute',
+            left: 60,
+            right: 100,
+            top: 40,
+            bottom: 0,
+            justifyContent: 'center',
+        },
+        miniHeaderTitle: {
+            color: '#FFF',
+            fontSize: 17,
+            fontWeight: '800',
+        },
+        miniHeaderSubtitle: {
+            color: 'rgba(255,255,255,0.8)',
+            fontSize: 11,
+            fontWeight: '700',
+        },
+        fixedHeaderActions: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        orderNumberCardRefined: {
+            backgroundColor: '#FFF',
+            borderRadius: 20,
+            flexDirection: 'row',
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 10,
+            elevation: 3,
+        },
+        dateCardsRowRefined: {
+            flexDirection: 'row',
+            gap: 16,
+        },
+        dateCardRefined: {
+            flex: 1,
+            backgroundColor: '#FFF',
+            borderRadius: 20,
+            flexDirection: 'row',
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 10,
+            elevation: 3,
+        },
+        blueLeftAccent: {
+            width: 4,
+            backgroundColor: statusColor,
+        },
+        refinedCardPadding: {
+            padding: 16,
+            flex: 1,
+        },
+        refinedCardLabel: {
+            fontSize: 10,
+            fontWeight: '900',
+            color: '#94A3B8',
+            letterSpacing: 1,
+            marginBottom: 4,
+            textTransform: 'uppercase',
+        },
+        refinedCardValue: {
+            fontSize: 16,
+            fontWeight: '800',
+            color: '#1E293B',
+        },
+        refinedLabelRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 4,
+        },
+        heroAmountCardRefined: {
+            backgroundColor: '#00D4B1',
+            borderRadius: 24,
+            padding: 24,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            shadowColor: '#00D4B1',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.2,
+            shadowRadius: 15,
+            elevation: 8,
+        },
+        heroAmountContent: {
+            flex: 1,
+        },
+        heroAmountLabel: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: '#FFF',
+            opacity: 0.9,
+            marginBottom: 4,
+        },
+        heroAmountValue: {
+            fontSize: 34,
+            fontWeight: '900',
+            color: '#FFF',
+            letterSpacing: -1,
+        },
+        heroIconBadge: {
+            width: 56,
+            height: 56,
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            borderRadius: 16,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        refinedInfoGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 12,
+            marginTop: 8,
+        },
+        infoTile: {
+            flex: 1,
+            minWidth: '45%',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
+            padding: 12,
+            borderRadius: 12,
+            borderLeftWidth: 3,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 1,
+        },
+        infoTileHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+        },
+        infoTileLabel: {
+            fontSize: 10,
+            fontWeight: '900',
+            color: '#94A3B8',
+            letterSpacing: 0.5,
+            textTransform: 'uppercase',
+        },
+        infoTileValue: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text,
+        },
+        refinedInfoDivider: {
+            height: 1,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+        },
+        // Restored Section Styles
+        summaryList: {
+            gap: 12,
+            marginBottom: 20,
+        },
+        summaryRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+        },
+        summaryLabel: {
+            fontSize: 14,
+            color: colors.textSecondary,
+            fontWeight: '600',
+        },
+        summaryValue: {
+            fontSize: 15,
+            color: colors.text,
+            fontWeight: '800',
+        },
+        grandTotalBanner: {
+            marginTop: 16,
+            height: 80,
+            position: 'relative',
+        },
+        grandTotalSvg: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+        },
+        grandTotalContent: {
+            paddingHorizontal: 20,
+            height: 80,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+        },
+        grandTotalLabel: {
+            fontSize: 10,
+            color: 'rgba(255,255,255,0.7)',
+            fontWeight: '900',
+            letterSpacing: 1,
+            marginBottom: 4,
+        },
+        grandTotalAmount: {
+            fontSize: 24,
+            color: '#FFF',
+            fontWeight: '900',
+        },
+        grandTotalIcon: {
+            opacity: 0.3,
+        },
+        itemsSection: {
+            paddingHorizontal: 16,
+            marginTop: 32,
+            marginBottom: 24,
+        },
+        itemsHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 20,
+            paddingHorizontal: 4,
+        },
+        itemsTitle: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+        },
+        headerIconBox: {
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        itemsSectionTitle: {
+            fontSize: 20,
+            fontWeight: '900',
+            color: colors.text,
+            letterSpacing: -0.5,
+        },
+        itemsSectionSubtitle: {
+            fontSize: 12,
+            color: colors.textSecondary,
+            fontWeight: '600',
+        },
         itemCountBadge: {
-            backgroundColor: '#E3F2FD',
-            paddingHorizontal: 8,
-            paddingVertical: 2,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+            paddingHorizontal: 10,
+            paddingVertical: 4,
             borderRadius: 8,
         },
         itemCountText: {
             fontSize: 12,
-            fontWeight: '700',
-            color: '#0055D4',
+            fontWeight: '800',
         },
         itemCard: {
-            backgroundColor: '#FAFAFA',
-            borderRadius: 20,
-            padding: 16,
+            backgroundColor: colors.surface,
+            borderRadius: 24,
             marginBottom: 16,
+            padding: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: isDark ? 0.3 : 0.05,
+            shadowRadius: 12,
+            elevation: 5,
         },
-        itemCardTop: {
+        itemMain: {
+            flex: 1,
+        },
+        itemHeader: {
             flexDirection: 'row',
-            alignItems: 'flex-start',
+            alignItems: 'center',
+            marginBottom: 16,
             gap: 12,
         },
-        itemIndexCircle: {
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            backgroundColor: '#0055D4',
+        itemIndex: {
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
             justifyContent: 'center',
             alignItems: 'center',
         },
         itemIndexText: {
-            color: '#FFF',
             fontSize: 12,
-            fontWeight: '700',
+            fontWeight: '900',
+            color: colors.textSecondary,
         },
-        itemHeaderInfo: {
+        itemNameContainer: {
             flex: 1,
         },
         itemName: {
-            fontSize: ms(15),
-            fontWeight: '700',
-            color: '#263238',
-            marginBottom: vs(2),
-        },
-        itemCode: {
-            fontSize: 12,
-            color: '#90A4AE',
-            fontWeight: '600',
-            marginBottom: 8,
-        },
-        itemDesc: {
-            fontSize: 12,
-            color: '#78909C',
-            lineHeight: 18,
-        },
-        itemDivider: {
-            height: 1,
-            backgroundColor: '#F0F0F0',
-            marginVertical: 16,
-        },
-        itemGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-        },
-        gridBox: {
-            width: '50%',
-            marginBottom: 12,
-        },
-        gridLabelRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
+            fontSize: 15,
+            fontWeight: '800',
+            color: colors.text,
             marginBottom: 4,
         },
-        gridLabel: {
+        skuRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        skuText: {
             fontSize: 11,
-            color: '#90A4AE',
-            fontWeight: '600',
-        },
-        gridValue: {
-            fontSize: ms(13),
-            color: '#263238',
+            color: colors.textSecondary,
             fontWeight: '700',
+            textTransform: 'uppercase',
         },
-        gridValueBlue: {
-            fontSize: ms(14),
-            color: '#0055D4',
+        metaDot: {
+            width: 3,
+            height: 3,
+            borderRadius: 1.5,
+            backgroundColor: colors.border,
+        },
+        brandText: {
+            fontSize: 11,
+            color: colors.primary,
             fontWeight: '800',
         },
-        paymentTermCard: {
-            backgroundColor: '#FAFAFA',
-            borderRadius: 20,
-            padding: 16,
-            marginBottom: 12,
-        },
-        paymentLine: {
+        itemDetails: {
             flexDirection: 'row',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
+            borderRadius: 16,
+            padding: 12,
             justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingVertical: 8,
         },
-        paymentLeft: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-        },
-        paymentLabel: {
-            fontSize: 13,
-            color: '#90A4AE',
-            fontWeight: '600',
-        },
-        paymentValue: {
-            fontSize: 13,
-            color: '#263238',
-            fontWeight: '600',
-        },
-        paymentValueBlue: {
-            fontSize: 13,
-            color: '#0055D4',
-            fontWeight: '800',
-        },
-        paymentValueRed: {
-            fontSize: 13,
-            color: '#E53935',
-            fontWeight: '800',
-        },
-        contactLine: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: '#F5F7FA',
-        },
-        contactIcon: {
-            marginRight: 12,
-        },
-        contactLabel: {
+        detailBox: {
             flex: 1,
-            fontSize: 14,
-            color: '#90A4AE',
-            fontWeight: '500',
-        },
-        contactValue: {
-            fontSize: 14,
-            color: '#263238',
-            fontWeight: '600',
-        },
-        tableRowLeft: {
-            flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
         },
-        tableLabelLarge: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: '#455A64',
-        },
-        tableValueLarge: {
-            fontSize: 15,
-            fontWeight: '700',
-            color: '#263238',
-        },
-        summaryDivider: {
-            height: 1,
-            backgroundColor: '#ECEFF1',
-            marginVertical: 12,
-        },
-        tableLabelSummary: {
-            fontSize: 14,
-            color: '#78909C',
-            fontWeight: '500',
-        },
-        tableValueSummary: {
-            fontSize: 14,
-            color: '#263238',
-            fontWeight: '700',
-        },
-        tableValueSummaryRed: {
-            fontSize: 14,
-            color: '#E53935',
-            fontWeight: '700',
-        },
-        grandTotalBanner: {
-            backgroundColor: '#E3F2FD',
-            borderRadius: 12,
-            padding: 16,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: 20,
-            marginBottom: 12,
-        },
-        grandTotalLabel: {
-            fontSize: ms(16),
-            fontWeight: '700',
-            color: '#0055D4',
-        },
-        grandTotalValue: {
-            fontSize: ms(20),
+        detailLabel: {
+            fontSize: 9,
+            color: colors.textSecondary,
             fontWeight: '800',
-            color: '#0055D4',
+            textTransform: 'uppercase',
+            marginBottom: 4,
         },
-        wordAmount: {
-            fontSize: 12,
-            color: '#90A4AE',
-            textAlign: 'center',
-            fontStyle: 'italic',
+        detailValue: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        detailDivider: {
+            width: 1,
+            height: '100%',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#E2E8F0',
         },
         actionSection: {
             padding: 16,
+            marginBottom: 40,
         },
         actionGrid: {
             flexDirection: 'row',
@@ -1048,15 +1246,23 @@ function getStyles(theme: 'light' | 'dark') {
             alignItems: 'center',
             justifyContent: 'center',
             paddingVertical: 14,
-            borderRadius: 12,
+            borderRadius: 18,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 3,
         },
-        btnPrimary: { backgroundColor: '#0055D4' },
-        btnSuccess: { backgroundColor: '#2E7D32' },
+        btnPrimary: { backgroundColor: '#0277BD' },
+        btnSuccess: { backgroundColor: '#00BFA5' },
         btnDanger: { backgroundColor: '#C62828' },
+        btnWarning: { backgroundColor: '#F4511E' },
         btnText: {
             color: '#FFF',
             fontSize: 14,
-            fontWeight: '700',
+            fontWeight: '800',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
         },
     });
 }

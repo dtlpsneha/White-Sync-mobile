@@ -2,7 +2,7 @@
   "expo": {
     "name": "White Sync",
     "slug": "White_Sync",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "whitesync",
@@ -25,7 +25,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.deeptech.whitesync"
+      "package": "com.deeptech.whitesync",
+      "versionCode": 3
     },
     "web": {
       "output": "static",

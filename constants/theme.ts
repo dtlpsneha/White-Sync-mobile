@@ -32,26 +32,26 @@ export const Colors = {
     placeholder: '#94A3B8',
   },
   dark: {
-    text: '#FCFCFFFF',
+    text: '#F8FAFC',
     textSecondary: '#94A3B8',
-    background: '#1B2129',
-    surface: '#2D3748',
-    surfaceSecondary: '#3E4B5E',
-    surfaceVariant: '#4A5568',
-    tint: '#0277BD',
-    primary: '#01579B',
-    primaryVariant: '#01579B',
+    background: '#0F172A', // Deep Navy (Slate 900)
+    surface: '#1E293B',    // Slate 800
+    surfaceSecondary: '#334155', // Slate 700
+    surfaceVariant: '#475569',   // Slate 600
+    tint: '#38BDF8', // Light Blue
+    primary: '#0EA5E9',
+    primaryVariant: '#0284C7',
     secondary: '#94A3B8',
     icon: '#94A3B8',
-    border: 'rgba(255, 255, 255, 0.1)',
-    tabIconDefault: '#4A5568',
-    tabIconSelected: '#00BFA5',
-    success: '#00BFA5',
-    danger: '#F4511E',
-    warning: '#FBBF24',
-    info: '#0277BD',
-    cardShadow: 'rgba(0, 0, 0, 0.4)',
-    placeholder: '#4A5568',
+    border: 'rgba(51, 65, 85, 0.5)', // Slate 700 with opacity
+    tabIconDefault: '#475569',
+    tabIconSelected: '#38BDF8',
+    success: '#10B981',
+    danger: '#EF4444',
+    warning: '#F59E0B',
+    info: '#0EA5E9',
+    cardShadow: 'rgba(0, 0, 0, 0.5)',
+    placeholder: '#475569',
   },
 };
 

@@ -6,7 +6,15 @@ import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { notificationService } from '../services/NotificationService';
-import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+    FadeInUp,
+    FadeInDown,
+    useSharedValue,
+    useAnimatedProps,
+    withTiming,
+    interpolate,
+    Easing
+} from 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
@@ -14,62 +22,109 @@ import { useTheme } from '@/context/ThemeContext';
 import Svg, { G, Circle, Rect, Path } from 'react-native-svg';
 import { FloatingNav } from '@/components/FloatingNav';
 
-import { s, vs, ms, device } from '../utils/responsive';
+import { useResponsive } from '../hooks/useResponsive';
 
-const { width } = device;
 
-const DonutChart = ({ data, colors }: { data: number[], colors: string[] }) => {
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const DonutSegment = ({ center, radius, strokeWidth, color, percentage, rotation, progress }: any) => {
+    const circumference = 2 * Math.PI * radius;
+
+    const animatedProps = useAnimatedProps(() => {
+        // Draw the segment based on progress
+        const segmentOffset = circumference - (circumference * percentage * progress.value);
+        return {
+            strokeDashoffset: segmentOffset,
+        };
+    });
+
+    return (
+        <AnimatedCircle
+            cx={center}
+            cy={center}
+            r={radius}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            animatedProps={animatedProps}
+            fill="none"
+            transform={`rotate(${rotation}, ${center}, ${center})`}
+            strokeLinecap="round"
+        />
+    );
+};
+
+const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: number[], colors: string[], centerText?: string, strokeWidth?: number }) => {
+    const isDark = useColorScheme() === 'dark';
     const total = data.reduce((acc, val) => acc + val, 0);
-    const radius = 60;
-    const strokeWidth = 20;
+    const radius = 70;
     const center = radius + strokeWidth;
-    let accumulatedAngle = 0;
+    const progress = useSharedValue(0);
+
+    useEffect(() => {
+        progress.value = 0;
+        progress.value = withTiming(1, {
+            duration: 1500,
+            easing: Easing.out(Easing.exp)
+        });
+    }, [data]);
 
     if (total === 0) {
         return (
-            <Svg width={center * 2} height={center * 2}>
-                <Circle
-                    cx={center}
-                    cy={center}
-                    r={radius}
-                    stroke="#E6E6E6"
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                />
-            </Svg>
-        );
-    }
-
-    return (
-        <Svg width={center * 2} height={center * 2} style={{ transform: [{ rotate: '-90deg' }] }}>
-            {data.map((value, index) => {
-                const percentage = value / total;
-                const angle = percentage * 360;
-
-                const circumference = 2 * Math.PI * radius;
-                const strokeDasharray = circumference;
-                const strokeDashoffset = circumference - (circumference * percentage);
-                const rotation = accumulatedAngle;
-                accumulatedAngle += angle;
-
-                return (
+            <View style={{ width: center * 2, height: center * 2, justifyContent: 'center', alignItems: 'center' }}>
+                <Svg width={center * 2} height={center * 2}>
                     <Circle
-                        key={index}
                         cx={center}
                         cy={center}
                         r={radius}
-                        stroke={colors[index]}
+                        stroke={isDark ? '#334155' : '#E6E6E6'}
                         strokeWidth={strokeWidth}
-                        strokeDasharray={strokeDasharray}
-                        strokeDashoffset={strokeDashoffset}
                         fill="none"
-                        transform={`rotate(${rotation}, ${center}, ${center})`}
-                        strokeLinecap="round"
                     />
-                );
-            })}
-            <Circle cx={center} cy={center} r={radius - strokeWidth / 2} fill="white" />
-        </Svg>
+                </Svg>
+                <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 24, fontWeight: '900', color: isDark ? '#FFF' : '#263238' }}>0</Text>
+                    <Text style={{ fontSize: 10, color: isDark ? '#94A3B8' : '#78909C', fontWeight: '700', textTransform: 'uppercase' }}>Total</Text>
+                </View>
+            </View>
+        );
+    }
+
+    const size = center * 2 + 10; // Extra padding to prevent clipping
+    const actualCenter = size / 2;
+    let accumulatedAngle = 0;
+
+    return (
+        <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+            <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                <G rotation="-90" origin={`${actualCenter}, ${actualCenter}`}>
+                    {data.map((value, index) => {
+                        if (value === 0) return null;
+                        const percentage = value / total;
+                        const rotation = accumulatedAngle;
+                        accumulatedAngle += percentage * 360;
+
+                        return (
+                            <DonutSegment
+                                key={index}
+                                center={actualCenter}
+                                radius={radius}
+                                strokeWidth={strokeWidth}
+                                color={colors[index]}
+                                percentage={percentage}
+                                rotation={rotation}
+                                progress={progress}
+                            />
+                        );
+                    })}
+                </G>
+            </Svg>
+            <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ fontSize: 28, fontWeight: '900', color: isDark ? '#FFF' : '#263238' }}>{centerText ?? total}</Text>
+                <Text style={{ fontSize: 10, color: isDark ? '#94A3B8' : '#78909C', fontWeight: '700', textTransform: 'uppercase' }}>Total Quotes</Text>
+            </View>
+        </View>
     );
 };
 
@@ -79,7 +134,8 @@ export default function HomeScreen() {
     const { toggleTheme } = useTheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const styles = getStyles(theme);
+    const { s, vs, ms, width } = useResponsive();
+    const styles = getStyles(theme, { s, vs, ms, width });
 
     const [userName, setUserName] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -97,7 +153,7 @@ export default function HomeScreen() {
         totalCustomers: 0,
         conversionRate: '0%',
         avgQuoteValue: '₹0',
-        avgResponseTime: '2.4h'
+
     });
     const [lastUpdated, setLastUpdated] = useState<string>(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 
@@ -115,16 +171,14 @@ export default function HomeScreen() {
         lastSeenPendingIdsRef.current = lastSeenPendingIds;
     }, [lastSeenPendingIds]);
 
-    const canApprove = () => isManager;
+
 
     useEffect(() => {
         if (!loading && hasSession && !permissionDenied) {
             console.log('[Home] Starting background data refresher...');
             const interval = setInterval(() => {
                 fetchStats();
-                if (canApprove()) {
-                    checkForNewPending();
-                }
+                checkForNewPending();
             }, 30000);
             return () => clearInterval(interval);
         }
@@ -260,7 +314,7 @@ export default function HomeScreen() {
                     totalCustomers: totalCustomers,
                     conversionRate: conversionRate,
                     avgQuoteValue: avgQuoteValue.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
-                    avgResponseTime: '2.4h'
+
                 });
 
                 if (data.user_name) {
@@ -287,10 +341,7 @@ export default function HomeScreen() {
             if (!sessionCookies) return;
 
             const headers = { 'Content-Type': 'application/json', 'Cookie': sessionCookies };
-            const { status: existingStatus } = await Notifications.getPermissionsAsync();
-            if (existingStatus !== 'granted') return;
 
-            if (!canApprove()) return;
 
             const showAllStr = await SecureStore.getItemAsync('show_all_quotes');
             const showAll = showAllStr === 'true';
@@ -349,13 +400,7 @@ export default function HomeScreen() {
         }
     };
 
-    const handleTestNotification = async () => {
-        await notificationService.postLocalNotification(
-            "Test Alert 🚀",
-            "This is a manual test to verify notifications are working correctly.",
-            { id: "TEST-001" }
-        );
-    };
+
 
     const handleLogout = async () => {
         Alert.alert(
@@ -421,6 +466,10 @@ export default function HomeScreen() {
                     {/* Header */}
                     <View style={styles.header}>
                         <View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                <Image source={require('../assets/images/logo.png')} style={{ width: 28, height: 28, borderRadius: 6, marginRight: 8 }} resizeMode="contain" />
+                                <Text style={{ fontSize: 18, fontWeight: '900', color: colors.primary, letterSpacing: -0.5 }}>White Sync</Text>
+                            </View>
                             <Text style={styles.welcomeText}>WELCOME BACK</Text>
                             <Text style={styles.userNameText}>{userName || 'User'}</Text>
                             <View style={styles.liveIndicatorContainer}>
@@ -444,9 +493,7 @@ export default function HomeScreen() {
                                 color={colors.text}
                             />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={handleTestNotification} style={styles.iconButton}>
-                            <Ionicons name="bug-outline" size={18} color={colors.warning} />
-                        </TouchableOpacity>
+
                     </View>
 
                     {/* Status Grid */}
@@ -473,7 +520,7 @@ export default function HomeScreen() {
                                             <Ionicons name="cash-outline" size={16} color="rgba(255,255,255,0.8)" />
                                             <Text style={styles.statLabel}>Values:</Text>
                                         </View>
-                                        <Text style={styles.statValue}>{stats.pending.value.toLocaleString('en-IN')}</Text>
+                                        <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.pending.value.toLocaleString('en-IN')}</Text>
                                     </View>
                                     <View style={styles.statRow}>
                                         <View style={styles.statLabelContainer}>
@@ -481,13 +528,6 @@ export default function HomeScreen() {
                                             <Text style={styles.statLabel}>Customers:</Text>
                                         </View>
                                         <Text style={styles.statValue}>{stats.pending.customers}</Text>
-                                    </View>
-                                </View>
-                                <View style={styles.statusFooter}>
-                                    <Text style={styles.vsText}>vs last month</Text>
-                                    <View style={styles.changeBadge}>
-                                        <Ionicons name={stats.pending.change >= 0 ? "trending-up-outline" : "trending-down-outline"} size={12} color="#FFF" />
-                                        <Text style={styles.changeText}>{stats.pending.change}%</Text>
                                     </View>
                                 </View>
                             </TouchableOpacity>
@@ -515,7 +555,7 @@ export default function HomeScreen() {
                                             <Ionicons name="cash-outline" size={16} color="rgba(255,255,255,0.8)" />
                                             <Text style={styles.statLabel}>Values:</Text>
                                         </View>
-                                        <Text style={styles.statValue}>{stats.approved.value.toLocaleString('en-IN')}</Text>
+                                        <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.approved.value.toLocaleString('en-IN')}</Text>
                                     </View>
                                     <View style={styles.statRow}>
                                         <View style={styles.statLabelContainer}>
@@ -525,21 +565,14 @@ export default function HomeScreen() {
                                         <Text style={styles.statValue}>{stats.approved.customers}</Text>
                                     </View>
                                 </View>
-                                <View style={styles.statusFooter}>
-                                    <Text style={styles.vsText}>vs last month</Text>
-                                    <View style={styles.changeBadge}>
-                                        <Ionicons name={stats.approved.change >= 0 ? "trending-up-outline" : "trending-down-outline"} size={12} color="#FFF" />
-                                        <Text style={styles.changeText}>{stats.approved.change}%</Text>
-                                    </View>
-                                </View>
                             </TouchableOpacity>
                         </Animated.View>
 
-                        {/* Declined Card */}
-                        <View style={[styles.statusCard, { backgroundColor: '#F4511E' }]}>
-                            <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Declined' } })}>
+                        {/* Declined Card -> Review Card */}
+                        <Animated.View entering={FadeInDown.delay(300).springify()} style={[styles.statusCard, { backgroundColor: '#F4511E' }]}>
+                            <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Review' } })}>
                                 <View style={styles.statusHeader}>
-                                    <Text style={styles.statusTitle}>DECLINED</Text>
+                                    <Text style={styles.statusTitle}>REVIEW</Text>
                                     <View style={styles.statusIconContainer}>
                                         <Ionicons name="trending-down-outline" size={18} color="#FFF" />
                                     </View>
@@ -557,7 +590,7 @@ export default function HomeScreen() {
                                             <Ionicons name="cash-outline" size={16} color="rgba(255,255,255,0.8)" />
                                             <Text style={styles.statLabel}>Values:</Text>
                                         </View>
-                                        <Text style={styles.statValue}>{stats.declined.value.toLocaleString('en-IN')}</Text>
+                                        <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.declined.value.toLocaleString('en-IN')}</Text>
                                     </View>
                                     <View style={styles.statRow}>
                                         <View style={styles.statLabelContainer}>
@@ -567,18 +600,11 @@ export default function HomeScreen() {
                                         <Text style={styles.statValue}>{stats.declined.customers}</Text>
                                     </View>
                                 </View>
-                                <View style={styles.statusFooter}>
-                                    <Text style={styles.vsText}>vs last month</Text>
-                                    <View style={styles.changeBadge}>
-                                        <Ionicons name={stats.declined.change >= 0 ? "trending-up-outline" : "trending-down-outline"} size={12} color="#FFF" />
-                                        <Text style={styles.changeText}>{stats.declined.change}%</Text>
-                                    </View>
-                                </View>
                             </TouchableOpacity>
-                        </View>
+                        </Animated.View>
 
                         {/* Cancelled Card */}
-                        <View style={[styles.statusCard, { backgroundColor: '#C62828' }]}>
+                        <Animated.View entering={FadeInDown.delay(400).springify()} style={[styles.statusCard, { backgroundColor: '#C62828' }]}>
                             <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Cancelled' } })}>
                                 <View style={styles.statusHeader}>
                                     <Text style={styles.statusTitle}>CANCELLED</Text>
@@ -592,14 +618,14 @@ export default function HomeScreen() {
                                             <Ionicons name="document-text-outline" size={16} color="rgba(255,255,255,0.8)" />
                                             <Text style={styles.statLabel}>Quotes:</Text>
                                         </View>
-                                        <Text style={styles.statValue}>{stats.cancelled.quotes}</Text>
+                                        <Text style={stats.cancelled.quotes > 0 ? styles.statValue : styles.statValue}> {stats.cancelled.quotes}</Text>
                                     </View>
                                     <View style={styles.statRow}>
                                         <View style={styles.statLabelContainer}>
                                             <Ionicons name="cash-outline" size={16} color="rgba(255,255,255,0.8)" />
                                             <Text style={styles.statLabel}>Values:</Text>
                                         </View>
-                                        <Text style={styles.statValue}>{stats.cancelled.value.toLocaleString('en-IN')}</Text>
+                                        <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.cancelled.value.toLocaleString('en-IN')}</Text>
                                     </View>
                                     <View style={styles.statRow}>
                                         <View style={styles.statLabelContainer}>
@@ -609,19 +635,12 @@ export default function HomeScreen() {
                                         <Text style={styles.statValue}>{stats.cancelled.customers}</Text>
                                     </View>
                                 </View>
-                                <View style={styles.statusFooter}>
-                                    <Text style={styles.vsText}>vs last month</Text>
-                                    <View style={styles.changeBadge}>
-                                        <Ionicons name={stats.cancelled.change >= 0 ? "trending-up-outline" : "trending-down-outline"} size={12} color="#FFF" />
-                                        <Text style={styles.changeText}>{stats.cancelled.change}%</Text>
-                                    </View>
-                                </View>
                             </TouchableOpacity>
-                        </View>
+                        </Animated.View>
                     </View>
 
                     {/* Donut Chart Card */}
-                    <View style={styles.donutCard}>
+                    <Animated.View entering={FadeInUp.delay(500).duration(800)} style={styles.donutCard}>
                         <View style={styles.donutHeader}>
                             <View>
                                 <Text style={styles.donutTitle}>Donut Chart</Text>
@@ -636,44 +655,62 @@ export default function HomeScreen() {
                         <View style={styles.chartWrapper}>
                             <DonutChart
                                 data={[stats.pending.quotes, stats.approved.quotes, stats.declined.quotes, stats.cancelled.quotes]}
-                                colors={['#00B0FF', '#00BFA5', '#F4511E', '#D32F2F']}
+                                colors={['#0277BD', '#00BFA5', '#F4511E', '#C62828']}
+                                centerText={stats.totalQuotes.toString()}
+                                strokeWidth={12}
                             />
                             <View style={styles.legendContainer}>
-                                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#00B0FF' }]} /><Text style={styles.legendText}>Pending</Text></View>
-                                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#00BFA5' }]} /><Text style={styles.legendText}>Approved</Text></View>
-                                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#F4511E' }]} /><Text style={styles.legendText}>Declined</Text></View>
-                                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#D32F2F' }]} /><Text style={styles.legendText}>Cancelled</Text></View>
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: '#0277BD' }]} />
+                                    <Text style={styles.legendText}>Pending</Text>
+                                    <Text style={styles.legendValue}>{stats.pending.quotes}</Text>
+                                </View>
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: '#00BFA5' }]} />
+                                    <Text style={styles.legendText}>Approved</Text>
+                                    <Text style={styles.legendValue}>{stats.approved.quotes}</Text>
+                                </View>
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: '#F4511E' }]} />
+                                    <Text style={styles.legendText}>Declined</Text>
+                                    <Text style={styles.legendValue}>{stats.declined.quotes}</Text>
+                                </View>
+                                <View style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: '#C62828' }]} />
+                                    <Text style={styles.legendText}>Cancelled</Text>
+                                    <Text style={styles.legendValue}>{stats.cancelled.quotes}</Text>
+                                </View>
                             </View>
                         </View>
 
                         <View style={styles.donutStatsRow}>
                             <View style={styles.donutStat}>
-                                <Text style={styles.donutStatValue}>{stats.totalQuotes}</Text>
+                                <Text style={styles.donutStatValue} numberOfLines={1} adjustsFontSizeToFit>{stats.totalQuotes}</Text>
                                 <Text style={styles.donutStatLabel}>Total Quotes</Text>
                             </View>
-                            <View style={[styles.donutStat, styles.donutStatBorder]}>
-                                <Text style={styles.donutStatValue}>{stats.totalValue.replace('INR', '₹')}</Text>
+                            <View style={[styles.donutStat, styles.donutStatBorder, { flex: 1.5 }]}>
+                                <Text style={styles.donutStatValue} numberOfLines={1} adjustsFontSizeToFit>{stats.totalValue.replace('INR', '₹')}</Text>
                                 <Text style={styles.donutStatLabel}>Total Value</Text>
                             </View>
                             <View style={styles.donutStat}>
-                                <Text style={styles.donutStatValue}>{stats.totalCustomers}</Text>
+                                <Text style={styles.donutStatValue} numberOfLines={1} adjustsFontSizeToFit>{stats.totalCustomers}</Text>
                                 <Text style={styles.donutStatLabel}>Customers</Text>
                             </View>
                         </View>
-                    </View>
+                    </Animated.View>
 
                     {/* Bottom Metrics */}
-                    <View style={styles.metricsContainer}>
-                        <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: 4 }]}>
+                    <Animated.View entering={FadeInUp.delay(600).duration(800)} style={styles.metricsContainer}>
+                        <Animated.View entering={FadeInDown.delay(700).springify()} style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: 4 }]}>
                             <View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}>
                                 <Ionicons name="trending-up" size={16} color="#FFF" />
                             </View>
                             <View>
-                                <Text style={styles.metricLabel}>Conversion Rate</Text>
+                                <Text style={styles.metricLabel}>Approved Rate</Text>
                                 <Text style={[styles.metricValue, { color: '#00695C' }]}>{stats.conversionRate}</Text>
                             </View>
-                        </View>
-                        <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: 4 }]}>
+                        </Animated.View>
+                        <Animated.View entering={FadeInDown.delay(800).springify()} style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: 4 }]}>
                             <View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}>
                                 <Ionicons name="cash-outline" size={16} color="#FFF" />
                             </View>
@@ -681,27 +718,20 @@ export default function HomeScreen() {
                                 <Text style={styles.metricLabel}>Avg. Quote Value</Text>
                                 <Text style={[styles.metricValue, { color: '#01579B' }]}>{stats.avgQuoteValue}</Text>
                             </View>
-                        </View>
-                        <View style={[styles.metricCard, { backgroundColor: '#FFF3E0', borderLeftColor: '#FF6F00', borderLeftWidth: 4 }]}>
-                            <View style={[styles.metricIcon, { backgroundColor: '#FF6F00' }]}>
-                                <Ionicons name="time-outline" size={16} color="#FFF" />
-                            </View>
-                            <View>
-                                <Text style={styles.metricLabel}>Avg. Response Time</Text>
-                                <Text style={[styles.metricValue, { color: '#E65100' }]}>{stats.avgResponseTime}</Text>
-                            </View>
-                        </View>
-                    </View>
+                        </Animated.View>
+                    </Animated.View>
 
                     <View style={{ height: 100 }} />
                     <FloatingNav />
                 </>
-            )}
-        </ScrollView>
+            )
+            }
+        </ScrollView >
     );
 }
 
-function getStyles(theme: 'light' | 'dark') {
+function getStyles(theme: 'light' | 'dark', { s, vs, ms, width }: any) {
+    const isDark = theme === 'dark';
     const colors = Colors[theme];
     return StyleSheet.create({
         container: {
@@ -775,7 +805,7 @@ function getStyles(theme: 'light' | 'dark') {
             width: 80,
             height: 80,
             borderRadius: 40,
-            backgroundColor: 'rgba(244, 81, 30, 0.1)',
+            backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : 'rgba(244, 81, 30, 0.1)',
             justifyContent: 'center',
             alignItems: 'center',
             marginBottom: 24,
@@ -783,18 +813,18 @@ function getStyles(theme: 'light' | 'dark') {
         deniedTitle: {
             fontSize: 22,
             fontWeight: '900',
-            color: '#263238', // Ensure high contrast even if theme object is small
+            color: colors.text,
             marginBottom: 12,
         },
         deniedSubtitle: {
             fontSize: 14,
-            color: '#78909C',
+            color: colors.textSecondary,
             textAlign: 'center',
             lineHeight: 22,
             marginBottom: 32,
         },
         deniedButton: {
-            backgroundColor: '#01579B',
+            backgroundColor: colors.primary,
             paddingVertical: 14,
             paddingHorizontal: 32,
             borderRadius: 16,
@@ -820,12 +850,12 @@ function getStyles(theme: 'light' | 'dark') {
             width: 48,
             height: 48,
             borderRadius: 16,
-            backgroundColor: '#01579B',
+            backgroundColor: colors.primary,
             justifyContent: 'center',
             alignItems: 'center',
             borderWidth: 2,
-            borderColor: 'rgba(255,255,255,0.2)',
-            shadowColor: '#01579B',
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
+            shadowColor: colors.primary,
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,
@@ -863,19 +893,20 @@ function getStyles(theme: 'light' | 'dark') {
         },
         statusCard: {
             width: (width - s(40) - s(12)) / 2,
-            height: vs(200),
+            minHeight: vs(210), // Increased height and used minHeight
             borderRadius: ms(24),
             marginBottom: vs(12),
             padding: s(16),
-            shadowColor: '#01579B',
+            shadowColor: '#000',
             shadowOffset: { width: 0, height: vs(12) },
-            shadowOpacity: 0.15,
+            shadowOpacity: isDark ? 0.3 : 0.15,
             shadowRadius: ms(15),
             elevation: 10,
         },
         cardContent: {
             flex: 1,
-            justifyContent: 'space-between',
+            justifyContent: 'flex-start',
+            gap: 16,
         },
         statusHeader: {
             flexDirection: 'row',
@@ -904,21 +935,23 @@ function getStyles(theme: 'light' | 'dark') {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
+            minHeight: vs(24), // Ensure some height even if empty
         },
         statLabelContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 6,
-            flexShrink: 1,
-            marginRight: 8,
+            gap: 4, // Reduced gap slightly
+            flexShrink: 0, // Labels should not shrink
+            marginRight: 4,
         },
         statLabel: {
             fontSize: ms(11),
             color: 'rgba(255,255,255,0.8)',
         },
         statValue: {
-            fontSize: ms(13),
-            fontWeight: 'bold',
+            flex: 1, // Take up remaining space
+            fontSize: ms(12), // Slightly smaller font for values
+            fontWeight: '900',
             color: '#FFF',
             textAlign: 'right',
         },
@@ -974,7 +1007,7 @@ function getStyles(theme: 'light' | 'dark') {
             color: colors.textSecondary,
         },
         detailsButton: {
-            backgroundColor: '#0277BD',
+            backgroundColor: isDark ? colors.surfaceSecondary : colors.primary,
             paddingVertical: 10,
             paddingHorizontal: 14,
             borderRadius: 12,
@@ -1013,6 +1046,13 @@ function getStyles(theme: 'light' | 'dark') {
             fontSize: 10,
             color: colors.textSecondary,
             fontWeight: '500',
+            flex: 1,
+        },
+        legendValue: {
+            fontSize: 10,
+            color: colors.text,
+            fontWeight: '800',
+            marginLeft: 8,
         },
         donutStatsRow: {
             flexDirection: 'row',
@@ -1030,10 +1070,11 @@ function getStyles(theme: 'light' | 'dark') {
             borderLeftWidth: 1,
             borderRightWidth: 1,
             borderColor: colors.border,
+            paddingHorizontal: 10,
         },
         donutStatValue: {
-            fontSize: 20,
-            fontWeight: 'bold',
+            fontSize: 18,
+            fontWeight: '900',
             color: colors.text,
         },
         donutStatLabel: {

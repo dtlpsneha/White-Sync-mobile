@@ -18,14 +18,16 @@ import * as SecureStore from 'expo-secure-store';
 import { useEffect } from 'react';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { s, vs, ms } from '../utils/responsive';
+import Animated, { FadeInUp, FadeInDown, FadeIn } from 'react-native-reanimated';
+import { useResponsive } from '../hooks/useResponsive';
 
 export default function LoginScreen() {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const styles = getStyles(theme);
+    const { s, vs, ms } = useResponsive();
+    const styles = getStyles(theme, { s, vs, ms });
 
     useEffect(() => {
         checkSession();
@@ -143,17 +145,17 @@ export default function LoginScreen() {
                     <Stack.Screen options={{ headerShown: false }} />
                     <StatusBar style="dark" />
 
-                    <View style={styles.headerContainer}>
-
+                    <Animated.View entering={FadeInUp.duration(1000).springify()} style={styles.headerContainer}>
+                        <Image source={require('../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
                         <Text style={styles.appName}>White Sync</Text>
-                        <View style={styles.welcomeBox}>
+                        <Animated.View entering={FadeIn.delay(300).duration(800)} style={styles.welcomeBox}>
                             <Text style={styles.welcomeText}>Welcome Back!</Text>
                             <Text style={styles.subText}>Sign in to access your dashboard</Text>
-                        </View>
-                    </View>
+                        </Animated.View>
+                    </Animated.View>
 
-                    <View style={styles.formContainer}>
-                        <View style={styles.inputWrapper}>
+                    <Animated.View entering={FadeInDown.delay(500).duration(1000).springify()} style={styles.formContainer}>
+                        <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.inputWrapper}>
                             <Text style={styles.inputLabel}>Email Address</Text>
                             <View style={styles.inputContainer}>
                                 <Ionicons name="mail-outline" size={20} color="#90A4AE" style={styles.inputIcon} />
@@ -167,9 +169,9 @@ export default function LoginScreen() {
                                     onChangeText={setEmail}
                                 />
                             </View>
-                        </View>
+                        </Animated.View>
 
-                        <View style={styles.inputWrapper}>
+                        <Animated.View entering={FadeInDown.delay(700).springify()} style={styles.inputWrapper}>
                             <Text style={styles.inputLabel}>Password</Text>
                             <View style={styles.inputContainer}>
                                 <Ionicons name="lock-closed-outline" size={20} color="#90A4AE" style={styles.inputIcon} />
@@ -189,38 +191,41 @@ export default function LoginScreen() {
                                     />
                                 </TouchableOpacity>
                             </View>
-                        </View>
+                        </Animated.View>
 
-                        <TouchableOpacity style={styles.forgotPassword}>
+                        <Animated.View entering={FadeIn.delay(800)} style={styles.forgotPassword}>
                             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                        </TouchableOpacity>
+                        </Animated.View>
 
-                        <TouchableOpacity style={styles.loginButton} onPress={handleLogin} activeOpacity={0.8}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Text style={styles.loginButtonText}>Sign In</Text>
-                                <Ionicons name="arrow-forward" size={20} color="#FFF" style={{ marginLeft: 8 }} />
-                            </View>
-                        </TouchableOpacity>
+                        <Animated.View entering={FadeInDown.delay(900).springify()} style={styles.loginButtonWrapper}>
+                            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} activeOpacity={0.8}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={styles.loginButtonText}>Sign In</Text>
+                                    <Ionicons name="arrow-forward" size={20} color="#FFF" style={{ marginLeft: 8 }} />
+                                </View>
+                            </TouchableOpacity>
+                        </Animated.View>
 
-                        <View style={styles.signupContainer}>
+                        <Animated.View entering={FadeIn.delay(1000)} style={styles.signupContainer}>
                             <Text style={styles.signupText}>New member? </Text>
                             <TouchableOpacity>
                                 <Text style={styles.signupLink}>Contact Admin</Text>
                             </TouchableOpacity>
-                        </View>
-                    </View>
+                        </Animated.View>
+                    </Animated.View>
                 </View>
             </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
     );
 }
 
-function getStyles(theme: 'light' | 'dark') {
+function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
     const isDark = theme === 'dark';
+    const colors = Colors[theme];
     return StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: '#F8F9FE', // Very light lavender/grey
+            backgroundColor: colors.background,
         },
         inner: {
             flex: 1,
@@ -228,14 +233,20 @@ function getStyles(theme: 'light' | 'dark') {
             padding: 24,
         },
         headerContainer: {
-            marginBottom: 48,
+            marginBottom: 32,
             alignItems: 'center',
+        },
+        logo: {
+            width: ms(80),
+            height: ms(80),
+            marginBottom: vs(16),
+            borderRadius: ms(20),
         },
 
         appName: {
             fontSize: ms(32),
             fontWeight: '900',
-            color: '#01579B', // Midnight Blue
+            color: colors.primary,
             letterSpacing: -0.5,
             marginBottom: vs(8),
         },
@@ -245,12 +256,12 @@ function getStyles(theme: 'light' | 'dark') {
         welcomeText: {
             fontSize: ms(22),
             fontWeight: '700',
-            color: '#263238',
+            color: colors.text,
             marginBottom: vs(4),
         },
         subText: {
             fontSize: ms(15),
-            color: '#90A4AE',
+            color: colors.textSecondary,
             fontWeight: '500',
         },
         formContainer: {
@@ -262,22 +273,22 @@ function getStyles(theme: 'light' | 'dark') {
         inputLabel: {
             fontSize: 14,
             fontWeight: '700',
-            color: '#455A64',
+            color: colors.textSecondary,
             marginBottom: 8,
             marginLeft: 4,
         },
         inputContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: '#FFF',
+            backgroundColor: isDark ? colors.surface : '#FFF',
             borderRadius: ms(18),
             paddingHorizontal: s(16),
             height: vs(58),
             borderWidth: 1.5,
-            borderColor: '#F0F4F8',
+            borderColor: isDark ? colors.surfaceSecondary : '#F0F4F8',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: vs(4) },
-            shadowOpacity: 0.02,
+            shadowOpacity: isDark ? 0.3 : 0.02,
             shadowRadius: ms(10),
             elevation: 2,
         },
@@ -287,7 +298,7 @@ function getStyles(theme: 'light' | 'dark') {
         input: {
             flex: 1,
             fontSize: 16,
-            color: '#263238',
+            color: colors.text,
             fontWeight: '500',
         },
         forgotPassword: {
@@ -296,18 +307,18 @@ function getStyles(theme: 'light' | 'dark') {
         },
         forgotPasswordText: {
             fontSize: 14,
-            color: '#0277BD',
+            color: colors.primary,
             fontWeight: '700',
         },
         loginButton: {
-            backgroundColor: '#01579B', // Midnight Blue
+            backgroundColor: colors.primary,
             borderRadius: ms(18),
             height: vs(58),
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: vs(32),
-            shadowColor: '#01579B',
+            shadowColor: colors.primary,
             shadowOffset: { width: 0, height: vs(8) },
             shadowOpacity: 0.3,
             shadowRadius: ms(15),
@@ -320,6 +331,9 @@ function getStyles(theme: 'light' | 'dark') {
             textTransform: 'uppercase',
             letterSpacing: 1,
         },
+        loginButtonWrapper: {
+            width: '100%',
+        },
         signupContainer: {
             flexDirection: 'row',
             justifyContent: 'center',
@@ -327,11 +341,11 @@ function getStyles(theme: 'light' | 'dark') {
         },
         signupText: {
             fontSize: 14,
-            color: '#90A4AE',
+            color: colors.textSecondary,
         },
         signupLink: {
             fontSize: 14,
-            color: '#00BFA5', // Teal
+            color: colors.success,
             fontWeight: '800',
         },
     });
