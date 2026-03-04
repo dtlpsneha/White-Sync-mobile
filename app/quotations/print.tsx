@@ -7,6 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { apiPost } from '@/utils/api';
 
 export default function PrintPreviewScreen() {
     const { id } = useLocalSearchParams();
@@ -39,18 +40,11 @@ export default function PrintPreviewScreen() {
             setFormatsLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const response = await fetch('http://13.234.62.39:8080/api/method/get_quotation_html', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Cookie': sessionCookies || '',
-                },
-                body: JSON.stringify({ action: 'get_list' })
-            });
+            // Ensure we use the documented base URL for print formats
+            const res = await apiPost('http://13.234.62.39:8080/api/method/get_quotation_html', { action: 'get_list' }, sessionCookies);
+            const data: any = res.data;
 
-            const data = await response.json();
-
-            if (data.message && Array.isArray(data.message)) {
+            if (res.ok && data && data.message && Array.isArray(data.message)) {
                 setPrintFormats(data.message);
                 // Try to default to "Proforma Invoice Precitex" if it exists, otherwise use the first one
                 const defaultFormat = data.message.includes('Proforma Invoice Precitex')
@@ -73,22 +67,15 @@ export default function PrintPreviewScreen() {
             setLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const response = await fetch('http://13.234.62.39:8080/api/method/get_quotation_html', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Cookie': sessionCookies || '',
-                },
-                body: JSON.stringify({
-                    action: 'get_preview',
-                    doc_name: id,
-                    print_format: selectedFormat
-                })
-            });
+            const res = await apiPost('http://13.234.62.39:8080/api/method/get_quotation_html', {
+                action: 'get_preview',
+                doc_name: id,
+                print_format: selectedFormat
+            }, sessionCookies);
 
-            const data = await response.json();
+            const data: any = res.data;
 
-            if (data.message) {
+            if (res.ok && data && data.message) {
                 // Inject mobile-friendly scaling meta and table styling
                 const injectedHTML = `
                     <html>

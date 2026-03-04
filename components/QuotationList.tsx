@@ -7,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useResponsive } from '../hooks/useResponsive';
 import Animated, { FadeInDown, FadeInUp, useSharedValue, withRepeat, withTiming, withSequence, useAnimatedStyle } from 'react-native-reanimated';
+import { apiPost } from '@/utils/api';
 
 interface Quotation {
     name: string;
@@ -36,6 +37,7 @@ interface Quotation {
     net_total?: number;
     base_net_total?: number;
     approved_by?: string;
+    dashboard_category?: string;
 }
 
 interface QuotationListProps {
@@ -82,70 +84,36 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
         try {
             setLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const showAllQuotes = await SecureStore.getItemAsync('show_all_quotes');
-            const isManager = await SecureStore.getItemAsync('is_manager');
-            const loggedInUser = await SecureStore.getItemAsync('user_id');
-
-            const headers: HeadersInit = { 'Content-Type': 'application/json' };
-            if (sessionCookies) headers['Cookie'] = sessionCookies;
-
-            // Determine body based on logic:
-            // Quote Head / Manager (is_manager=true, show_all_quotes=true) -> "all"
-            // Everyone else -> "respective_user"
-            // Note: Login logic stores 'true'/'false' strings.
-            const requestType = (showAllQuotes === 'true') ? 'all' : 'respective_user';
-
-            console.log(`[QuotationList] Fetching with type: ${requestType}`);
-
             const url = `http://13.234.62.39:8080/api/method/get_quote_resource`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    show_quotation_type: requestType
-                })
-            });
+            const res = await apiPost(url, {}, sessionCookies);
 
-            const data = await response.json();
+            const data: any = res.data;
 
-            // Log response structure to verify assumption
-            // console.log('[QuotationList] Response:', JSON.stringify(data).substring(0, 200) + '...');
+            if (res.ok && data && data.message && data.message.success) {
+                let fetchedList: Quotation[] = Array.isArray(data.message.data) ? data.message.data : [];
 
-            if (response.ok && data.message) {
-                // Assumption: Custom API returns list in `data.message` or `data.message.data`? 
-                // User example: "Response: { message: ... }" (User Data example). 
-                // Usually Frappe custom methods return data in `message`.
-                // If it returns a list directly in message:
-                let fetchedList: Quotation[] = [];
-                if (Array.isArray(data.message)) {
-                    fetchedList = data.message;
-                } else if (data.message.data && Array.isArray(data.message.data)) {
-                    fetchedList = data.message.data;
-                } else if (data.data && Array.isArray(data.data)) {
-                    // Fallback for standard resource response style just in case
-                    fetchedList = data.data;
-                }
-
-                // Client-side filtering
+                // Client-side filtering for UI filters
                 let filtered = fetchedList;
 
-                // 1. Workflow State Filter
+                // 1. Filter by dashboard category or status
                 if (filter !== 'All') {
                     filtered = filtered.filter(q => {
-                        const rawStatus = (q.workflow_state || q.status || '').trim();
-                        let displayStatus = rawStatus;
-                        if (displayStatus === 'Open') displayStatus = 'Pending';
-                        if (displayStatus === 'Declined' || displayStatus === 'Rejected') displayStatus = 'Review';
+                        const cat = (q.dashboard_category || '').toUpperCase();
+                        const target = filter.toUpperCase();
 
-                        // Case-insensitive comparison and handle Canceled vs Cancelled
-                        const targetFilter = filter.toLowerCase();
-                        const currentStatus = displayStatus.toLowerCase();
+                        // Mapping UI filters to dashboard categories
+                        if (target === 'PENDING') return cat === 'PENDING';
+                        if (target === 'APPROVED') return cat === 'APPROVED';
+                        if (target === 'REVIEW') return cat === 'REVIEW';
+                        if (target === 'CANCELLED') return cat === 'CANCELLED';
 
-                        if (targetFilter === 'cancelled' || targetFilter === 'canceled') {
-                            return currentStatus === 'cancelled' || currentStatus === 'canceled';
-                        }
+                        // Fallback to workflow_state or status
+                        const rawStatus = (q.workflow_state || q.status || '').toUpperCase();
+                        if (rawStatus.includes(target)) return true;
+                        if (target === 'PENDING' && rawStatus === 'OPEN') return true;
+                        if (target === 'REVIEW' && (rawStatus === 'DECLINED' || rawStatus === 'REJECTED')) return true;
 
-                        return currentStatus === targetFilter;
+                        return false;
                     });
                 }
 
@@ -157,20 +125,6 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                         (q.customer_name && q.customer_name.toLowerCase().includes(query))
                     );
                 }
-
-                // 3. Sales Manager Filter (Waiting for approval)
-                // Logic: is_manager = true and show_all_quotes = false
-                // Relaxation: Also show quotes where the user is the owner, so they can see their history/cancelled quotes.
-                if (isManager === 'true' && showAllQuotes === 'false') {
-                    console.log(`[QuotationList] Applying Sales Manager filter for: ${loggedInUser}`);
-                    filtered = filtered.filter(q => q.temporary_approver === loggedInUser || q.owner === loggedInUser);
-                }
-
-                if (fetchedList.length > 0) {
-                    console.log('[QuotationList] First Item Sample:', JSON.stringify(fetchedList[0]));
-                }
-
-                // Data usually comes sorted from ERPNext reports, but safe to trust API/Array order for now.
 
                 setQuotations(filtered);
             } else {
@@ -247,7 +201,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
         rawName = rawName.replace(/^dtlp/i, '');
 
         // Clean up and Title Case
-        return rawName.trim().replace(/\b\w/g, c => c.toUpperCase());
+        return rawName.trim().replace(/\b\w/g, (c: string) => c.toUpperCase());
     };
 
     const renderItem = ({ item }: { item: Quotation }) => {

@@ -1,11 +1,13 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, usePathname } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsive } from '@/hooks/useResponsive';
+import { Ionicons } from '@expo/vector-icons';
+import { usePathname, useRouter } from 'expo-router';
+import React from 'react';
+import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const FloatingNav = () => {
     const router = useRouter();
@@ -13,31 +15,57 @@ export const FloatingNav = () => {
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
+    const insets = useSafeAreaInsets();
+    const { ms, s } = useResponsive();
 
     const isHome = pathname === '/home';
     const isQuotation = pathname.includes('/quotations');
+    const isMaintenance = pathname.includes('/maintenance');
 
     return (
         <View style={styles.container}>
-            <View style={[styles.navBar, { backgroundColor: theme === 'dark' ? 'rgba(30,40,55,0.95)' : 'rgba(255,255,255,0.95)' }]}>
+            <View style={[styles.navBar, {
+                backgroundColor: theme === 'dark' ? '#0F172A' : '#FFFFFF',
+                borderTopColor: theme === 'dark' ? '#1E293B' : '#F1F5F9',
+                borderTopWidth: 1,
+                paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, ms(25)) : Math.max(insets.bottom, ms(12)),
+                paddingTop: ms(12),
+                paddingHorizontal: s(10),
+            }]}>
                 <TouchableOpacity
-                    style={[styles.navItem, isHome && styles.activeItem]}
+                    style={styles.navItem}
                     onPress={() => router.replace('/home')}
                 >
                     <Ionicons
-                        name="grid"
-                        size={18}
-                        color={isHome ? '#0277BD' : '#90A4AE'}
+                        name={isHome ? "grid" : "grid-outline"}
+                        size={ms(22)}
+                        color={isHome ? '#0277BD' : '#94A3B8'}
                     />
-                    <Text style={[styles.navText, { color: isHome ? '#0277BD' : '#90A4AE' }]}>Dashboard</Text>
+                    <Text style={[styles.navText, { color: isHome ? '#0277BD' : '#94A3B8', fontSize: ms(10) }]} numberOfLines={1}>Home</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.navItem, isQuotation && styles.activeItem]}
+                    style={styles.navItem}
                     onPress={() => router.replace('/quotations')}
                 >
-                    <View style={[styles.dotIcon, { backgroundColor: isQuotation ? '#00BFA5' : '#90A4AE' }]} />
-                    <Text style={[styles.navText, { color: isQuotation ? '#00BFA5' : '#90A4AE' }]}>Quotation</Text>
+                    <Ionicons
+                        name={isQuotation ? "document-text" : "document-text-outline"}
+                        size={ms(22)}
+                        color={isQuotation ? '#00BFA5' : '#94A3B8'}
+                    />
+                    <Text style={[styles.navText, { color: isQuotation ? '#00BFA5' : '#94A3B8', fontSize: ms(10) }]} numberOfLines={1}>Quote</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.navItem}
+                    onPress={() => router.replace('/maintenance')}
+                >
+                    <Ionicons
+                        name={isMaintenance ? "calendar" : "calendar-outline"}
+                        size={ms(22)}
+                        color={isMaintenance ? '#F4511E' : '#94A3B8'}
+                    />
+                    <Text style={[styles.navText, { color: isMaintenance ? '#F4511E' : '#94A3B8', fontSize: ms(10) }]} numberOfLines={1}>Records</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -47,43 +75,29 @@ export const FloatingNav = () => {
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 30,
+        bottom: 0,
         left: 0,
         right: 0,
-        alignItems: 'center',
         zIndex: 1000,
     },
     navBar: {
         flexDirection: 'row',
-        padding: 5,
-        borderRadius: 40,
-        width: width * 0.7,
-        gap: 5,
+        width: SCREEN_WIDTH,
+        justifyContent: 'space-around',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 15,
-        elevation: 10,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 20,
     },
     navItem: {
-        flex: 1,
-        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: 35,
-        gap: 8,
-    },
-    activeItem: {
-        backgroundColor: 'rgba(255,255,255,0.3)',
+        gap: 4,
+        paddingHorizontal: 4,
+        minWidth: 60,
     },
     navText: {
-        fontSize: 14,
         fontWeight: '700',
-    },
-    dotIcon: {
-        width: 14,
-        height: 14,
-        borderRadius: 7,
     }
 });

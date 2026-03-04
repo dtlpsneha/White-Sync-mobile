@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import QuotationList from '@/components/QuotationList';
+import { apiPost } from '@/utils/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { FloatingNav } from '@/components/FloatingNav';
@@ -32,50 +33,23 @@ export default function QuotationListScreen() {
     const fetchWorkflowStates = async () => {
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const headers: HeadersInit = { 'Content-Type': 'application/json' };
-            if (sessionCookies) headers['Cookie'] = sessionCookies;
+            const res = await apiPost(`http://13.234.62.39:8080/api/method/get_quote_resource`, {}, sessionCookies);
+            const data: any = res.data;
 
-            const showAllStr = await SecureStore.getItemAsync('show_all_quotes');
-            const showAll = showAllStr === 'true';
-
-            // Fetch all quotations to get distinct workflow states via new API
-            const url = `http://13.234.62.39:8080/api/method/get_quote_resource`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    show_quotation_type: showAll ? 'all' : 'respective_user'
-                })
-            });
-            const data = await response.json();
-
-            // Handle different response structures for robustness
-            let quotes: any[] = [];
-            if (Array.isArray(data.message)) quotes = data.message;
-            else if (data.message && Array.isArray(data.message.data)) quotes = data.message.data;
-
-            if (quotes && quotes.length > 0) {
+            if (res.ok && data && data.message && data.message.success && Array.isArray(data.message.data)) {
+                const quotes = data.message.data;
                 const states: string[] = quotes
                     .reduce((acc: string[], q: any) => {
-                        const ws = q.workflow_state;
-                        const s = q.status === 'Open' ? 'Pending' : q.status;
-                        const displayStatus = ws || s;
+                        const displayStatus = q.dashboard_category || q.workflow_state || q.status;
                         if (displayStatus && !acc.includes(displayStatus)) acc.push(displayStatus);
                         return acc;
                     }, [])
                     .sort();
 
-                // Ensure standard mockup states are always present in the collection if needed
-                const mockupStates = ['Approved', 'Cancelled', 'Draft'];
-                mockupStates.forEach(s => {
-                    if (!states.includes(s)) states.push(s);
-                });
-
-                // Ensure a standard order if possible: All, Pending, Approved...
-                const priority = ['Pending', 'Approved', 'Cancelled', 'Draft', 'Review'];
+                const priority = ['PENDING', 'APPROVED', 'REVIEW', 'CANCELLED'];
                 const sortedStates = states.sort((a, b) => {
-                    const indexA = priority.indexOf(a);
-                    const indexB = priority.indexOf(b);
+                    const indexA = priority.indexOf(a.toUpperCase());
+                    const indexB = priority.indexOf(b.toUpperCase());
                     if (indexA !== -1 && indexB !== -1) return indexA - indexB;
                     if (indexA !== -1) return -1;
                     if (indexB !== -1) return 1;
@@ -84,8 +58,7 @@ export default function QuotationListScreen() {
 
                 setWorkflowStates(['All', ...sortedStates]);
             } else {
-                // If no quotes at all, show the standard filters from mockup
-                setWorkflowStates(['All', 'Approved', 'Cancelled', 'Draft']);
+                setWorkflowStates(['All', 'PENDING', 'APPROVED', 'REVIEW', 'CANCELLED']);
             }
         } catch (error) {
             console.error('Error fetching workflow states:', error);

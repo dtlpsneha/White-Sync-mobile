@@ -11,6 +11,7 @@ import Animated, { FadeInUp, FadeInDown, useAnimatedScrollHandler, useSharedValu
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useResponsive } from '../../hooks/useResponsive';
+import { apiGet, apiPost } from '@/utils/api';
 
 interface QuotationDetail {
     name: string;
@@ -29,6 +30,8 @@ interface QuotationDetail {
     company?: string;
     sales_executive?: string;
     team_member?: string;
+    approved_by?: string;
+    dashboard_category?: string;
     designation?: string;
     phone_no?: string;
     mobile_no?: string;
@@ -160,15 +163,11 @@ export default function QuotationDetailScreen() {
     const fetchQuotationListForNavigation = async () => {
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const headers: HeadersInit = { 'Content-Type': 'application/json' };
-            if (sessionCookies) headers['Cookie'] = sessionCookies;
-
             const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=["name"]&order_by=creation desc&limit_page_length=500`;
-            const response = await fetch(url, { headers });
-            const data = await response.json();
+            const res = await apiGet(url, sessionCookies);
 
-            if (response.ok && data.data) {
-                const allIds = data.data.map((q: any) => q.name);
+            if (res.ok && res.data && res.data.data) {
+                const allIds = res.data.data.map((q: any) => q.name);
                 updateNeighbors(allIds, normalizedId);
             }
         } catch (error) {
@@ -189,7 +188,7 @@ export default function QuotationDetailScreen() {
             fetchQuotationDetails(normalizedId);
             fetchQuotationListForNavigation();
         } else if (normalizedId === 'index') {
-            router.replace('/quotations' as any);
+            router.replace('/quotations');
         }
     }, [normalizedId]);
 
@@ -207,31 +206,15 @@ export default function QuotationDetailScreen() {
     const fetchQuotationDetails = async (currentId: string) => {
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const headers: HeadersInit = { 'Content-Type': 'application/json' };
-            if (sessionCookies) headers['Cookie'] = sessionCookies;
-
-            const url = `http://13.234.62.39:8080/api/method/get_quote_resource`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ name: currentId })
-            });
-            const data = await response.json();
+            const res = await apiPost(`http://13.234.62.39:8080/api/method/get_quote_resource`, { name: currentId }, sessionCookies);
+            const data: any = res.data;
 
             let quoteData = null;
-            if (data.message) {
-                if (data.message.data) {
-                    if (Array.isArray(data.message.data) && data.message.data.length > 0) {
-                        quoteData = data.message.data[0];
-                    } else if (!Array.isArray(data.message.data) && data.message.data.name) {
-                        quoteData = data.message.data;
-                    }
-                } else if (data.message.name) {
-                    quoteData = data.message;
-                }
+            if (res.ok && data && data.message && data.message.success && Array.isArray(data.message.data)) {
+                quoteData = data.message.data[0];
             }
 
-            if (response.ok && quoteData) {
+            if (res.ok && quoteData) {
                 setQuotation(quoteData);
             }
         } catch (error) {
@@ -245,32 +228,21 @@ export default function QuotationDetailScreen() {
         if (!quotation) return;
 
         try {
-            setActionLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const headers: HeadersInit = { 'Content-Type': 'application/json' };
-            if (sessionCookies) headers['Cookie'] = sessionCookies;
-
-            const url = `http://13.234.62.39:8080/api/method/approve_quotation`;
-            const body = JSON.stringify({
+            const res = await apiPost(`http://13.234.62.39:8080/api/method/approve_quotation`, {
                 name: quotation.name,
                 workflow_state: newStatus
-            });
+            }, sessionCookies);
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers,
-                body
-            });
-
-            if (response.ok) {
+            if (res.ok) {
                 Alert.alert(
                     'Success',
                     `Action "${actionLabel}" completed successfully.`,
                     [{ text: 'OK', onPress: () => fetchQuotationDetails(normalizedId) }]
                 );
             } else {
-                const data = await response.json();
-                Alert.alert('Error', data.message || 'Failed to update quotation status.');
+                const data: any = res.data;
+                Alert.alert('Error', data?.message || 'Failed to update quotation status.');
             }
         } catch (error) {
             console.error('Workflow Action Error:', error);

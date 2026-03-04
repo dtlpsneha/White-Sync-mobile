@@ -10,6 +10,7 @@ import {
     TouchableWithoutFeedback,
     Keyboard,
     Image,
+    Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +21,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import Animated, { FadeInUp, FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useResponsive } from '../hooks/useResponsive';
+import { apiGet, apiPost } from '@/utils/api';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -37,11 +39,26 @@ export default function LoginScreen() {
         try {
             const session = await SecureStore.getItemAsync('session_cookies');
             if (session) {
-                console.log('[LoginScreen] Active session detected, routing to home...');
-                router.replace('/home');
+                console.log('[LoginScreen] Verifying active session...');
+                // Try to fetch profile to verify session is still valid on the new server
+                const res = await apiPost('http://13.234.62.39:8080/api/method/get_user_profile', {}, session);
+
+                if (res.ok) {
+                    const data: any = res.data;
+                    if (data && data.message && data.message.success) {
+                        console.log('[LoginScreen] Session valid, routing to home');
+                        router.replace('/home');
+                        return;
+                    }
+                }
+
+                // If not ok or success=false, clear and stay on login
+                console.log('[LoginScreen] Session invalid or expired, clearing...');
+                await SecureStore.deleteItemAsync('session_cookies');
             }
         } catch (error) {
             console.error('[LoginScreen] Session check error:', error);
+            // In case of network error during check, we stay on login screen
         }
     };
     const [email, setEmail] = useState('');
@@ -50,87 +67,70 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         try {
-            console.log('Attempting login for:', email);
-            const response = await fetch('http://13.234.62.39:8080/api/method/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    usr: email,
-                    pwd: password,
-                }),
-            });
+            const trimmedEmail = email.trim();
+            const trimmedPassword = password.trim();
 
-            const data = await response.json();
-            console.log('Login Response:', data);
+            console.log('[Login] Attempting login for:', trimmedEmail);
 
-            if (response.ok && data.message === 'Logged In') {
-                // Extract session cookie
-                const setCookieHeader = response.headers.get('set-cookie');
+            const loginData = new URLSearchParams();
+            loginData.append('usr', trimmedEmail);
+            loginData.append('pwd', trimmedPassword);
+
+            // Directly using apiPost which now handles URLSearchParams
+            const res = await apiPost('http://13.234.62.39:8080/api/method/login', loginData);
+            const data: any = res.data;
+            console.log('[Login] Response:', data);
+
+            if (res.ok && data.message === 'Logged In') {
+                const setCookieHeader = res.headers['set-cookie'];
                 if (setCookieHeader) {
-                    await SecureStore.setItemAsync('session_cookies', setCookieHeader);
-                    console.log('Session cookies stored securedly.');
+                    const sidMatch = setCookieHeader.match(/(?:^|;)\s*sid=([^;]+)/);
+                    if (sidMatch) {
+                        const sidCookie = `sid=${sidMatch[1].trim()}`;
+                        await SecureStore.setItemAsync('session_cookies', sidCookie);
+                        console.log('[Login] sid cookie stored successfully');
+                    } else {
+                        console.warn('[Login] sid cookie not found in header, storing truncated header');
+                        await SecureStore.setItemAsync('session_cookies', setCookieHeader.substring(0, 1000));
+                    }
                 }
 
-                // Store user info if needed
                 if (data.full_name) {
                     await SecureStore.setItemAsync('user_name', data.full_name);
                 }
 
-                // Fetch User Profile & Permissions
+                // Fetch User Profile
                 try {
-                    console.log('Fetching user profile...');
-                    const profileRes = await fetch('http://13.234.62.39:8080/api/method/get_user_profile', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Cookie': setCookieHeader || ''
-                        }
-                    });
-
-                    const profileData = await profileRes.json();
-                    console.log('User Profile Response:', profileData);
-
-                    if (profileRes.ok && profileData.message && profileData.message.success) {
-                        const { is_manager, show_all_quotes, roles, user_id } = profileData.message;
-
-                        // Store critical permission flags as string booleans
+                    const profileRes = await apiPost('http://13.234.62.39:8080/api/method/get_user_profile', {}, setCookieHeader || '');
+                    const profileData: any = profileRes.data;
+                    if (profileRes.ok && profileData && profileData.message && profileData.message.success) {
+                        const { is_manager, show_all_quotes, user_id } = profileData.message;
                         await SecureStore.setItemAsync('is_manager', is_manager ? 'true' : 'false');
                         await SecureStore.setItemAsync('show_all_quotes', show_all_quotes ? 'true' : 'false');
-                        await SecureStore.setItemAsync('user_id', user_id || email);
-
-                        // Store roles (legacy support)
-                        if (roles && roles.length > 0) {
-                            await SecureStore.setItemAsync('user_roles', JSON.stringify(roles));
-                        }
-
-                        console.log(`Permissions saved: Manager=${is_manager}, ShowAll=${show_all_quotes}`);
-                    } else {
-                        console.warn('Failed to fetch user profile or success flag is missing:', profileData);
-                        // Default to restricted access if profile fetch fails but login succeeded
-                        await SecureStore.setItemAsync('is_manager', 'false');
-                        await SecureStore.setItemAsync('show_all_quotes', 'false');
+                        await SecureStore.setItemAsync('user_id', user_id || trimmedEmail);
                     }
-                } catch (profileError) {
-                    console.error('Error fetching user profile:', profileError);
-                    // Default to restricted access on error
-                    await SecureStore.setItemAsync('is_manager', 'false');
-                    await SecureStore.setItemAsync('show_all_quotes', 'false');
+                } catch (pe) {
+                    console.error('[Login] Profile fetch error:', pe);
                 }
 
-                alert(`Welcome, ${data.full_name || 'User'}!`);
+                Alert.alert('Success', `Welcome, ${data.full_name || 'User'}!`);
                 router.replace('/home');
             } else {
-                alert('Login Failed: ' + (data.message || 'Unknown error'));
+                let errorMsg = 'Invalid Credentials';
+                if (data.message) {
+                    errorMsg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
+                } else if (data.exc_type) {
+                    errorMsg = `${data.exc_type}: Verify credentials on new server.`;
+                }
+                Alert.alert('Login Failed', errorMsg);
             }
         } catch (error) {
-            console.error('Login Error:', error);
+            console.error('[Login] Error:', error);
             const errorMessage = error instanceof Error ? error.message : String(error);
             if (errorMessage.includes('Failed to fetch')) {
-                alert('Connection Failed: The server is unreachable.\n\nPlease check your internet connection or server status.');
+                Alert.alert('Connection Failed', 'The server is unreachable. Check your internet.');
             } else {
-                alert('An error occurred: ' + errorMessage);
+                Alert.alert('Error', errorMessage);
             }
         }
     };
