@@ -99,3 +99,117 @@ export function apiPost<T = any>(url: string, body: unknown, cookies?: string | 
         xhr.send(body instanceof URLSearchParams ? body.toString() : JSON.stringify(body));
     });
 }
+/**
+ * Perform a PUT request using XMLHttpRequest.
+ * @param url  Full URL to request
+ * @param body  JSON-serialisable body
+ * @param cookies  Optional session cookie string
+ */
+export function apiPut<T = any>(url: string, body: unknown, cookies?: string | null): Promise<ApiResponse<T>> {
+    return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        if (cookies) {
+            xhr.setRequestHeader('Cookie', cookies);
+        }
+        xhr.onload = () => {
+            const headers: { [key: string]: string } = {};
+            const headerString = xhr.getAllResponseHeaders();
+            headerString.split('\r\n').forEach(line => {
+                const parts = line.split(': ');
+                if (parts.length > 1) headers[parts[0].toLowerCase()] = parts[1];
+            });
+            try {
+                const data: T = JSON.parse(xhr.responseText);
+                resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data, headers });
+            } catch {
+                resolve({ ok: false, status: xhr.status, data: null, headers });
+            }
+        };
+        xhr.onerror = () => resolve({ ok: false, status: 0, data: null, headers: {} });
+        xhr.ontimeout = () => resolve({ ok: false, status: 0, data: null, headers: {} });
+        xhr.timeout = 15000;
+        xhr.send(JSON.stringify(body));
+    });
+}
+
+/**
+ * Perform a PATCH request using XMLHttpRequest.
+ */
+export function apiPatch<T = any>(url: string, body: unknown, cookies?: string | null): Promise<ApiResponse<T>> {
+    return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PATCH', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        if (cookies) {
+            xhr.setRequestHeader('Cookie', cookies);
+        }
+        xhr.onload = () => {
+            const headers: { [key: string]: string } = {};
+            const headerString = xhr.getAllResponseHeaders();
+            headerString.split('\r\n').forEach(line => {
+                const parts = line.split(': ');
+                if (parts.length > 1) headers[parts[0].toLowerCase()] = parts[1];
+            });
+            try {
+                const data: T = JSON.parse(xhr.responseText);
+                resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data, headers });
+            } catch {
+                resolve({ ok: false, status: xhr.status, data: null, headers });
+            }
+        };
+        xhr.onerror = () => resolve({ ok: false, status: 0, data: null, headers: {} });
+        xhr.ontimeout = () => resolve({ ok: false, status: 0, data: null, headers: {} });
+        xhr.timeout = 15000;
+        xhr.send(JSON.stringify(body));
+    });
+}
+
+/**
+ * Upload a file using XMLHttpRequest and FormData.
+ */
+export function uploadFile<T = any>(url: string, file: any, cookies?: string | null): Promise<ApiResponse<T>> {
+    return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+
+        if (cookies) {
+            xhr.setRequestHeader('Cookie', cookies);
+        }
+
+        const formData = new FormData();
+        // Frappe/ERPNext file upload API expects 'file' and optionally 'doctype', 'docname', 'fieldname'
+        if (file.uri) {
+            const fileName = file.uri.split('/').pop();
+            const type = file.type || 'image/jpeg';
+            formData.append('file', {
+                uri: file.uri,
+                name: fileName,
+                type: type,
+            } as any);
+        }
+
+        xhr.onload = () => {
+            const headers: { [key: string]: string } = {};
+            const headerString = xhr.getAllResponseHeaders();
+            headerString.split('\r\n').forEach(line => {
+                const parts = line.split(': ');
+                if (parts.length > 1) headers[parts[0].toLowerCase()] = parts[1];
+            });
+
+            try {
+                const data: T = JSON.parse(xhr.responseText);
+                resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data, headers });
+            } catch {
+                resolve({ ok: false, status: xhr.status, data: null, headers });
+            }
+        };
+
+        xhr.onerror = () => resolve({ ok: false, status: 0, data: null, headers: {} });
+        xhr.ontimeout = () => resolve({ ok: false, status: 0, data: null, headers: {} });
+
+        xhr.timeout = 60000; // Longer timeout for file uploads
+        xhr.send(formData);
+    });
+}

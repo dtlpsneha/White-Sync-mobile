@@ -28,21 +28,32 @@ interface MaintenanceRecord {
     company: string;
     location?: string;
     date_and_time?: string;
-    purposes: Array<{
+    purposes?: Array<{
         item_code: string;
         item_name: string;
         description: string;
         work_done: string;
         service_person: string;
     }>;
-    assigned_to: string[];
-    // New fields from create_full_visit API
+    maintenance_visit_purposes?: Array<{
+        item_code: string;
+        item_name: string;
+        description: string;
+        work_done: string;
+        service_person: string;
+    }>;
+    assigned_to: string;
+    sales_executive?: string;
+    // New fields from user request
+    new_customer?: string;
+    new_address?: string;
+    new_contact_number?: string;
+    new_contact_email?: string;
     follow_up_required?: number;
     follow_up_due_date?: string;
     follow_up_notes?: string;
     follow_up_type?: string;
-    follow_up_status?: string;
-    follow_up_owner?: string;
+    total?: any;
 }
 
 export default function MaintenanceScreen() {
@@ -60,7 +71,7 @@ export default function MaintenanceScreen() {
     const fetchMaintenanceRecords = async () => {
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet('http://13.234.62.39:8080/api/method/create_full_visit', sessionCookies);
+            const res = await apiGet('http://13.234.62.39:8080/api/method/create_full_visit?limit_page_length=1000', sessionCookies);
 
             if (!res.ok) {
                 const errorData: any = res.data || {};
@@ -69,15 +80,25 @@ export default function MaintenanceScreen() {
             }
 
             const data: any = res.data;
+            let fetchedRecords: MaintenanceRecord[] = [];
+
             if (data.data) {
-                setRecords(data.data);
+                fetchedRecords = data.data;
             } else if (data.message && data.message.data) {
-                setRecords(data.message.data);
+                fetchedRecords = data.message.data;
             } else if (data.message && Array.isArray(data.message)) {
-                setRecords(data.message);
-            } else {
-                setRecords([]);
+                fetchedRecords = data.message;
             }
+
+            // Deduplicate by record name (ID)
+            const uniqueRecords = fetchedRecords.filter((record, index, self) => {
+                const recordId = record.name;
+                if (!recordId) return true; // Keep if no name for safety/debugging
+                return index === self.findIndex((r) => r.name === recordId);
+            });
+
+            console.log('[MaintenanceScreen] Total Fetched:', fetchedRecords.length, 'Unique:', uniqueRecords.length);
+            setRecords(uniqueRecords);
             setError(null);
         } catch (err) {
             console.error('Fetch error:', err);
@@ -107,41 +128,32 @@ export default function MaintenanceScreen() {
 
     const totalInteractions = currentMonthRecords.length;
     const uniqueCustomers = new Set(records.map(v => v.customer_name)).size;
-    const newCustomersCount = new Set(
-        currentMonthRecords.filter(v => v.maintenance_type === 'New' || v.maintenance_type === 'New Customer').map(v => v.customer_name)
-    ).size;
 
     const stats = [
         { label: 'Total Customers', value: String(uniqueCustomers), trend: 'All Time', icon: 'people', gradient: ['#6366F1', '#4F46E5'] },
         { label: 'Interactions', value: String(totalInteractions), trend: 'This Month', icon: 'chatbubbles', gradient: ['#EC4899', '#D946EF'] },
-        { label: 'New Growth', value: String(newCustomersCount), trend: 'This Month', icon: 'trending-up', gradient: ['#10B981', '#059669'] },
     ];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View
-                style={[styles.headerGradient, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}
-            >
+            <View style={[styles.headerGradient, { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' }]}>
                 <SafeAreaView>
                     <View style={styles.header}>
                         <View style={styles.headerContent}>
                             <View>
                                 <Text style={[styles.headerTitle, { color: colors.text }]}>Visits</Text>
-                                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Relationship Management</Text>
+                                <View style={styles.headerSubtitleRow}>
+                                    <View style={[styles.subtitleAccent, { backgroundColor: colors.primary }]} />
+                                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Relationship Management</Text>
+                                </View>
                             </View>
                             <TouchableOpacity
                                 style={[styles.addButton, { backgroundColor: colors.primary }]}
                                 onPress={() => router.push('/maintenance/create')}
                                 activeOpacity={0.8}
                             >
-                                <LinearGradient
-                                    colors={['rgba(255,255,255,0.2)', 'transparent']}
-                                    style={StyleSheet.absoluteFill}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                />
                                 <Ionicons name="add" size={20} color="#FFFFFF" />
                                 <Text style={styles.addButtonText}>New Visit</Text>
                             </TouchableOpacity>
@@ -158,11 +170,12 @@ export default function MaintenanceScreen() {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                 }
             >
-                <View>
+                <View style={styles.statsContainer}>
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.statsScroll}
+                        decelerationRate="fast"
                     >
                         {stats.map((stat, index) => (
                             <TouchableOpacity key={index} activeOpacity={0.9} style={styles.statWrapper}>
@@ -172,16 +185,23 @@ export default function MaintenanceScreen() {
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 1 }}
                                 >
-                                    <View style={styles.statIconBox}>
-                                        <Ionicons name={stat.icon as any} size={20} color="#FFF" />
+                                    <View style={styles.statHeader}>
+                                        <View style={styles.statIconBox}>
+                                            <Ionicons name={stat.icon as any} size={22} color="#FFF" />
+                                        </View>
+                                        <Ionicons name="stats-chart" size={12} color="rgba(255,255,255,0.4)" />
                                     </View>
-                                    <View>
-                                        <Text style={styles.statValue}>{stat.value}</Text>
-                                        <Text style={styles.statLabel}>{stat.label}</Text>
+                                    
+                                    <View style={styles.statBody}>
+                                        <Text style={styles.statValueText}>{stat.value}</Text>
+                                        <Text style={styles.statLabelText}>{stat.label}</Text>
                                     </View>
-                                    <View style={styles.statFooter}>
-                                        <Text style={styles.statTrend}>{stat.trend}</Text>
-                                        <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.7)" />
+                                    
+                                    <View style={styles.statFooterRow}>
+                                        <View style={styles.statTrendBadge}>
+                                            <Text style={styles.statTrendText}>{stat.trend}</Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward-circle" size={18} color="rgba(255,255,255,0.6)" />
                                     </View>
                                 </LinearGradient>
                             </TouchableOpacity>
@@ -221,27 +241,71 @@ export default function MaintenanceScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    headerGradient: { borderBottomLeftRadius: 32, borderBottomRightRadius: 32, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
-    header: { paddingHorizontal: 24, paddingVertical: 20 },
+    headerGradient: { 
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderColor: 'rgba(0,0,0,0.05)'
+    },
+    header: { paddingHorizontal: 24, paddingVertical: 16 },
     headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    headerTitle: { fontSize: 32, fontWeight: '900', letterSpacing: -1 },
-    headerSubtitle: { fontSize: 13, fontWeight: '600', opacity: 0.8 },
-    addButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, gap: 6, overflow: 'hidden', elevation: 2 },
-    addButtonText: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+    headerTitle: { fontSize: 36, fontWeight: '900', letterSpacing: -1.5 },
+    headerSubtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+    subtitleAccent: { width: 12, height: 2, borderRadius: 1 },
+    headerSubtitle: { fontSize: 13, fontWeight: '800', opacity: 0.6, letterSpacing: 0.5, textTransform: 'uppercase' },
+    addButton: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        paddingHorizontal: 20, 
+        paddingVertical: 12, 
+        borderRadius: 20, 
+        gap: 8, 
+        shadowColor: '#2563EB',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+        elevation: 10 
+    },
+    addButtonText: { color: '#FFF', fontSize: 15, fontWeight: '900' },
     scrollContent: { flex: 1 },
-    scrollInner: { paddingTop: 24, paddingBottom: 110 },
-    statsScroll: { paddingHorizontal: 24, gap: 16, paddingBottom: 10 },
-    statWrapper: { width: 160, height: 180 },
-    statCard: { flex: 1, borderRadius: 28, padding: 20, justifyContent: 'space-between' },
-    statIconBox: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-    statValue: { fontSize: 36, fontWeight: '900', color: '#FFF', letterSpacing: -1 },
-    statLabel: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.9)', marginTop: -4 },
-    statFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-    statTrend: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' },
-    section: { paddingHorizontal: 24, marginTop: 32 },
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-    sectionAccent: { width: 4, height: 20, borderRadius: 2 },
-    sectionTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+    scrollInner: { paddingTop: 20, paddingBottom: 110 },
+    statsContainer: { marginTop: 8 },
+    statsScroll: { paddingHorizontal: 20, gap: 14, paddingBottom: 12 },
+    statWrapper: { width: 200, height: 210 },
+    statCard: { 
+        flex: 1, 
+        borderRadius: 36, 
+        padding: 24, 
+        justifyContent: 'space-between',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 8
+    },
+    statHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    statIconBox: { 
+        width: 48, 
+        height: 48, 
+        borderRadius: 18, 
+        backgroundColor: 'rgba(255,255,255,0.25)', 
+        justifyContent: 'center', 
+        alignItems: 'center' 
+    },
+    statBody: { gap: 2 },
+    statValueText: { fontSize: 44, fontWeight: '900', color: '#FFF', letterSpacing: -2 },
+    statLabelText: { fontSize: 14, fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.2 },
+    statFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+    statTrendBadge: { 
+        backgroundColor: 'rgba(255,255,255,0.15)', 
+        paddingHorizontal: 12, 
+        paddingVertical: 6, 
+        borderRadius: 12 
+    },
+    statTrendText: { fontSize: 11, fontWeight: '900', color: '#FFF', textTransform: 'uppercase', opacity: 0.9 },
+    section: { paddingHorizontal: 24, marginTop: 24 },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
+    sectionAccent: { width: 6, height: 24, borderRadius: 3 },
+    sectionTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.8 },
     loadingBox: { padding: 60, alignItems: 'center', gap: 12 },
     loadingText: { fontSize: 14, fontWeight: '600' },
     errorBox: { padding: 40, alignItems: 'center', gap: 16, backgroundColor: 'rgba(255,0,0,0.02)', borderRadius: 24 },

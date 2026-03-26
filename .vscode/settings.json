@@ -3,5 +3,15 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "java.project.importHint": false,
+  "files.exclude": {
+    "node_modules": true,
+    "android/app/build": true,
+    "android/build": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/android/build": true
   }
 }

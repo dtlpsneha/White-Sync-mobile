@@ -63,9 +63,9 @@ export const FloatingNav = () => {
                     <Ionicons
                         name={isMaintenance ? "calendar" : "calendar-outline"}
                         size={ms(22)}
-                        color={isMaintenance ? '#F4511E' : '#94A3B8'}
+                        color={isMaintenance ? '#0292A8' : '#94A3B8'}
                     />
-                    <Text style={[styles.navText, { color: isMaintenance ? '#F4511E' : '#94A3B8', fontSize: ms(10) }]} numberOfLines={1}>Records</Text>
+                    <Text style={[styles.navText, { color: isMaintenance ? '#0292A8' : '#94A3B8', fontSize: ms(10) }]} numberOfLines={1}>Visits</Text>
                 </TouchableOpacity>
             </View>
         </View>

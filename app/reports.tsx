@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { FloatingNav } from '@/components/FloatingNav';
-import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 
 export default function ReportsScreen() {
     const colorScheme = useColorScheme();
@@ -21,26 +20,26 @@ export default function ReportsScreen() {
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Reports</Text>
 
                 {/* Monthly Summary Card */}
-                <Animated.View entering={FadeInUp.delay(100).duration(800)} style={styles.summaryCard}>
+                <View style={styles.summaryCard}>
                     <Text style={styles.summaryLabel}>MONTHLY SUMMARY</Text>
                     <Text style={styles.summaryValue}>₹5,88,87,970.98</Text>
                     <Text style={styles.summarySubtext}>Total Quote Value</Text>
-                </Animated.View>
+                </View>
 
                 {/* Metrics Row */}
                 <View style={styles.metricsRow}>
-                    <Animated.View entering={FadeInUp.delay(200).duration(800)} style={styles.metricCard}>
+                    <View style={styles.metricCard}>
                         <Text style={styles.metricLabel}>Success Rate</Text>
                         <Text style={[styles.metricValue, { color: '#00BFA5' }]}>93.8%</Text>
-                    </Animated.View>
-                    <Animated.View entering={FadeInUp.delay(300).duration(800)} style={styles.metricCard}>
+                    </View>
+                    <View style={styles.metricCard}>
                         <Text style={styles.metricLabel}>Total Quotes</Text>
                         <Text style={[styles.metricValue, { color: '#0277BD' }]}>644</Text>
-                    </Animated.View>
+                    </View>
                 </View>
 
                 {/* Recent Activity */}
-                <Animated.View entering={FadeInDown.delay(400).duration(800)} style={styles.activityContainer}>
+                <View style={styles.activityContainer}>
                     <Text style={[styles.activityTitle, { color: colors.text }]}>Recent Activity</Text>
 
                     <View style={styles.activityItem}>
@@ -55,7 +54,7 @@ export default function ReportsScreen() {
                         <View style={[styles.dot, { backgroundColor: '#0277BD' }]} />
                         <Text style={[styles.activityText, { color: colors.textSecondary }]}>Quote #1027 cancelled</Text>
                     </View>
-                </Animated.View>
+                </View>
             </ScrollView>
 
             <FloatingNav />
