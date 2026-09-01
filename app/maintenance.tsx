@@ -11,6 +11,7 @@ import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Te
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { apiGet } from '@/utils/api';
+import { apiUrl } from '@/constants/config';
 
 interface MaintenanceRecord {
     name: string;
@@ -71,7 +72,7 @@ export default function MaintenanceScreen() {
     const fetchMaintenanceRecords = async () => {
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet('http://13.234.62.39:8080/api/method/create_full_visit?limit_page_length=1000', sessionCookies);
+            const res = await apiGet(apiUrl('/api/method/create_full_visit?limit_page_length=1000'), sessionCookies);
 
             if (!res.ok) {
                 const errorData: any = res.data || {};
@@ -130,33 +131,23 @@ export default function MaintenanceScreen() {
     const uniqueCustomers = new Set(records.map(v => v.customer_name)).size;
 
     const stats = [
-        { label: 'Total Customers', value: String(uniqueCustomers), trend: 'All Time', icon: 'people', gradient: ['#6366F1', '#4F46E5'] },
-        { label: 'Interactions', value: String(totalInteractions), trend: 'This Month', icon: 'chatbubbles', gradient: ['#EC4899', '#D946EF'] },
+        { label: 'Total Customers', value: String(uniqueCustomers), trend: 'All Time', icon: 'people', gradient: ['#00BFA5', '#009688'] },
+        { label: 'Interactions', value: String(totalInteractions), trend: 'This Month', icon: 'chatbubbles', gradient: ['#10B981', '#059669'] },
     ];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View style={[styles.headerGradient, { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' }]}>
+            <View style={[styles.headerGradient, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
                 <SafeAreaView>
                     <View style={styles.header}>
-                        <View style={styles.headerContent}>
-                            <View>
-                                <Text style={[styles.headerTitle, { color: colors.text }]}>Visits</Text>
-                                <View style={styles.headerSubtitleRow}>
-                                    <View style={[styles.subtitleAccent, { backgroundColor: colors.primary }]} />
-                                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Relationship Management</Text>
-                                </View>
+                        <View>
+                            <Text style={[styles.headerTitle, { color: colors.text }]}>Visits</Text>
+                            <View style={styles.headerSubtitleRow}>
+                                <View style={[styles.subtitleAccent, { backgroundColor: colors.primary }]} />
+                                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Relationship Management</Text>
                             </View>
-                            <TouchableOpacity
-                                style={[styles.addButton, { backgroundColor: colors.primary }]}
-                                onPress={() => router.push('/maintenance/create')}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="add" size={20} color="#FFFFFF" />
-                                <Text style={styles.addButtonText}>New Visit</Text>
-                            </TouchableOpacity>
                         </View>
                     </View>
                 </SafeAreaView>
@@ -233,8 +224,16 @@ export default function MaintenanceScreen() {
                     )}
                 </View>
             </ScrollView>
-
             <FloatingNav />
+
+            {/* New Floating Action Button */}
+            <TouchableOpacity 
+                style={[styles.fab, { backgroundColor: '#00BFA5' }]} 
+                onPress={() => router.push('/maintenance/create')}
+                activeOpacity={0.8}
+            >
+                <Ionicons name="add" size={32} color="#FFFFFF" />
+            </TouchableOpacity>
         </View>
     );
 }
@@ -252,20 +251,22 @@ const styles = StyleSheet.create({
     headerSubtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
     subtitleAccent: { width: 12, height: 2, borderRadius: 1 },
     headerSubtitle: { fontSize: 13, fontWeight: '800', opacity: 0.6, letterSpacing: 0.5, textTransform: 'uppercase' },
-    addButton: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        paddingHorizontal: 20, 
-        paddingVertical: 12, 
-        borderRadius: 20, 
-        gap: 8, 
-        shadowColor: '#2563EB',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-        elevation: 10 
+    fab: {
+        position: 'absolute',
+        bottom: 150,
+        right: 24,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#00BFA5',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+        elevation: 8,
+        zIndex: 50,
     },
-    addButtonText: { color: '#FFF', fontSize: 15, fontWeight: '900' },
     scrollContent: { flex: 1 },
     scrollInner: { paddingTop: 20, paddingBottom: 110 },
     statsContainer: { marginTop: 8 },
@@ -313,3 +314,4 @@ const styles = StyleSheet.create({
     retryBtn: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#EF4444', borderRadius: 14 },
     retryText: { color: '#FFF', fontWeight: '700' }
 });
+

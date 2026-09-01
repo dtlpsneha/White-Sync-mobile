@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useResponsive } from '../hooks/useResponsive';
-import Animated, { FadeInDown, FadeInUp, useSharedValue, withRepeat, withTiming, withSequence, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { apiPost } from '@/utils/api';
+import { apiUrl } from '@/constants/config';
 
 interface Quotation {
     name: string;
@@ -25,6 +26,8 @@ interface Quotation {
     team_member?: string;
     sales_executive?: string;
     temporary_approver?: string;
+    quotation_approver?: string | null;
+    quotation_approver_name?: string | null;
     total?: number;
     total_amount?: number;
     rounded_total?: number;
@@ -38,134 +41,172 @@ interface Quotation {
     base_net_total?: number;
     approved_by?: string;
     dashboard_category?: string;
+    docstatus?: number;
+    against_purchase_invoice?: string;
+    purchase_rate?: number;
+    item_margin?: number;
+    total_margin?: number;
+    display_status?: string;
+    color?: string;
 }
 
 interface QuotationListProps {
     filter?: string;
     searchQuery?: string;
     scrollEnabled?: boolean;
+    /** Reports the distinct workflow states in the fetched data, so the parent
+     *  screen can build its filter pills without refetching the list. */
+    onStatesLoaded?: (states: string[]) => void;
 }
 
-export default function QuotationList({ filter = 'All', searchQuery = '', scrollEnabled = true }: QuotationListProps) {
+export default function QuotationList({ filter = 'All', searchQuery = '', scrollEnabled = true, onStatesLoaded }: QuotationListProps) {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const isDark = theme === 'dark';
     const { s, vs, ms } = useResponsive();
-    const styles = getStyles(theme, { s, vs, ms });
+    // StyleSheet.create() on every render also defeated the memoised renderItem below.
+    const styles = useMemo(() => getStyles(theme, { s, vs, ms }), [theme, s, vs, ms]);
 
-    const [quotations, setQuotations] = useState<Quotation[]>([]);
+    // Raw server list. Filtering and searching are done locally against this,
+    // so typing does not trigger a refetch.
+    const [allQuotations, setAllQuotations] = useState<Quotation[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const pulseValue = useSharedValue(1);
-
-    useEffect(() => {
-        pulseValue.value = withRepeat(
-            withSequence(
-                withTiming(1.2, { duration: 1000 }),
-                withTiming(1, { duration: 1000 })
-            ),
-            -1,
-            true
-        );
-    }, []);
-
-    const pulseStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: pulseValue.value }],
-        opacity: withRepeat(withSequence(withTiming(0.4, { duration: 1000 }), withTiming(0.8, { duration: 1000 })), -1, true),
-    }));
-
+    // Fetch once. `filter` and `searchQuery` are applied client-side below —
+    // having them here meant every keystroke re-downloaded the whole list.
     useEffect(() => {
         fetchQuotations();
-    }, [filter, searchQuery]);
+    }, []);
 
     const fetchQuotations = async () => {
         try {
             setLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const url = `http://13.234.62.39:8080/api/method/get_quote_resource`;
+            const url = apiUrl('/api/method/get_quote_resource');
             const res = await apiPost(url, {}, sessionCookies);
 
             const data: any = res.data;
 
             if (res.ok && data && data.message && data.message.success) {
-                let fetchedList: Quotation[] = Array.isArray(data.message.data) ? data.message.data : [];
+                const fetchedList: Quotation[] = Array.isArray(data.message.data) ? data.message.data : [];
 
-                // Client-side filtering for UI filters
-                let filtered = fetchedList;
+                // The endpoint can return the same quotation more than once.
+                // Duplicates would collide in FlatList's keyExtractor (which
+                // keys on `name`), producing React key warnings and recycled
+                // rows rendering the wrong record.
+                const seen = new Set<string>();
+                const deduped = fetchedList.filter(q => {
+                    if (!q?.name || seen.has(q.name)) return false;
+                    seen.add(q.name);
+                    return true;
+                });
 
-                // 1. Filter by dashboard category or status
-                if (filter !== 'All') {
-                    filtered = filtered.filter(q => {
-                        const cat = (q.dashboard_category || '').toUpperCase();
-                        const target = filter.toUpperCase();
+                setAllQuotations(deduped);
 
-                        // Mapping UI filters to dashboard categories
-                        if (target === 'PENDING') return cat === 'PENDING';
-                        if (target === 'APPROVED') return cat === 'APPROVED';
-                        if (target === 'REVIEW') return cat === 'REVIEW';
-                        if (target === 'CANCELLED') return cat === 'CANCELLED';
-
-                        // Fallback to workflow_state or status
-                        const rawStatus = (q.workflow_state || q.status || '').toUpperCase();
-                        if (rawStatus.includes(target)) return true;
-                        if (target === 'PENDING' && rawStatus === 'OPEN') return true;
-                        if (target === 'REVIEW' && (rawStatus === 'DECLINED' || rawStatus === 'REJECTED')) return true;
-
-                        return false;
-                    });
+                if (onStatesLoaded) {
+                    const states = Array.from(new Set(
+                        deduped
+                            .map(q => (q.dashboard_category || q.workflow_state || q.status || '').trim())
+                            .filter(Boolean)
+                    )).sort();
+                    onStatesLoaded(states);
                 }
-
-                // 2. Search Query
-                if (searchQuery) {
-                    const query = searchQuery.toLowerCase();
-                    filtered = filtered.filter(q =>
-                        (q.name && q.name.toLowerCase().includes(query)) ||
-                        (q.customer_name && q.customer_name.toLowerCase().includes(query))
-                    );
-                }
-
-                setQuotations(filtered);
             } else {
                 console.warn('Failed to fetch quotations', data);
-                setQuotations([]);
+                setAllQuotations([]);
             }
         } catch (error) {
             console.error('Error fetching quotations:', error);
-            setQuotations([]);
+            setAllQuotations([]);
         } finally {
             setLoading(false);
         }
     };
 
-    const getStatusColors = (status: string) => {
-        const isDark = theme === 'dark';
-        switch (status) {
-            case 'Approved':
-            case 'Ordered':
-                return { bg: 'rgba(0, 191, 165, 0.1)', text: '#00BFA5', border: 'rgba(0, 191, 165, 0.2)' };
-            case 'Open':
-            case 'Pending':
-            case 'Draft':
-                return { bg: 'rgba(2, 119, 189, 0.1)', text: '#0277BD', border: 'rgba(2, 119, 189, 0.2)' };
-            case 'Review':
-                return { bg: 'rgba(244, 81, 30, 0.1)', text: '#F4511E', border: 'rgba(244, 81, 30, 0.2)' };
-            case 'Cancelled':
-            case 'Declined':
-            case 'Rejected':
-                return { bg: 'rgba(198, 40, 40, 0.1)', text: '#C62828', border: 'rgba(198, 40, 40, 0.2)' };
-            default:
-                return { bg: isDark ? 'rgba(255,255,255,0.05)' : '#F5F7FA', text: '#78909C', border: isDark ? 'rgba(255,255,255,0.1)' : '#ECEFF1' };
-        }
-    };
+    const quotations = useMemo(() => {
+        let filtered = allQuotations;
 
-    const getRandomColor = (char: string) => {
-        const primaryColors = theme === 'dark'
-            ? ['#818CF8', '#34D399', '#FBBF24', '#F87171', '#60A5FA']
-            : ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6'];
-        const index = char.charCodeAt(0) % primaryColors.length;
-        return primaryColors[index];
+        // 1. Filter by dashboard category or status
+        if (filter !== 'All') {
+            const target = filter.toUpperCase().replace('-', '');
+
+            filtered = filtered.filter(q => {
+                const cat = (q.dashboard_category || '').toUpperCase().replace('-', '');
+                const workflow = (q.workflow_state || '').toUpperCase().replace('-', '');
+                const status = (q.status || '').toUpperCase().replace('-', '');
+
+                // Treat workflow_state as the primary state if present, fallback to standard status.
+                // This prevents Frappe's default 'Draft' status from pulling 'Pending' items into the Draft tab.
+                const activeState = workflow || status || 'DRAFT';
+
+                const isCanceled = activeState.includes('CANCEL') || activeState.includes('REJECT') || activeState.includes('DECLINE') || q.docstatus === 2;
+                const isApproved = activeState.includes('APPROV') || activeState.includes('ORDER') || activeState === 'SUBMITTED' || (q.docstatus === 1 && !isCanceled);
+                const isPending = activeState.includes('PENDING') || activeState === 'OPEN';
+                const isReview = activeState.includes('REVIEW');
+                const isReopen = activeState.includes('REOPEN') || activeState.includes('RESUBMIT');
+                const isDraft = activeState === 'DRAFT' || activeState === '';
+
+                if (target === 'APPROVED') return isApproved && !isCanceled;
+                if (target === 'CANCELLED') return isCanceled;
+                if (target === 'PENDING') return isPending && !isApproved && !isCanceled;
+                if (target === 'REVIEW') return isReview && !isApproved && !isCanceled;
+                if (target === 'REOPEN') return isReopen && !isApproved && !isCanceled;
+                if (target === 'DRAFT') return isDraft && !isPending && !isReview && !isApproved && !isCanceled && !isReopen;
+
+                // Generic match for other potential status tabs
+                return activeState.includes(target) || cat === target;
+            });
+        }
+
+        // 2. Search Query
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            filtered = filtered.filter(q =>
+                (q.name && q.name.toLowerCase().includes(query)) ||
+                (q.customer_name && q.customer_name.toLowerCase().includes(query))
+            );
+        }
+
+        return filtered;
+    }, [allQuotations, filter, searchQuery]);
+
+    const getStatusColors = (status: string, color?: string) => {
+        const isDark = theme === 'dark';
+        
+        // 1. If explicit color name provided by backend
+        if (color) {
+            const c = color.toLowerCase();
+            if (c === 'green') return { bg: 'rgba(0, 191, 165, 0.1)', text: '#00BFA5', border: 'rgba(0, 191, 165, 0.2)' };
+            if (c === 'orange') return { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.2)' };
+            if (c === 'blue') return { bg: 'rgba(59, 130, 246, 0.1)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.2)' };
+            if (c === 'red') return { bg: 'rgba(239, 68, 68, 0.1)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.2)' };
+            if (c === 'grey' || c === 'gray') return { bg: 'rgba(148, 163, 184, 0.1)', text: '#94A3B8', border: 'rgba(148, 163, 184, 0.2)' };
+        }
+
+        // 2. Logic fallback
+        const s = status.toUpperCase();
+        if (s === 'APPROVED' || s === 'ORDERED' || s === 'SUBMITTED') {
+            return { bg: 'rgba(0, 191, 165, 0.1)', text: '#00BFA5', border: 'rgba(0, 191, 165, 0.2)' };
+        }
+        if (s === 'PENDING') {
+            return { bg: 'rgba(59, 130, 246, 0.1)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.2)' };
+        }
+        if (s === 'REVIEW' || s === 'OPEN') {
+            return { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.2)' };
+        }
+        if (s.includes('REOPEN') || s.includes('RESUBMIT')) {
+            return { bg: 'rgba(30, 58, 138, 0.1)', text: '#1E3A8A', border: 'rgba(30, 58, 138, 0.2)' };
+        }
+        if (s === 'CANCELLED') {
+            return { bg: 'rgba(239, 68, 68, 0.1)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.2)' };
+        }
+        if (s === 'DRAFT') {
+            return { bg: 'rgba(148, 163, 184, 0.1)', text: '#94A3B8', border: 'rgba(148, 163, 184, 0.2)' };
+        }
+
+        return { bg: isDark ? 'rgba(255,255,255,0.05)' : '#F5F7FA', text: '#94A3B8', border: isDark ? 'rgba(255,255,255,0.1)' : '#ECEFF1' };
     };
 
     const formatDate = (dateString: string) => {
@@ -182,12 +223,20 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
 
     const formatCreatorName = (item: Quotation) => {
         // Prioritize actual name fields over owner/email
-        let rawName = (item.temporary_approver && item.temporary_approver.trim()) ? item.temporary_approver :
-            (item.approved_by && item.approved_by.trim()) ? item.approved_by :
-                (item.executive_person && item.executive_person.trim()) ? item.executive_person :
-                    (item.team_member && item.team_member.trim()) ? item.team_member :
-                        (item.sales_executive && item.sales_executive.trim()) ? item.sales_executive :
-                            (item.owner && !item.owner.toLowerCase().includes('system')) ? item.owner : 'System';
+        const candidates = [
+            item.quotation_approver_name,
+            item.quotation_approver,
+            item.temporary_approver,
+            item.approved_by,
+            item.executive_person,
+            item.team_member,
+            item.sales_executive,
+        ];
+
+        const named = candidates.find(v => typeof v === 'string' && v.trim());
+
+        let rawName = named ? named.trim() :
+            (item.owner && !item.owner.toLowerCase().includes('system')) ? item.owner : 'System';
 
         // If it looks like an email, take the part before @
         if (rawName.includes('@')) {
@@ -201,32 +250,12 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
         rawName = rawName.replace(/^dtlp/i, '');
 
         // Clean up and Title Case
-        return rawName.trim().replace(/\b\w/g, (c: string) => c.toUpperCase());
+        return rawName.trim().replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'System';
     };
 
-    const renderItem = ({ item }: { item: Quotation }) => {
-        const rawStatus = item.workflow_state || item.status;
-        let displayStatus = rawStatus;
-        if (displayStatus === 'Open') displayStatus = 'Pending';
-        if (displayStatus === 'Declined' || displayStatus === 'Rejected') displayStatus = 'Review';
-
-        const isApproved = displayStatus === 'Approved' || displayStatus === 'Ordered';
-        const isPending = displayStatus === 'Pending' || displayStatus === 'Draft';
-        const isReview = displayStatus === 'Review';
-        const isCancelled = displayStatus === 'Cancelled';
-        const isResubmit = displayStatus.toLowerCase().includes('resubmit') || displayStatus.toLowerCase().includes('re-open');
-
-        const statusConfig = isApproved
-            ? { color: '#00BFA5', bg: 'rgba(0, 191, 165, 0.1)', border: 'rgba(0, 191, 165, 0.2)' }
-            : isPending
-                ? { color: '#0277BD', bg: 'rgba(2, 119, 189, 0.1)', border: 'rgba(2, 119, 189, 0.2)' }
-                : isReview
-                    ? { color: '#F4511E', bg: 'rgba(244, 81, 30, 0.1)', border: 'rgba(244, 81, 30, 0.2)' }
-                    : isCancelled
-                        ? { color: '#C62828', bg: 'rgba(198, 40, 40, 0.1)', border: 'rgba(198, 40, 40, 0.2)' }
-                        : isResubmit
-                            ? { color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.2)' }
-                            : { color: colors.textSecondary, bg: colors.surfaceSecondary, border: colors.border };
+    const renderItem = useCallback(({ item }: { item: Quotation }) => {
+        const displayStatus = item.display_status || item.workflow_state || item.status || 'Draft';
+        const statusConfig = getStatusColors(displayStatus, item.color);
 
         const amount = Number(item.grand_total ?? item.net_total ?? item.base_net_total ?? item.rounded_total ?? item.total ?? item.total_amount ?? item.base_grand_total ?? 0);
         const formattedAmount = amount.toLocaleString('en-IN', {
@@ -248,7 +277,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                     }}
                 >
                     {/* Status Accent Line */}
-                    <View style={[styles.statusAccent, { backgroundColor: statusConfig.color }]} />
+                    <View style={[styles.statusAccent, { backgroundColor: statusConfig.text }]} />
 
                     <View style={styles.cardContent}>
                         {/* Top: Header Info */}
@@ -257,15 +286,28 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                                 <Text style={styles.idText}>#{item.name}</Text>
                             </View>
                             <View style={[styles.statusPill, { backgroundColor: statusConfig.bg + '10', borderColor: statusConfig.border }]}>
-                                <View style={[styles.statusDot, { backgroundColor: statusConfig.color }]} />
-                                <Text style={[styles.statusText, { color: statusConfig.color }]}>
+                                <View style={[styles.statusDot, { backgroundColor: statusConfig.text }]} />
+                                <Text style={[styles.statusText, { color: statusConfig.text }]}>
                                     {displayStatus}
                                 </Text>
                             </View>
                         </View>
 
-                        {/* Middle: Customer Name */}
-                        <Text style={styles.customerName} numberOfLines={1}>{item.customer_name}</Text>
+                        {/* Middle: Customer Name & Margin */}
+                        <View style={styles.projectInfoRow}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.customerName} numberOfLines={1}>{item.customer_name}</Text>
+                            </View>
+                            {(item.item_margin !== undefined || item.total_margin !== undefined) && (
+                                <View style={styles.marginChip}>
+                                    <Text style={styles.marginChipLabel}>Margin</Text>
+                                    <View style={styles.marginValueContainer}>
+                                        <Ionicons name="trending-up" size={10} color="#059669" />
+                                        <Text style={styles.marginChipValue}>₹{(item.item_margin ?? item.total_margin ?? 0).toLocaleString()}</Text>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
 
                         {/* Meta Row: Date and Creator */}
                         <View style={styles.metaRow}>
@@ -284,7 +326,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                         <View style={styles.cardFooter}>
                             <View style={styles.amountContainer}>
                                 <Text style={styles.amountLabel}>Total Value</Text>
-                                <Text style={[styles.amountText, { color: statusConfig.color }]}>{formattedAmount}</Text>
+                                <Text style={[styles.amountText, { color: statusConfig.text }]}>{formattedAmount}</Text>
                             </View>
 
                             {(item.valid_till || item.valid_until) && (
@@ -300,8 +342,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                 </TouchableOpacity>
             </Animated.View>
         );
-    };
-
+    }, [styles, colors, isDark, router]);
 
     if (loading) {
         return (
@@ -330,6 +371,10 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                     scrollEnabled={true}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    initialNumToRender={8}
+                    maxToRenderPerBatch={8}
+                    windowSize={7}
+                    removeClippedSubviews
                 />
             ) : (
                 <View style={styles.listContent}>
@@ -400,7 +445,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             letterSpacing: 0.5,
         },
         customerName: {
-            fontSize: ms(15),
+            fontSize: ms(16),
             fontWeight: '900',
             color: colors.text,
             letterSpacing: -0.3,
@@ -469,9 +514,9 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             marginBottom: 2,
         },
         amountText: {
-            fontSize: ms(18),
+            fontSize: ms(20),
             fontWeight: '900',
-            color: colors.primary,
+            color: '#00BFA5',
             letterSpacing: -0.5,
         },
         expiryBadge: {
@@ -494,5 +539,40 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             marginTop: 12,
             fontWeight: '600',
         },
+        projectInfoRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 10,
+            gap: 8,
+        },
+        marginChip: {
+            backgroundColor: isDark ? 'rgba(16, 185, 129, 0.1)' : '#ECFDF5',
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5',
+            alignItems: 'center',
+        },
+        marginChipLabel: {
+            fontSize: 8,
+            color: '#10B981',
+            fontWeight: '900',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 2,
+        },
+        marginValueContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 3,
+        },
+        marginChipValue: {
+            fontSize: 13,
+            color: '#059669',
+            fontWeight: '900',
+        },
     });
 }
+

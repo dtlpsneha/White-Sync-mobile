@@ -22,6 +22,7 @@ import { Colors } from '@/constants/theme';
 import Animated, { FadeInUp, FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useResponsive } from '../hooks/useResponsive';
 import { apiGet, apiPost } from '@/utils/api';
+import { apiUrl } from '@/constants/config';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -41,7 +42,7 @@ export default function LoginScreen() {
             if (session) {
                 console.log('[LoginScreen] Verifying active session...');
                 // Try to fetch profile to verify session is still valid on the new server
-                const res = await apiPost('http://13.234.62.39:8080/api/method/get_user_profile', {}, session);
+                const res = await apiPost(apiUrl('/api/method/get_user_profile'), {}, session);
 
                 if (res.ok) {
                     const data: any = res.data;
@@ -77,21 +78,25 @@ export default function LoginScreen() {
             loginData.append('pwd', trimmedPassword);
 
             // Directly using apiPost which now handles URLSearchParams
-            const res = await apiPost('http://13.234.62.39:8080/api/method/login', loginData);
+            const res = await apiPost(apiUrl('/api/method/login'), loginData);
             const data: any = res.data;
             console.log('[Login] Response:', data);
 
             if (res.ok && data.message === 'Logged In') {
                 const setCookieHeader = res.headers['set-cookie'];
+                // Normalised `sid=...` value to send back as a Cookie header.
+                let sessionCookie = '';
+
                 if (setCookieHeader) {
                     const sidMatch = setCookieHeader.match(/(?:^|;)\s*sid=([^;]+)/);
                     if (sidMatch) {
-                        const sidCookie = `sid=${sidMatch[1].trim()}`;
-                        await SecureStore.setItemAsync('session_cookies', sidCookie);
+                        sessionCookie = `sid=${sidMatch[1].trim()}`;
+                        await SecureStore.setItemAsync('session_cookies', sessionCookie);
                         console.log('[Login] sid cookie stored successfully');
                     } else {
                         console.warn('[Login] sid cookie not found in header, storing truncated header');
-                        await SecureStore.setItemAsync('session_cookies', setCookieHeader.substring(0, 1000));
+                        sessionCookie = setCookieHeader.substring(0, 1000);
+                        await SecureStore.setItemAsync('session_cookies', sessionCookie);
                     }
                 }
 
@@ -101,7 +106,10 @@ export default function LoginScreen() {
 
                 // Fetch User Profile
                 try {
-                    const profileRes = await apiPost('http://13.234.62.39:8080/api/method/get_user_profile', {}, setCookieHeader || '');
+                    // Send the parsed `sid=...` value, not the raw Set-Cookie
+                    // header — that still carries Path/HttpOnly/Expires
+                    // attributes and is not a valid Cookie request header.
+                    const profileRes = await apiPost(apiUrl('/api/method/get_user_profile'), {}, sessionCookie);
                     const profileData: any = profileRes.data;
                     if (profileRes.ok && profileData && profileData.message && profileData.message.success) {
                         const { is_manager, show_all_quotes, user_id } = profileData.message;
@@ -350,3 +358,4 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
     });
 }
+

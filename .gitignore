@@ -9,6 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Local release APKs produced by scripts/build-apk.ps1
+build-output/
+
 # Native
 .kotlin/
 *.orig.*
@@ -41,3 +44,17 @@ app-example
 # generated native folders
 /ios
 /android
+
+# EAS build metadata dumps (contain artifact URLs / signed log links)
+builds.json
+build_status.json
+buildinfo.json
+latest_build.json
+latest_status.json
+latest_name_fix.json
+latest_build_trigger.json
+
+# Ad-hoc debug scripts that hit the production server
+check_address.js
+check_contact.js
+check_contact2.js

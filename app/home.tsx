@@ -1,30 +1,29 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView, Image, RefreshControl, Alert, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
-import { apiPost } from '../utils/api';
-import { notificationService } from '../services/NotificationService';
+import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
-    FadeInUp,
+    Easing,
     FadeInDown,
-    useSharedValue,
+    FadeInUp,
     useAnimatedProps,
-    withTiming,
-    interpolate,
-    Easing
+    useSharedValue,
+    withTiming
 } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { notificationService } from '../services/NotificationService';
+import { apiPost } from '../utils/api';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { FloatingNav } from '@/components/FloatingNav';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
-import Svg, { G, Circle, Rect, Path } from 'react-native-svg';
-import { FloatingNav } from '@/components/FloatingNav';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import Svg, { Circle, G } from 'react-native-svg';
 
 import { useResponsive } from '../hooks/useResponsive';
+import { apiUrl } from '@/constants/config';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -142,11 +141,8 @@ export default function HomeScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [permissionDenied, setPermissionDenied] = useState(false);
 
-    const [stats, setStats] = useState({
-        pending: { quotes: 0, value: 0, customers: 0, executives: 0, change: 0 },
-        approved: { quotes: 0, value: 0, customers: 0, executives: 0, change: 0 },
-        declined: { quotes: 0, value: 0, customers: 0, executives: 0, change: 0 },
-        cancelled: { quotes: 0, value: 0, customers: 0, executives: 0, change: 0 },
+    const [statsMap, setStatsMap] = useState<Record<string, any>>({});
+    const [summaryStats, setSummaryStats] = useState({
         totalValue: '₹0',
         totalQuotes: 0,
         totalCustomers: 0,
@@ -157,7 +153,6 @@ export default function HomeScreen() {
 
     const [lastSeenPendingIds, setLastSeenPendingIds] = useState<string[]>([]);
     const lastSeenPendingIdsRef = useRef<string[]>([]);
-    const [userRoles, setUserRoles] = useState<string[]>([]);
     const [isManager, setIsManager] = useState(false);
     const [hasSession, setHasSession] = useState(false);
 
@@ -167,15 +162,38 @@ export default function HomeScreen() {
         lastSeenPendingIdsRef.current = lastSeenPendingIds;
     }, [lastSeenPendingIds]);
 
+    // Poll only while the app is actually in the foreground. Previously this
+    // kept firing two requests every 30s even when backgrounded.
     useEffect(() => {
-        if (!loading && hasSession && !permissionDenied) {
-            const interval = setInterval(() => {
+        if (loading || !hasSession || permissionDenied) return;
+
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const start = () => {
+            if (interval) return;
+            interval = setInterval(() => {
                 fetchStats();
                 checkForNewPending(false);
             }, 30000);
-            return () => clearInterval(interval);
-        }
-    }, [loading, hasSession, userRoles, permissionDenied]);
+        };
+
+        const stop = () => {
+            if (interval) clearInterval(interval);
+            interval = null;
+        };
+
+        if (AppState.currentState === 'active') start();
+
+        const subscription = AppState.addEventListener('change', state => {
+            if (state === 'active') start();
+            else stop();
+        });
+
+        return () => {
+            stop();
+            subscription.remove();
+        };
+    }, [loading, hasSession, permissionDenied]);
 
     const loadData = async () => {
         setLoading(true);
@@ -216,11 +234,6 @@ export default function HomeScreen() {
         try {
             const name = await SecureStore.getItemAsync('user_name');
             setUserName(name || 'User');
-            const rolesString = await SecureStore.getItemAsync('user_roles');
-            if (rolesString) {
-                const roles = JSON.parse(rolesString);
-                setUserRoles(roles);
-            }
             const isManagerStr = await SecureStore.getItemAsync('is_manager');
             setIsManager(isManagerStr === 'true');
         } catch (error) { }
@@ -231,7 +244,7 @@ export default function HomeScreen() {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
             if (!sessionCookies) { router.replace('/'); return; }
 
-            const res = await apiPost(`http://13.234.62.39:8080/api/method/get_dashboard_stats`, {}, sessionCookies);
+            const res = await apiPost(apiUrl('/api/method/get_dashboard_stats'), {}, sessionCookies);
 
             if (res.status === 401 || res.status === 403) {
                 console.log('[Home] Session expired, logging out...');
@@ -249,20 +262,47 @@ export default function HomeScreen() {
             if (data && data.success && data.data) {
                 const d = data.data;
                 setPermissionDenied(false);
-                const pending = { quotes: d.PENDING?.quotes || 0, value: d.PENDING?.values || 0, customers: 0, executives: 0, change: d.PENDING?.percentage_change || 0 };
-                const approved = { quotes: d.APPROVED?.quotes || 0, value: d.APPROVED?.values || 0, customers: 0, executives: 0, change: d.APPROVED?.percentage_change || 0 };
-                const declined = { quotes: d.REVIEW?.quotes || 0, value: d.REVIEW?.values || 0, customers: 0, executives: 0, change: d.REVIEW?.percentage_change || 0 };
-                const cancelled = { quotes: d.CANCELLED?.quotes || 0, value: d.CANCELLED?.values || 0, customers: 0, executives: 0, change: d.CANCELLED?.percentage_change || 0 };
-                const totalQuotes = pending.quotes + approved.quotes + declined.quotes + cancelled.quotes;
-                const totalValue = pending.value + approved.value + declined.value + cancelled.value;
-                const totalCustomers = 0;
-                const conversionRate = totalQuotes > 0 ? ((approved.quotes / totalQuotes) * 100).toFixed(0) + '%' : '0%';
-                const avgQuoteValue = totalQuotes > 0 ? (totalValue / totalQuotes) : 0;
-                setStats({
-                    pending, approved, declined, cancelled,
+
+                const newStatsMap: Record<string, any> = {};
+                let totalQuotes = 0;
+                let totalValue = 0;
+                let approvedQuotes = 0;
+
+                Object.keys(d).forEach(key => {
+                    const statusKeyUpper = key.toUpperCase();
+                    if (['DRAFT', 'REOPEN', 'RE-OPEN', 'RESUBMIT', 'SUBMIT'].includes(statusKeyUpper)) {
+                        return; // Skip these as requested
+                    }
+
+                    const statusData = d[key];
+                    const quotes = statusData?.quotes || 0;
+                    const value = statusData?.values || 0;
+
+                    newStatsMap[key] = {
+                        quotes,
+                        value,
+                        customers: 0,
+                        executives: 0,
+                        change: statusData?.percentage_change || 0
+                    };
+
+                    totalQuotes += quotes;
+                    totalValue += value;
+                    if (statusKeyUpper === 'APPROVED') {
+                        approvedQuotes = quotes;
+                    }
+                });
+
+                const conversionRate = totalQuotes > 0 ? ((approvedQuotes / totalQuotes) * 100).toFixed(0) + '%' : '0%';
+                const avgQuoteValueNumeric = totalQuotes > 0 ? (totalValue / totalQuotes) : 0;
+
+                setStatsMap(newStatsMap);
+                setSummaryStats({
                     totalValue: totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
-                    totalQuotes, totalCustomers, conversionRate,
-                    avgQuoteValue: avgQuoteValue.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
+                    totalQuotes,
+                    totalCustomers: 0,
+                    conversionRate,
+                    avgQuoteValue: avgQuoteValueNumeric.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
                 });
                 setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
             }
@@ -276,7 +316,7 @@ export default function HomeScreen() {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
             if (!sessionCookies) return;
 
-            const res = await apiPost(`http://13.234.62.39:8080/api/method/get_quote_resource`, {}, sessionCookies);
+            const res = await apiPost(apiUrl('/api/method/get_quote_resource'), {}, sessionCookies);
             const data: any = res.data;
 
             let quotes: any[] = [];
@@ -321,10 +361,19 @@ export default function HomeScreen() {
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Logout', style: 'destructive', onPress: async () => {
-                    await SecureStore.deleteItemAsync('session_cookies');
-                    await SecureStore.deleteItemAsync('user_name');
-                    await SecureStore.deleteItemAsync('user_roles');
-                    await SecureStore.deleteItemAsync('last_seen_pending_ids');
+                    // Must clear the same keys as the Profile screen's logout.
+                    // This path previously left is_manager / show_all_quotes /
+                    // user_id behind, so the next account to sign in on this
+                    // device inherited the previous user's permissions if its
+                    // profile fetch failed.
+                    await Promise.all([
+                        SecureStore.deleteItemAsync('session_cookies'),
+                        SecureStore.deleteItemAsync('user_name'),
+                        SecureStore.deleteItemAsync('is_manager'),
+                        SecureStore.deleteItemAsync('show_all_quotes'),
+                        SecureStore.deleteItemAsync('user_id'),
+                        SecureStore.deleteItemAsync('last_seen_pending_ids'),
+                    ]);
                     router.replace('/');
                 }
             }
@@ -363,49 +412,123 @@ export default function HomeScreen() {
                             <TouchableOpacity onPress={handleLogout} style={styles.profileButton}><View style={styles.avatar}><Text style={styles.avatarText}>{userName ? userName[0].toUpperCase() : 'U'}</Text></View></TouchableOpacity>
                         </View>
 
-                        <View style={styles.topActions}><TouchableOpacity onPress={toggleTheme} style={styles.iconButton}><Ionicons name={theme === 'dark' ? 'sunny-outline' : 'moon-outline'} size={ms(20)} color={colors.text} /></TouchableOpacity></View>
+
 
                         <View style={styles.gridContainer}>
-                            <Animated.View entering={FadeInDown.delay(100).springify()} style={[styles.statusCard, { backgroundColor: '#0277BD' }]}>
-                                <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Pending' } })}>
-                                    <View style={styles.statusHeader}><Text style={styles.statusTitle}>PENDING</Text><View style={styles.statusIconContainer}><Ionicons name="time-outline" size={ms(18)} color="#FFF" /></View></View>
-                                    <View style={styles.statusBody}>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="document-text-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quotes</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.pending.quotes}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="cash-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Values</Text></View><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.pending.value.toLocaleString('en-IN')}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="people-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Customers</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.pending.customers}</Text></View>
+                            {Object.keys(statsMap).map((statusKey, index) => {
+                                const status = statsMap[statusKey];
+                                const isPending = statusKey.toUpperCase() === 'PENDING';
+                                const isApproved = statusKey.toUpperCase() === 'APPROVED';
+                                const isReview = statusKey.toUpperCase() === 'REVIEW' || statusKey.toUpperCase() === 'DECLINED';
+                                const isCancelled = statusKey.toUpperCase() === 'CANCELLED' || statusKey.toUpperCase() === 'REJECTED';
+
+                                const cardColor = isPending ? '#0277BD' :
+                                    isApproved ? '#00BFA5' :
+                                        isReview ? '#F4511E' :
+                                            isCancelled ? '#C62828' :
+                                                '#64748B'; // Default Slate for others
+
+                                const iconName = isPending ? 'time-outline' :
+                                    isApproved ? 'trending-up-outline' :
+                                        isReview ? 'trending-down-outline' :
+                                            isCancelled ? 'close-circle-outline' :
+                                                'document-text-outline';
+
+                                return (
+                                    <Animated.View
+                                        key={statusKey}
+                                        entering={FadeInDown.delay(100 * (index + 1)).springify()}
+                                        style={[styles.statusCard, { backgroundColor: cardColor }]}
+                                    >
+                                        <TouchableOpacity
+                                            style={styles.cardContent}
+                                            onPress={() => router.push({ pathname: '/quotations', params: { filter: statusKey } })}
+                                        >
+                                            <View style={styles.statusHeader}>
+                                                <Text style={styles.statusTitle}>{statusKey}</Text>
+                                                <View style={styles.statusIconContainer}>
+                                                    <Ionicons name={iconName as any} size={ms(18)} color="#FFF" />
+                                                </View>
+                                            </View>
+                                            <View style={styles.statusBody}>
+                                                <View style={styles.statRow}>
+                                                    <View style={styles.statLabelContainer}>
+                                                        <Ionicons name="document-text-outline" size={ms(14)} color="rgba(255,255,255,0.8)" />
+                                                        <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quotes</Text>
+                                                    </View>
+                                                    <Text style={styles.statValue} numberOfLines={1}>{status.quotes}</Text>
+                                                </View>
+                                                <View style={styles.statRow}>
+                                                    <View style={styles.statLabelContainer}>
+                                                        <Ionicons name="cash-outline" size={ms(14)} color="rgba(255,255,255,0.8)" />
+                                                        <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Values</Text>
+                                                    </View>
+                                                    <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+                                                        {status.value.toLocaleString('en-IN')}
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.statRow}>
+                                                    <View style={styles.statLabelContainer}>
+                                                        <Ionicons name="people-outline" size={ms(14)} color="rgba(255,255,255,0.8)" />
+                                                        <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Customers</Text>
+                                                    </View>
+                                                    <Text style={styles.statValue} numberOfLines={1}>{status.customers}</Text>
+                                                </View>
+                                            </View>
+                                        </TouchableOpacity>
+                                    </Animated.View>
+                                );
+                            })}
+
+                            <Animated.View
+                                key="sales-orders"
+                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 1)).springify()}
+                                style={[styles.statusCard, { backgroundColor: '#6366F1' }]} // Indigo for Sales Orders
+                            >
+                                <TouchableOpacity
+                                    style={styles.cardContent}
+                                    onPress={() => router.push('/sales-orders')}
+                                >
+                                    <View style={styles.statusHeader}>
+                                        <Text style={styles.statusTitle}>Sales Orders</Text>
+                                        <View style={styles.statusIconContainer}>
+                                            <Ionicons name="cart-outline" size={ms(18)} color="#FFF" />
+                                        </View>
+                                    </View>
+                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Ionicons name="cart" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
+                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>View All Orders</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>Manage Orders</Text>
+                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
+                                        </View>
                                     </View>
                                 </TouchableOpacity>
                             </Animated.View>
 
-                            <Animated.View entering={FadeInDown.delay(200).springify()} style={[styles.statusCard, { backgroundColor: '#00BFA5' }]}>
-                                <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Approved' } })}>
-                                    <View style={styles.statusHeader}><Text style={styles.statusTitle}>APPROVED</Text><View style={styles.statusIconContainer}><Ionicons name="trending-up-outline" size={ms(18)} color="#FFF" /></View></View>
-                                    <View style={styles.statusBody}>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="document-text-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quotes</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.approved.quotes}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="cash-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Values</Text></View><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.approved.value.toLocaleString('en-IN')}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="people-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Customers</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.approved.customers}</Text></View>
+                            {/* Price Calculator Card */}
+                            <Animated.View
+                                key="price-calculator"
+                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 2)).springify()}
+                                style={[styles.statusCard, { backgroundColor: '#10B981' }]} // Emerald green for Calculator
+                            >
+                                <TouchableOpacity
+                                    style={styles.cardContent}
+                                    onPress={() => router.push('/price-calculator')}
+                                >
+                                    <View style={styles.statusHeader}>
+                                        <Text style={styles.statusTitle}>Price Calculator</Text>
+                                        <View style={styles.statusIconContainer}>
+                                            <Ionicons name="calculator-outline" size={ms(18)} color="#FFF" />
+                                        </View>
                                     </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-
-                            <Animated.View entering={FadeInDown.delay(300).springify()} style={[styles.statusCard, { backgroundColor: '#F4511E' }]}>
-                                <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Review' } })}>
-                                    <View style={styles.statusHeader}><Text style={styles.statusTitle}>REVIEW</Text><View style={styles.statusIconContainer}><Ionicons name="trending-down-outline" size={ms(18)} color="#FFF" /></View></View>
-                                    <View style={styles.statusBody}>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="document-text-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quotes</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.declined.quotes}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="cash-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Values</Text></View><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.declined.value.toLocaleString('en-IN')}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="people-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Customers</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.declined.customers}</Text></View>
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-
-                            <Animated.View entering={FadeInDown.delay(400).springify()} style={[styles.statusCard, { backgroundColor: '#C62828' }]}>
-                                <TouchableOpacity style={styles.cardContent} onPress={() => router.push({ pathname: '/quotations', params: { filter: 'Cancelled' } })}>
-                                    <View style={styles.statusHeader}><Text style={styles.statusTitle}>CANCELLED</Text><View style={styles.statusIconContainer}><Ionicons name="time-outline" size={ms(18)} color="#FFF" /></View></View>
-                                    <View style={styles.statusBody}>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="document-text-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quotes</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.cancelled.quotes}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="cash-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Values</Text></View><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{stats.cancelled.value.toLocaleString('en-IN')}</Text></View>
-                                        <View style={styles.statRow}><View style={styles.statLabelContainer}><Ionicons name="people-outline" size={ms(14)} color="rgba(255,255,255,0.8)" /><Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Customers</Text></View><Text style={styles.statValue} numberOfLines={1}>{stats.cancelled.customers}</Text></View>
+                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Ionicons name="calculator" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
+                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Habasit Calculator</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>Calculate Price</Text>
+                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
+                                        </View>
                                     </View>
                                 </TouchableOpacity>
                             </Animated.View>
@@ -416,17 +539,30 @@ export default function HomeScreen() {
                                 <View><Text style={styles.donutTitle}>Donut Chart</Text><Text style={styles.donutSubtitle}>Quote distribution overview</Text></View>
                                 <TouchableOpacity style={styles.detailsButton} onPress={() => router.push('/quotations')}><Text style={styles.detailsButtonText}>View Details</Text><Ionicons name="arrow-forward-outline" size={ms(14)} color="#FFF" style={{ transform: [{ rotate: '-45deg' }] }} /></TouchableOpacity>
                             </View>
-                            <View style={styles.chartWrapper}><DonutChart data={[stats.pending.quotes, stats.approved.quotes, stats.declined.quotes, stats.cancelled.quotes]} colors={['#0277BD', '#00BFA5', '#F4511E', '#C62828']} centerText={stats.totalQuotes.toString()} /></View>
+                            <View style={styles.chartWrapper}>
+                                <DonutChart
+                                    data={Object.keys(statsMap).map(k => statsMap[k].quotes)}
+                                    colors={Object.keys(statsMap).map(k => {
+                                        const uk = k.toUpperCase();
+                                        if (uk === 'PENDING') return '#0277BD';
+                                        if (uk === 'APPROVED') return '#00BFA5';
+                                        if (uk === 'REVIEW' || uk === 'DECLINED') return '#F4511E';
+                                        if (uk === 'CANCELLED' || uk === 'REJECTED') return '#C62828';
+                                        return '#64748B';
+                                    })}
+                                    centerText={summaryStats.totalQuotes.toString()}
+                                />
+                            </View>
                             <View style={styles.donutStatsRow}>
-                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{stats.totalQuotes}</Text><Text style={styles.donutStatLabel}>Total Quotes</Text></View>
-                                <View style={[styles.donutStat, styles.donutStatBorder, { flex: 1.5 }]}><Text style={styles.donutStatValue}>{stats.totalValue.replace('INR', '₹')}</Text><Text style={styles.donutStatLabel}>Total Value</Text></View>
-                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{stats.totalCustomers}</Text><Text style={styles.donutStatLabel}>Customers</Text></View>
+                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{summaryStats.totalQuotes}</Text><Text style={styles.donutStatLabel}>Total Quotes</Text></View>
+                                <View style={[styles.donutStat, styles.donutStatBorder, { flex: 1.5 }]}><Text style={styles.donutStatValue}>{summaryStats.totalValue.replace('INR', '₹')}</Text><Text style={styles.donutStatLabel}>Total Value</Text></View>
+                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{summaryStats.totalCustomers}</Text><Text style={styles.donutStatLabel}>Customers</Text></View>
                             </View>
                         </Animated.View>
 
                         <Animated.View entering={FadeInUp.delay(600)} style={styles.metricsContainer}>
-                            <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{stats.conversionRate}</Text></View></View>
-                            <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{stats.avgQuoteValue}</Text></View></View>
+                            <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{summaryStats.conversionRate}</Text></View></View>
+                            <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
                         </Animated.View>
                     </>
                 )}
@@ -477,10 +613,10 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms, width }: any) {
         statusTitle: { fontSize: ms(12), fontWeight: '900', color: '#FFF', opacity: 0.9, letterSpacing: 0.5 },
         statusIconContainer: { width: ms(32), height: ms(32), borderRadius: ms(12), backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
         statusBody: { flex: 1, justifyContent: 'center', gap: vs(12) },
-        statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: s(8) },
-        statLabelContainer: { flexDirection: 'row', alignItems: 'center', gap: s(4), flex: 1.1 },
-        statLabel: { fontSize: ms(10), color: 'rgba(255,255,255,0.8)', fontWeight: '700' },
-        statValue: { fontSize: ms(16), fontWeight: '900', color: '#FFF', flex: 2.8, textAlign: 'right' },
+        statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: s(4), marginBottom: vs(4) },
+        statLabelContainer: { flexDirection: 'row', alignItems: 'center', gap: s(4), flex: 0.8 },
+        statLabel: { fontSize: ms(9), color: 'rgba(255,255,255,0.8)', fontWeight: '700' },
+        statValue: { fontSize: ms(14), fontWeight: '900', color: '#FFF', flex: 1.5, textAlign: 'right' },
         donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(24), elevation: 5 },
         donutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: vs(24) },
         donutTitle: { fontSize: ms(20), fontWeight: '900', color: colors.text },
@@ -500,3 +636,4 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms, width }: any) {
         metricValue: { fontSize: ms(18), fontWeight: '900' }
     });
 }
+

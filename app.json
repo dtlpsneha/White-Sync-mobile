@@ -4,9 +4,10 @@
     "slug": "White_Sync",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "whitesync",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -18,9 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/logo.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.deeptech.whitesync",
@@ -30,19 +29,25 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO"
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -57,7 +62,11 @@
         {
           "android": {
             "usesCleartextTraffic": true,
-            "kotlinVersion": "2.1.20"
+            "kotlinVersion": "2.1.20",
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableBundleCompression": true,
+            "extraProguardRules": "-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.webview.** { *; }\n-keep class com.swmansion.** { *; }\n-keep class expo.modules.** { *; }\n-dontwarn expo.modules.**"
           }
         }
       ],
@@ -76,12 +85,15 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f465bea0-2332-4001-9355-ed8059f4b472"
+        "projectId": "ed7c614c-e059-4629-a2e2-cae1bc505958"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {}
+    "updates": {
+      "url": "https://u.expo.dev/ed7c614c-e059-4629-a2e2-cae1bc505958"
+    },
+    "owner": "sasikumar2005"
   }
 }

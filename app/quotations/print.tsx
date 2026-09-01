@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiPost } from '@/utils/api';
+import { apiUrl } from '@/constants/config';
 
 export default function PrintPreviewScreen() {
     const { id } = useLocalSearchParams();
@@ -41,7 +42,7 @@ export default function PrintPreviewScreen() {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
             // Ensure we use the documented base URL for print formats
-            const res = await apiPost('http://13.234.62.39:8080/api/method/get_quotation_html', { action: 'get_list' }, sessionCookies);
+            const res = await apiPost(apiUrl('/api/method/get_quotation_html'), { action: 'get_list' }, sessionCookies);
             const data: any = res.data;
 
             if (res.ok && data && data.message && Array.isArray(data.message)) {
@@ -67,7 +68,7 @@ export default function PrintPreviewScreen() {
             setLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const res = await apiPost('http://13.234.62.39:8080/api/method/get_quotation_html', {
+            const res = await apiPost(apiUrl('/api/method/get_quotation_html'), {
                 action: 'get_preview',
                 doc_name: id,
                 print_format: selectedFormat
@@ -119,11 +120,11 @@ export default function PrintPreviewScreen() {
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: isDark ? '#0F172A' : '#F1F5F9' }]}>
+        <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F1F5F9' }]}>
             <StatusBar style="light" />
 
             {/* Premium Header */}
-            <View style={styles.premiumHeader}>
+            <View style={[styles.premiumHeader, { backgroundColor: isDark ? '#121212' : '#1E293B' }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
                     <Ionicons name="close" size={24} color="#FFF" />
                 </TouchableOpacity>
@@ -269,7 +270,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     premiumHeaderTitle: {
+        flex: 1,
         alignItems: 'center',
+        paddingHorizontal: 8,
     },
     headerMainTitle: {
         color: '#FFF',
@@ -432,3 +435,4 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
 });
+

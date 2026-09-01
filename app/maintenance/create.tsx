@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiGet, apiPost, uploadFile } from '@/utils/api';
+import { parseFrappeError } from '@/utils/frappeError';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,34 +25,22 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { API_BASE_URL, apiUrl } from '@/constants/config';
+import {
+    Contact,
+    Customer,
+    Item,
+    getAddressDisplay,
+    getContactDetails,
+    searchAddresses,
+    searchApprovingAuthorities,
+    searchContacts,
+    searchCustomers,
+    searchItems,
+} from '@/services/frappeSearch';
 
-const IMAGE_HOST = 'http://13.234.62.39:8080';
-
-interface Customer {
-    name: string;
-    customer_name: string;
-    customer_group?: string;
-    territory?: string;
-    customer_primary_address?: string;
-    customer_primary_contact?: string;
-}
-
-interface Item {
-    name: string;
-    item_name: string;
-    description?: string;
-}
-
-interface Contact {
-    name: string;
-    first_name: string;
-    last_name?: string;
-    email_id?: string;
-    mobile_no?: string;
-}
-
-
+const IMAGE_HOST = API_BASE_URL;
 
 export default function CreateMaintenanceScreen() {
     const router = useRouter();
@@ -59,6 +48,7 @@ export default function CreateMaintenanceScreen() {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const isDark = theme === 'dark';
+    const insets = useSafeAreaInsets();
 
     // Form States
     const [form, setForm] = useState({
@@ -175,7 +165,7 @@ export default function CreateMaintenanceScreen() {
                         filters: JSON.stringify([["user", "=", userId]]),
                         fields: JSON.stringify(["name", "approving_authority_name"])
                     });
-                    const res = await apiGet(`http://13.234.62.39:8080/api/method/frappe.client.get_list?${params.toString()}`, sessionCookies);
+                    const res = await apiGet(apiUrl(`/api/method/frappe.client.get_list?${params.toString()}`), sessionCookies);
                     if (res.ok && res.data?.message && res.data.message.length > 0) {
                         const authority = res.data.message[0];
                         updateForm('assigned_to', authority.name);
@@ -277,7 +267,7 @@ export default function CreateMaintenanceScreen() {
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ['images'],
                 allowsEditing: true,
                 quality: 0.7,
             });
@@ -299,7 +289,7 @@ export default function CreateMaintenanceScreen() {
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ['images'],
                 allowsEditing: true,
                 quality: 0.7,
             });
@@ -349,148 +339,51 @@ export default function CreateMaintenanceScreen() {
     }, [form.food_expenses, form.travel_expenses, form.stay_expenses, form.other_expenses]);
 
     const fetchCustomers = async (query: string = '') => {
-        const trimmedQuery = query.trim();
-        if (!trimmedQuery) {
+        if (!query.trim()) {
             setCustomers([]);
             setShowCustomerResults(false);
             return;
         }
         setIsSearchingCustomer(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            // Use frappe.client.get_list — a whitelisted endpoint with simple params
-            const params = new URLSearchParams({
-                doctype: 'Customer',
-                txt: trimmedQuery,
-                fields: JSON.stringify(["name", "customer_name", "territory", "customer_primary_address", "customer_primary_contact", "customer_group"]),
-                filters: JSON.stringify([["customer_name", "like", `%${trimmedQuery}%`]]),
-                limit_page_length: '100',
-            });
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.client.get_list?${params.toString()}`;
-            console.log('[fetchCustomers] URL:', url);
-            const res = await apiGet(url, sessionCookies);
-            console.log('[fetchCustomers] Status:', res.status, 'Data:', JSON.stringify(res.data)?.substring(0, 200));
-
-            if (res.ok) {
-                setCustomers(res.data?.message || res.data?.data || []);
-                setShowCustomerResults(true);
-            } else {
-                console.error('Customer Fetch Error:', res.status, res.data);
-                setSearchError(`Server error (${res.status}). Please try again.`);
-                setCustomers([]);
-                setShowCustomerResults(true);
-            }
-        } catch (err) {
-            console.warn('Customer Fetch Failed:', err);
-            setSearchError('Network error. Please check your connection.');
-            setCustomers([]);
-            setShowCustomerResults(true);
-        } finally {
-            setIsSearchingCustomer(false);
-        }
+        const result = await searchCustomers(query);
+        if (!result.ok) setSearchError(result.error);
+        setCustomers(result.data);
+        setShowCustomerResults(true);
+        setIsSearchingCustomer(false);
     };
 
-
-
     const fetchContacts = async (customerName: string, query: string = '') => {
-        const trimmedQuery = query.trim();
         if (!customerName) return;
         setIsSearchingContact(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const fields = ["name", "first_name", "last_name", "email_id", "mobile_no"];
-            const filters: any[] = [
-                ["Dynamic Link", "link_name", "=", customerName],
-                ["Dynamic Link", "link_doctype", "=", "Customer"]
-            ];
-
-            if (trimmedQuery) {
-                filters.push(["first_name", "like", `%${encodeURIComponent(trimmedQuery)}%`]);
-            }
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.client.get_list?doctype=Contact&fields=${encodeURIComponent(JSON.stringify(fields))}&filters=${encodeURIComponent(JSON.stringify(filters))}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                const data = res.data?.message || res.data?.data || [];
-                setContacts(data);
-                setShowContactResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setContacts([]);
-                setShowContactResults(true);
-            }
-        } catch (err) {
-            console.warn('Contact Fetch Failed:', err);
-            setSearchError('Network error');
-            setContacts([]);
-            setShowContactResults(true);
-        } finally {
-            setIsSearchingContact(false);
-        }
+        const result = await searchContacts(customerName, query);
+        if (!result.ok) setSearchError(result.error);
+        setContacts(result.data);
+        setShowContactResults(true);
+        setIsSearchingContact(false);
     };
 
     const fetchAuthorities = async (query: string = '') => {
-        const trimmedQuery = query.trim();
         setIsSearchingAuthority(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const params = new URLSearchParams({
-                doctype: 'Approving Authority',
-                txt: trimmedQuery,
-                ignore_user_permissions: '0'
-            });
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.desk.search.search_link?${params.toString()}`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                // search_link returns results in res.data.message as [{value: 'ID', description: 'Label'}, ...]
-                const results = res.data?.message || res.data?.results || [];
-                setAuthorities(results);
-                setShowAuthorityResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setAuthorities([]);
-                setShowAuthorityResults(true);
-            }
-        } catch (err) {
-            console.warn('Authority Fetch Failed:', err);
-            setSearchError('Network error');
-            setAuthorities([]);
-            setShowAuthorityResults(true);
-        } finally {
-            setIsSearchingAuthority(false);
-        }
+        const result = await searchApprovingAuthorities(query);
+        if (!result.ok) setSearchError(result.error);
+        setAuthorities(result.data);
+        setShowAuthorityResults(true);
+        setIsSearchingAuthority(false);
     };
 
     const fetchAddresses = async (customerName: string) => {
         if (!customerName) return;
         setIsSearchingAddress(true);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const filters = JSON.stringify([
-                ["Dynamic Link", "link_name", "=", customerName],
-                ["Dynamic Link", "link_doctype", "=", "Customer"]
-            ]);
-            const fields = JSON.stringify(["name", "address_title", "address_line1", "address_line2", "city", "state", "pincode"]);
-            const url = `http://13.234.62.39:8080/api/method/frappe.client.get_list?doctype=Address&filters=${encodeURIComponent(filters)}&fields=${encodeURIComponent(fields)}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-            if (res.ok) {
-                setAddresses(res.data?.message || res.data?.data || []);
-            }
-        } catch (err) {
-            console.warn('Address Fetch Failed:', err);
-        } finally {
-            setIsSearchingAddress(false);
-        }
+
+        const result = await searchAddresses(customerName);
+        if (result.ok) setAddresses(result.data);
+        setIsSearchingAddress(false);
     };
 
     useEffect(() => {
@@ -500,39 +393,17 @@ export default function CreateMaintenanceScreen() {
         }
     }, [authorityQuery]);
 
+    // Same Approving Authority lookup as fetchAuthorities, feeding the sales
+    // executive picker instead.
     const fetchSalesExecutives = async (query: string = '') => {
-        const trimmedQuery = query.trim();
         setIsSearchingSalesExec(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const params = new URLSearchParams({
-                doctype: 'Approving Authority',
-                txt: trimmedQuery,
-                ignore_user_permissions: '0'
-            });
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.desk.search.search_link?${params.toString()}`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                const results = res.data?.message || res.data?.results || [];
-                setSalesExecutives(results);
-                setShowSalesExecResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setSalesExecutives([]);
-                setShowSalesExecResults(true);
-            }
-        } catch (err) {
-            console.warn('Sales Executive Fetch Failed:', err);
-            setSearchError('Network error');
-            setSalesExecutives([]);
-            setShowSalesExecResults(true);
-        } finally {
-            setIsSearchingSalesExec(false);
-        }
+        const result = await searchApprovingAuthorities(query);
+        if (!result.ok) setSearchError(result.error);
+        setSalesExecutives(result.data);
+        setShowSalesExecResults(true);
+        setIsSearchingSalesExec(false);
     };
 
     useEffect(() => {
@@ -551,38 +422,14 @@ export default function CreateMaintenanceScreen() {
     };
 
     const fetchItems = async (query: string = '') => {
-        const trimmedQuery = query.trim();
         setIsSearchingItem(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const fields = ["name", "item_name", "description"];
-            const filters = JSON.stringify([["disabled", "=", 0], ["has_variants", "=", 0]]);
-            const or_filters = trimmedQuery ? JSON.stringify([
-                ["item_code", "like", `%${trimmedQuery}%`],
-                ["item_name", "like", `%${trimmedQuery}%`]
-            ]) : "[]";
-
-            const url = `http://13.234.62.39:8080/api/resource/Item?fields=${encodeURIComponent(JSON.stringify(fields))}&filters=${encodeURIComponent(filters)}${trimmedQuery ? `&or_filters=${encodeURIComponent(or_filters)}` : ''}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                setItems(res.data?.data || []);
-                setShowItemResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setItems([]);
-                setShowItemResults(true);
-            }
-        } catch (err) {
-            console.warn('Item Fetch Failed:', err);
-            setSearchError('Network error');
-            setItems([]);
-            setShowItemResults(true);
-        } finally {
-            setIsSearchingItem(false);
-        }
+        const result = await searchItems(query);
+        if (!result.ok) setSearchError(result.error);
+        setItems(result.data);
+        setShowItemResults(true);
+        setIsSearchingItem(false);
     };
 
     const selectItem = (item: Item, index: number) => {
@@ -604,37 +451,18 @@ export default function CreateMaintenanceScreen() {
     };
 
     const fetchAddressAndContact = async (customerName: string, addressName?: string, contactName?: string) => {
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
+        if (addressName) {
+            updateForm('customer_address', await getAddressDisplay(addressName));
+        }
 
-            // Fetch Address display if name exists
-            if (addressName) {
-                const addrRes = await apiGet(
-                    `http://13.234.62.39:8080/api/resource/Address/${encodeURIComponent(addressName)}?fields=${encodeURIComponent('["display"]')}`,
-                    sessionCookies
-                );
-                if (addrRes.ok) {
-                    updateForm('customer_address', addrRes.data?.data?.display || '');
-                }
+        if (contactName) {
+            const contact = await getContactDetails(contactName);
+            if (contact) {
+                updateForm('contact_person', contact.fullName);
+                updateForm('contact_email', contact.email);
+                updateForm('contact_mobile', contact.mobile);
+                setContactQuery(contact.fullName);
             }
-
-            // Fetch Contact display if name exists
-            if (contactName) {
-                const contRes = await apiGet(
-                    `http://13.234.62.39:8080/api/resource/Contact/${encodeURIComponent(contactName)}?fields=${encodeURIComponent('["first_name","last_name","email_id","mobile_no"]')}`,
-                    sessionCookies
-                );
-                if (contRes.ok) {
-                    const c = contRes.data?.data || {};
-                    const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.full_name || '';
-                    updateForm('contact_person', fullName);
-                    updateForm('contact_email', c.email_id || '');
-                    updateForm('contact_mobile', c.mobile_no || '');
-                    setContactQuery(fullName);
-                }
-            }
-        } catch (err) {
-            console.warn('Auto-fetch failed:', err);
         }
     };
 
@@ -727,6 +555,29 @@ export default function CreateMaintenanceScreen() {
     }, []);
 
     const handleSave = async () => {
+        // Validate before uploading anything. ERPNext rejects a Maintenance
+        // Visit with no linked Customer ("Value missing for Customer Visits:
+        // Customer"), but that only came back after every expense and purpose
+        // image had already been uploaded — so the user waited through the
+        // whole save just to get an error they could not act on.
+        if (!form.customer.trim()) {
+            Alert.alert(
+                'Select a Customer',
+                form.new_customer.trim()
+                    // They filled the free-text block, which is the easy mistake
+                    // to make: it records extra detail but does not create or
+                    // replace the Customer link the server requires.
+                    ? `"${form.new_customer.trim()}" is stored as extra detail only — it does not create a customer record.\n\nUse the Customer search at the top to pick an existing customer.`
+                    : 'Use the Customer search at the top to pick a customer before saving.'
+            );
+            return;
+        }
+
+        if (!form.date_and_time.trim()) {
+            Alert.alert('Set the Visit Date', 'Pick a date and time for this visit before saving.');
+            return;
+        }
+
         setIsSaving(true);
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
@@ -826,38 +677,11 @@ export default function CreateMaintenanceScreen() {
                 total: form.total,
             };
 
-            const res = await apiPost(`http://13.234.62.39:8080/api/resource/Maintenance%20Visit`, payload, sessionCookies);
+            const res = await apiPost(apiUrl('/api/resource/Maintenance%20Visit'), payload, sessionCookies);
 
             if (!res.ok) {
                 console.error('Server Error Data:', res.data);
-                let serverMsg = 'Creation failed';
-
-                if (res.data) {
-                    if (res.data._server_messages) {
-                        try {
-                            const messages = JSON.parse(res.data._server_messages);
-                            serverMsg = messages.map((m: any) => {
-                                try {
-                                    return JSON.parse(m).message;
-                                } catch {
-                                    return m.message || m;
-                                }
-                            }).join('\n');
-                        } catch {
-                            serverMsg = res.data._server_messages;
-                        }
-                    } else if (res.data.message) {
-                        serverMsg = typeof res.data.message === 'object' ? JSON.stringify(res.data.message) : res.data.message;
-                    } else if (res.data.exc) {
-                        try {
-                            const exc = JSON.parse(res.data.exc);
-                            serverMsg = Array.isArray(exc) ? exc[0] : exc;
-                        } catch {
-                            serverMsg = res.data.exc;
-                        }
-                    }
-                }
-                throw new Error(serverMsg);
+                throw new Error(parseFrappeError(res.data, 'Creation failed'));
             }
 
             Alert.alert("Success", "Maintenance record created.", [{ text: "OK", onPress: () => router.back() }]);
@@ -898,7 +722,7 @@ export default function CreateMaintenanceScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             <View
-                style={[styles.headerGradient, { backgroundColor: isDark ? '#1E293B' : '#4F46E5' }]}
+                style={[styles.headerGradient, { backgroundColor: isDark ? '#000000' : '#4F46E5' }]}
             >
                 <SafeAreaView>
                     <View style={styles.header}>
@@ -909,7 +733,7 @@ export default function CreateMaintenanceScreen() {
                             >
                                 <Ionicons name="chevron-back" size={24} color="#FFF" />
                             </TouchableOpacity>
-                            <View style={styles.headerText}>
+                            <View style={[styles.headerText, { flex: 1 }]}>
                                 <Text style={styles.headerTitle}>Add Visit</Text>
                                 <Text style={styles.headerSubtitle}>Create new Visit record</Text>
                             </View>
@@ -918,13 +742,13 @@ export default function CreateMaintenanceScreen() {
                 </SafeAreaView>
             </View>
 
-            <ScrollView
-                style={styles.scrollContent}
-                contentContainerStyle={styles.scrollInner}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-            >
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}>
+                <ScrollView
+                    style={styles.scrollContent}
+                    contentContainerStyle={[styles.scrollInner, { paddingBottom: 100 + insets.bottom }]}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
                     {/* 1. Customer & Schedule */}
                     <Section title="Customer & Schedule" icon="calendar">
                         {(form.maintenance_type === 'Existing' || form.maintenance_type === 'Scheduled' || form.maintenance_type === 'Unscheduled') && (
@@ -1014,9 +838,9 @@ export default function CreateMaintenanceScreen() {
                                 />
                             </View>
 
-                            <View style={styles.row}>
-                                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>New Contact Number</Text>
+                            <View style={[styles.row, { flexWrap: 'wrap', gap: 12 }]}>
+                                <View style={[styles.inputWrapper, { flex: 1, minWidth: '45%' }]}>
+                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>New Contact Number</Text>
                                     <TextInput
                                         style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
                                         value={form.new_contact_number}
@@ -1026,8 +850,8 @@ export default function CreateMaintenanceScreen() {
                                         keyboardType="phone-pad"
                                     />
                                 </View>
-                                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>New Contact Email</Text>
+                                <View style={[styles.inputWrapper, { flex: 1, minWidth: '45%' }]}>
+                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>New Contact Email</Text>
                                     <TextInput
                                         style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
                                         value={form.new_contact_email}
@@ -1264,7 +1088,7 @@ export default function CreateMaintenanceScreen() {
                     </Section>
 
                     {/* 3. Location */}
-                    <Section title="Location" icon="pin">
+                    <Section title="Location" icon="location">
                         <View style={styles.inputWrapper}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Customer Visit Location</Text>
@@ -1301,8 +1125,8 @@ export default function CreateMaintenanceScreen() {
                         </View>
                     </Section>
 
-                    {/* 5. RFQ (Items) */}
-                    <Section title="RFQ" icon="list">
+                    {/* 4. Purpose of Visit */}
+                    <Section title="Purpose of Visit" icon="briefcase">
                         {form.purposes.map((row, index) => (
                             <View key={index} style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                                 <View style={styles.itemHeader}>
@@ -1396,380 +1220,13 @@ export default function CreateMaintenanceScreen() {
                             </View>
                         ))}
 
-                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary, backgroundColor: isDark ? '#1E293B' : '#F5F7FF' }]} onPress={addPurposeRow}>
+                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary, backgroundColor: isDark ? colors.surface : '#F5F7FF' }]} onPress={addPurposeRow}>
                             <Ionicons name="add-circle" size={20} color={colors.primary} />
                             <Text style={[styles.addBtnText, { color: colors.primary }]}>Add Another Item</Text>
                         </TouchableOpacity>
-                    </Section>                    {/* 5.1 Travel Expenses */}
-                    <Section title="Travel Expenses" icon="airplane">
-                        {form.travel_expenses.map((exp, idx) => (
-                            <View key={idx} style={[styles.itemCard, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.border }]}>
-                                <View style={styles.itemHeader}>
-                                    <Text style={[styles.itemLabel, { color: colors.primary }]}>TRAVEL #{idx + 1}</Text>
-                                    <TouchableOpacity onPress={() => removeExpenseRow('travel', idx)}>
-                                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>From</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.from_location}
-                                            onChangeText={t => updateExpenseRow('travel', idx, 'from_location', t)}
-                                            placeholder="City"
-                                        />
-                                    </View>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>To</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.to_location}
-                                            onChangeText={t => updateExpenseRow('travel', idx, 'to_location', t)}
-                                            placeholder="City"
-                                        />
-                                    </View>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Mode</Text>
-                                        <TouchableOpacity
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, justifyContent: 'center' }]}
-                                            onPress={() => setSelectionModal({
-                                                visible: true,
-                                                title: 'Select Mode of Travel',
-                                                options: ['Taxi', 'Bus', 'Train', 'Flight', 'Own Vehicle', 'Other'],
-                                                onSelect: (v) => updateExpenseRow('travel', idx, 'mode_of_travel', v),
-                                                selectedValue: exp.mode_of_travel
-                                            })}
-                                        >
-                                            <Text style={{ color: exp.mode_of_travel ? colors.text : colors.textSecondary }}>{exp.mode_of_travel || 'Select Mode'}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.cost}
-                                            onChangeText={t => updateExpenseRow('travel', idx, 'cost', t)}
-                                            keyboardType="numeric"
-                                        />
-                                    </View>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Date</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.date}
-                                            onChangeText={t => updateExpenseRow('travel', idx, 'date', t)}
-                                            placeholder="YYYY-MM-DD"
-                                        />
-                                    </View>
-                                    <TouchableOpacity
-                                        style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                                        onPress={() => pickImage('travel', idx)}
-                                    >
-                                        <Ionicons name="camera-outline" size={20} color={colors.primary} />
-                                        <Text style={[styles.cameraButtonText, { color: colors.primary }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {exp.attach_image ? (
-                                    <TouchableOpacity
-                                        style={styles.imagePreviewContainer}
-                                        onPress={() => setPreviewImage(exp.attach_image)}
-                                    >
-                                        <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
-                                        <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('travel', idx, 'attach_image', '')}>
-                                            <Ionicons name="close-circle" size={20} color={colors.danger} />
-                                        </TouchableOpacity>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-                        ))}
-                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('travel')}>
-                            <Ionicons name="add-circle" size={20} color={colors.primary} />
-                            <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
-                        </TouchableOpacity>
                     </Section>
-
-                    {/* 5.2 Food Expenses */}
-                    <Section title="Food Expenses" icon="restaurant">
-                        {form.food_expenses.map((exp, idx) => (
-                            <View key={idx} style={[styles.itemCard, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.border }]}>
-                                <View style={styles.itemHeader}>
-                                    <Text style={[styles.itemLabel, { color: colors.primary }]}>FOOD #{idx + 1}</Text>
-                                    <TouchableOpacity onPress={() => removeExpenseRow('food', idx)}>
-                                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Meal Type</Text>
-                                        <TouchableOpacity
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, justifyContent: 'center' }]}
-                                            onPress={() => setSelectionModal({
-                                                visible: true,
-                                                title: 'Select Meal Type',
-                                                options: ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Other'],
-                                                onSelect: (v) => updateExpenseRow('food', idx, 'meal_type', v),
-                                                selectedValue: exp.meal_type
-                                            })}
-                                        >
-                                            <Text style={{ color: exp.meal_type ? colors.text : colors.textSecondary }}>{exp.meal_type || 'Select Meal'}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.cost}
-                                            onChangeText={t => updateExpenseRow('food', idx, 'cost', t)}
-                                            keyboardType="numeric"
-                                        />
-                                    </View>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Date</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.date}
-                                            onChangeText={t => updateExpenseRow('food', idx, 'date', t)}
-                                            placeholder="YYYY-MM-DD"
-                                        />
-                                    </View>
-                                    <TouchableOpacity
-                                        style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                                        onPress={() => pickImage('food', idx)}
-                                    >
-                                        <Ionicons name="camera-outline" size={20} color={colors.primary} />
-                                        <Text style={[styles.cameraButtonText, { color: colors.primary }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {exp.attach_image ? (
-                                    <TouchableOpacity
-                                        style={styles.imagePreviewContainer}
-                                        onPress={() => setPreviewImage(exp.attach_image)}
-                                    >
-                                        <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
-                                        <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('food', idx, 'attach_image', '')}>
-                                            <Ionicons name="close-circle" size={20} color={colors.danger} />
-                                        </TouchableOpacity>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-                        ))}
-                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('food')}>
-                            <Ionicons name="add-circle" size={20} color={colors.primary} />
-                            <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
-                        </TouchableOpacity>
-                    </Section>
-
-                    {/* 5.3 Stay Expenses */}
-                    <Section title="Stay Expenses" icon="bed">
-                        {form.stay_expenses.map((exp, idx) => (
-                            <View key={idx} style={[styles.itemCard, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.border }]}>
-                                <View style={styles.itemHeader}>
-                                    <Text style={[styles.itemLabel, { color: colors.primary }]}>STAY #{idx + 1}</Text>
-                                    <TouchableOpacity onPress={() => removeExpenseRow('stay', idx)}>
-                                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.inputWrapper}>
-                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Hotel Name</Text>
-                                    <TextInput
-                                        style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                        value={exp.hotel_name}
-                                        onChangeText={t => updateExpenseRow('stay', idx, 'hotel_name', t)}
-                                        placeholder="Hotel Name"
-                                    />
-                                </View>
-                                <View style={styles.inputWrapper}>
-                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Check-in Date & Time</Text>
-                                    <TouchableOpacity
-                                        style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                                        onPress={() => {
-                                            if (Platform.OS === 'android') {
-                                                DateTimePickerAndroid.open({
-                                                    value: exp.check_in_date ? new Date(exp.check_in_date) : new Date(),
-                                                    mode: 'date',
-                                                    onChange: (event, date) => {
-                                                        if (event.type === 'set' && date) {
-                                                            const formattedDate = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-                                                            updateExpenseRow('stay', idx, 'check_in_date', formattedDate);
-                                                            DateTimePickerAndroid.open({
-                                                                value: exp.check_in_time ? new Date(`2000-01-01T${exp.check_in_time}`) : new Date(),
-                                                                mode: 'time',
-                                                                onChange: (timeEvent, time) => {
-                                                                    if (timeEvent.type === 'set' && time) {
-                                                                        const formattedTime = time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                                                                        updateExpenseRow('stay', idx, 'check_in_time', formattedTime);
-                                                                    }
-                                                                }
-                                                            });
-                                                        }
-                                                    }
-                                                });
-                                            } else {
-                                                setStayPicker({ visible: true, idx, field: 'check_in_datetime' });
-                                            }
-                                        }}
-                                    >
-                                        <Text style={{ color: colors.text }}>
-                                            {exp.check_in_date ? new Date(exp.check_in_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'DD MMM YYYY'}
-                                            {', '}
-                                            {exp.check_in_time ? new Date(`2000-01-01T${exp.check_in_time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() : 'HH:MM am/pm'}
-                                        </Text>
-                                        <Ionicons name="time-outline" size={20} color={colors.primary} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.inputWrapper}>
-                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Check-out Date & Time</Text>
-                                    <TouchableOpacity
-                                        style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                                        onPress={() => {
-                                            if (Platform.OS === 'android') {
-                                                DateTimePickerAndroid.open({
-                                                    value: exp.checkout_date ? new Date(exp.checkout_date) : new Date(),
-                                                    mode: 'date',
-                                                    onChange: (event, date) => {
-                                                        if (event.type === 'set' && date) {
-                                                            const formattedDate = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-                                                            updateExpenseRow('stay', idx, 'checkout_date', formattedDate);
-                                                            DateTimePickerAndroid.open({
-                                                                value: exp.checkout_time ? new Date(`2000-01-01T${exp.checkout_time}`) : new Date(),
-                                                                mode: 'time',
-                                                                onChange: (timeEvent, time) => {
-                                                                    if (timeEvent.type === 'set' && time) {
-                                                                        const formattedTime = time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                                                                        updateExpenseRow('stay', idx, 'checkout_time', formattedTime);
-                                                                    }
-                                                                }
-                                                            });
-                                                        }
-                                                    }
-                                                });
-                                            } else {
-                                                setStayPicker({ visible: true, idx, field: 'checkout_datetime' });
-                                            }
-                                        }}
-                                    >
-                                        <Text style={{ color: colors.text }}>
-                                            {exp.checkout_date ? new Date(exp.checkout_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'DD MMM YYYY'}
-                                            {', '}
-                                            {exp.checkout_time ? new Date(`2000-01-01T${exp.checkout_time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() : 'HH:MM am/pm'}
-                                        </Text>
-                                        <Ionicons name="time-outline" size={20} color={colors.primary} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.cost}
-                                            onChangeText={t => updateExpenseRow('stay', idx, 'cost', t)}
-                                            keyboardType="numeric"
-                                        />
-                                    </View>
-                                    <TouchableOpacity
-                                        style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                                        onPress={() => pickImage('stay', idx)}
-                                    >
-                                        <Ionicons name="camera-outline" size={20} color={colors.primary} />
-                                        <Text style={[styles.cameraButtonText, { color: colors.primary }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                {exp.attach_image ? (
-                                    <TouchableOpacity
-                                        style={styles.imagePreviewContainer}
-                                        onPress={() => setPreviewImage(exp.attach_image)}
-                                    >
-                                        <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
-                                        <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('stay', idx, 'attach_image', '')}>
-                                            <Ionicons name="close-circle" size={20} color={colors.danger} />
-                                        </TouchableOpacity>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-                        ))}
-                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('stay')}>
-                            <Ionicons name="add-circle" size={20} color={colors.primary} />
-                            <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
-                        </TouchableOpacity>
-                    </Section>
-
-                    {/* 5.4 Other Expenses */}
-                    <Section title="Other Expenses" icon="ellipsis-horizontal">
-                        {form.other_expenses.map((exp, idx) => (
-                            <View key={idx} style={[styles.itemCard, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.border }]}>
-                                <View style={styles.itemHeader}>
-                                    <Text style={[styles.itemLabel, { color: colors.primary }]}>OTHER #{idx + 1}</Text>
-                                    <TouchableOpacity onPress={() => removeExpenseRow('other', idx)}>
-                                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.row}>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Type</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.expense_type}
-                                            onChangeText={t => updateExpenseRow('other', idx, 'expense_type', t)}
-                                            placeholder="e.g. Purchase"
-                                        />
-                                    </View>
-                                    <View style={[styles.inputWrapper, { flex: 1 }]}>
-                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                                            value={exp.cost}
-                                            onChangeText={t => updateExpenseRow('other', idx, 'cost', t)}
-                                            keyboardType="numeric"
-                                        />
-                                    </View>
-                                </View>
-                                <View style={styles.inputWrapper}>
-                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Details</Text>
-                                    <View style={styles.row}>
-                                        <TextInput
-                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text, height: 60, flex: 1 }]}
-                                            value={exp.expense_in_details}
-                                            onChangeText={t => updateExpenseRow('other', idx, 'expense_in_details', t)}
-                                            multiline
-                                            placeholder="Detailed description..."
-                                        />
-                                        <TouchableOpacity
-                                            style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border, height: 60, justifyContent: 'center' }]}
-                                            onPress={() => pickImage('other', idx)}
-                                        >
-                                            <Ionicons name="camera-outline" size={20} color={colors.primary} />
-                                            <Text style={[styles.cameraButtonText, { color: colors.primary, fontSize: 10 }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                                {exp.attach_image ? (
-                                    <TouchableOpacity
-                                        style={styles.imagePreviewContainer}
-                                        onPress={() => setPreviewImage(exp.attach_image)}
-                                    >
-                                        <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
-                                        <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('other', idx, 'attach_image', '')}>
-                                            <Ionicons name="close-circle" size={20} color={colors.danger} />
-                                        </TouchableOpacity>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-                        ))}
-                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('other')}>
-                            <Ionicons name="add-circle" size={20} color={colors.primary} />
-                            <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
-                        </TouchableOpacity>
-                    </Section>
-
-                    {/* 6. Visit Summary */}
-                    <Section title="Visit Summary" icon="document-text">
+                    {/* 5. Feedback */}
+                    <Section title="Customer Feedback" icon="chatbubbles">
                         <View style={styles.inputWrapper}>
                             <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Discussion Summary</Text>
                             <TextInput
@@ -1781,9 +1238,401 @@ export default function CreateMaintenanceScreen() {
                                 placeholderTextColor={colors.textSecondary}
                             />
                         </View>
+                    </Section>
 
+                    {/* 6. Attachments */}
+                    <Section title="Attachments" icon="image">
+                        {/* This section is currently empty in the provided code, but the diff implies it should be here. */}
+                        {/* Add attachment related UI here if needed */}
+                    </Section>
+
+                    {/* 7. Expenses */}
+                    <Section title="Expenses" icon="wallet">
+                        {/* 7.1 Travel Expenses */}
+                        <View style={{ marginBottom: 20 }}>
+                            <View style={styles.itemHeader}>
+                                <Text style={[styles.itemLabel, { color: colors.primary }]}>Travel Expenses</Text>
+                            </View>
+                            {form.travel_expenses.map((exp, idx) => (
+                                <View key={idx} style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                    <View style={styles.itemHeader}>
+                                        <Text style={[styles.itemLabel, { color: colors.primary }]}>TRAVEL #{idx + 1}</Text>
+                                        <TouchableOpacity onPress={() => removeExpenseRow('travel', idx)}>
+                                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>From</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.from_location}
+                                                onChangeText={t => updateExpenseRow('travel', idx, 'from_location', t)}
+                                                placeholder="City"
+                                            />
+                                        </View>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>To</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.to_location}
+                                                onChangeText={t => updateExpenseRow('travel', idx, 'to_location', t)}
+                                                placeholder="City"
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Mode</Text>
+                                            <TouchableOpacity
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, justifyContent: 'center' }]}
+                                                onPress={() => setSelectionModal({
+                                                    visible: true,
+                                                    title: 'Select Mode of Travel',
+                                                    options: ['Taxi', 'Bus', 'Train', 'Flight', 'Own Vehicle', 'Other'],
+                                                    onSelect: (v) => updateExpenseRow('travel', idx, 'mode_of_travel', v),
+                                                    selectedValue: exp.mode_of_travel
+                                                })}
+                                            >
+                                                <Text style={{ color: exp.mode_of_travel ? colors.text : colors.textSecondary }}>{exp.mode_of_travel || 'Select Mode'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.cost}
+                                                onChangeText={t => updateExpenseRow('travel', idx, 'cost', t)}
+                                                keyboardType="numeric"
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Date</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.date}
+                                                onChangeText={t => updateExpenseRow('travel', idx, 'date', t)}
+                                                placeholder="YYYY-MM-DD"
+                                            />
+                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                                            onPress={() => pickImage('travel', idx)}
+                                        >
+                                            <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                                            <Text style={[styles.cameraButtonText, { color: colors.primary }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {exp.attach_image ? (
+                                        <TouchableOpacity
+                                            style={styles.imagePreviewContainer}
+                                            onPress={() => setPreviewImage(exp.attach_image)}
+                                        >
+                                            <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
+                                            <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('travel', idx, 'attach_image', '')}>
+                                                <Ionicons name="close-circle" size={20} color={colors.danger} />
+                                            </TouchableOpacity>
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            ))}
+                            <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('travel')}>
+                                <Ionicons name="add-circle" size={20} color={colors.primary} />
+                                <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* 7.2 Food Expenses */}
+                        <View style={{ marginBottom: 20 }}>
+                            <View style={styles.itemHeader}>
+                                <Text style={[styles.itemLabel, { color: colors.primary }]}>Food Expenses</Text>
+                            </View>
+                            {form.food_expenses.map((exp, idx) => (
+                                <View key={idx} style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                    <View style={styles.itemHeader}>
+                                        <Text style={[styles.itemLabel, { color: colors.primary }]}>FOOD #{idx + 1}</Text>
+                                        <TouchableOpacity onPress={() => removeExpenseRow('food', idx)}>
+                                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Meal Type</Text>
+                                            <TouchableOpacity
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, justifyContent: 'center' }]}
+                                                onPress={() => setSelectionModal({
+                                                    visible: true,
+                                                    title: 'Select Meal Type',
+                                                    options: ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Other'],
+                                                    onSelect: (v) => updateExpenseRow('food', idx, 'meal_type', v),
+                                                    selectedValue: exp.meal_type
+                                                })}
+                                            >
+                                                <Text style={{ color: exp.meal_type ? colors.text : colors.textSecondary }}>{exp.meal_type || 'Select Meal'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.cost}
+                                                onChangeText={t => updateExpenseRow('food', idx, 'cost', t)}
+                                                keyboardType="numeric"
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Date</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.date}
+                                                onChangeText={t => updateExpenseRow('food', idx, 'date', t)}
+                                                placeholder="YYYY-MM-DD"
+                                            />
+                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                                            onPress={() => pickImage('food', idx)}
+                                        >
+                                            <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                                            <Text style={[styles.cameraButtonText, { color: colors.primary }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {exp.attach_image ? (
+                                        <TouchableOpacity
+                                            style={styles.imagePreviewContainer}
+                                            onPress={() => setPreviewImage(exp.attach_image)}
+                                        >
+                                            <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
+                                            <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('food', idx, 'attach_image', '')}>
+                                                <Ionicons name="close-circle" size={20} color={colors.danger} />
+                                            </TouchableOpacity>
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            ))}
+                            <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('food')}>
+                                <Ionicons name="add-circle" size={20} color={colors.primary} />
+                                <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* 7.3 Stay Expenses */}
+                        <View style={{ marginBottom: 20 }}>
+                            <View style={styles.itemHeader}>
+                                <Text style={[styles.itemLabel, { color: colors.primary }]}>Stay Expenses</Text>
+                            </View>
+                            {form.stay_expenses.map((exp, idx) => (
+                                <View key={idx} style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                    <View style={styles.itemHeader}>
+                                        <Text style={[styles.itemLabel, { color: colors.primary }]}>STAY #{idx + 1}</Text>
+                                        <TouchableOpacity onPress={() => removeExpenseRow('stay', idx)}>
+                                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.inputWrapper}>
+                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Hotel Name</Text>
+                                        <TextInput
+                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                            value={exp.hotel_name}
+                                            onChangeText={t => updateExpenseRow('stay', idx, 'hotel_name', t)}
+                                            placeholder="Hotel Name"
+                                        />
+                                    </View>
+                                    <View style={styles.inputWrapper}>
+                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Check-in Date & Time</Text>
+                                        <TouchableOpacity
+                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                            onPress={() => {
+                                                if (Platform.OS === 'android') {
+                                                    DateTimePickerAndroid.open({
+                                                        value: exp.check_in_date ? new Date(exp.check_in_date) : new Date(),
+                                                        mode: 'date',
+                                                        onChange: (event, date) => {
+                                                            if (event.type === 'set' && date) {
+                                                                const formattedDate = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+                                                                updateExpenseRow('stay', idx, 'check_in_date', formattedDate);
+                                                                DateTimePickerAndroid.open({
+                                                                    value: exp.check_in_time ? new Date(`2000-01-01T${exp.check_in_time}`) : new Date(),
+                                                                    mode: 'time',
+                                                                    onChange: (timeEvent, time) => {
+                                                                        if (timeEvent.type === 'set' && time) {
+                                                                            const formattedTime = time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                                                            updateExpenseRow('stay', idx, 'check_in_time', formattedTime);
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
+                                                    });
+                                                } else {
+                                                    setStayPicker({ visible: true, idx, field: 'check_in_datetime' });
+                                                }
+                                            }}
+                                        >
+                                            <Text style={{ color: colors.text }}>
+                                                {exp.check_in_date ? new Date(exp.check_in_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'DD MMM YYYY'}
+                                                {', '}
+                                                {exp.check_in_time ? new Date(`2000-01-01T${exp.check_in_time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() : 'HH:MM am/pm'}
+                                            </Text>
+                                            <Ionicons name="time-outline" size={20} color={colors.primary} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.inputWrapper}>
+                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Check-out Date & Time</Text>
+                                        <TouchableOpacity
+                                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                            onPress={() => {
+                                                if (Platform.OS === 'android') {
+                                                    DateTimePickerAndroid.open({
+                                                        value: exp.checkout_date ? new Date(exp.checkout_date) : new Date(),
+                                                        mode: 'date',
+                                                        onChange: (event, date) => {
+                                                            if (event.type === 'set' && date) {
+                                                                const formattedDate = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+                                                                updateExpenseRow('stay', idx, 'checkout_date', formattedDate);
+                                                                DateTimePickerAndroid.open({
+                                                                    value: exp.checkout_time ? new Date(`2000-01-01T${exp.checkout_time}`) : new Date(),
+                                                                    mode: 'time',
+                                                                    onChange: (timeEvent, time) => {
+                                                                        if (timeEvent.type === 'set' && time) {
+                                                                            const formattedTime = time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                                                            updateExpenseRow('stay', idx, 'checkout_time', formattedTime);
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }
+                                                        }
+                                                    });
+                                                } else {
+                                                    setStayPicker({ visible: true, idx, field: 'checkout_datetime' });
+                                                }
+                                            }}
+                                        >
+                                            <Text style={{ color: colors.text }}>
+                                                {exp.checkout_date ? new Date(exp.checkout_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'DD MMM YYYY'}
+                                                {', '}
+                                                {exp.checkout_time ? new Date(`2000-01-01T${exp.checkout_time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() : 'HH:MM am/pm'}
+                                            </Text>
+                                            <Ionicons name="time-outline" size={20} color={colors.primary} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.cost}
+                                                onChangeText={t => updateExpenseRow('stay', idx, 'cost', t)}
+                                                keyboardType="numeric"
+                                            />
+                                        </View>
+                                        <TouchableOpacity
+                                            style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                                            onPress={() => pickImage('stay', idx)}
+                                        >
+                                            <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                                            <Text style={[styles.cameraButtonText, { color: colors.primary }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {exp.attach_image ? (
+                                        <TouchableOpacity
+                                            style={styles.imagePreviewContainer}
+                                            onPress={() => setPreviewImage(exp.attach_image)}
+                                        >
+                                            <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
+                                            <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('stay', idx, 'attach_image', '')}>
+                                                <Ionicons name="close-circle" size={20} color={colors.danger} />
+                                            </TouchableOpacity>
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            ))}
+                            <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('stay')}>
+                                <Ionicons name="add-circle" size={20} color={colors.primary} />
+                                <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* 7.4 Other Expenses */}
+                        <View style={{ marginBottom: 20 }}>
+                            <View style={styles.itemHeader}>
+                                <Text style={[styles.itemLabel, { color: colors.primary }]}>Other Expenses</Text>
+                            </View>
+                            {form.other_expenses.map((exp, idx) => (
+                                <View key={idx} style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                    <View style={styles.itemHeader}>
+                                        <Text style={[styles.itemLabel, { color: colors.primary }]}>OTHER #{idx + 1}</Text>
+                                        <TouchableOpacity onPress={() => removeExpenseRow('other', idx)}>
+                                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={styles.row}>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Type</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.expense_type}
+                                                onChangeText={t => updateExpenseRow('other', idx, 'expense_type', t)}
+                                                placeholder="e.g. Purchase"
+                                            />
+                                        </View>
+                                        <View style={[styles.inputWrapper, { flex: 1 }]}>
+                                            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Cost (₹)</Text>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
+                                                value={exp.cost}
+                                                onChangeText={t => updateExpenseRow('other', idx, 'cost', t)}
+                                                keyboardType="numeric"
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.inputWrapper}>
+                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Details</Text>
+                                        <View style={styles.row}>
+                                            <TextInput
+                                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text, height: 60, flex: 1 }]}
+                                                value={exp.expense_in_details}
+                                                onChangeText={t => updateExpenseRow('other', idx, 'expense_in_details', t)}
+                                                multiline
+                                                placeholder="Detailed description..."
+                                            />
+                                            <TouchableOpacity
+                                                style={[styles.cameraButton, { backgroundColor: colors.surface, borderColor: colors.border, height: 60, justifyContent: 'center' }]}
+                                                onPress={() => pickImage('other', idx)}
+                                            >
+                                                <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                                                <Text style={[styles.cameraButtonText, { color: colors.primary, fontSize: 10 }]}>{exp.attach_image ? 'Change' : 'Attach'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    {exp.attach_image ? (
+                                        <TouchableOpacity
+                                            style={styles.imagePreviewContainer}
+                                            onPress={() => setPreviewImage(exp.attach_image)}
+                                        >
+                                            <Image source={{ uri: exp.attach_image }} style={styles.imagePreview} />
+                                            <TouchableOpacity style={styles.removeImageBtn} onPress={() => updateExpenseRow('other', idx, 'attach_image', '')}>
+                                                <Ionicons name="close-circle" size={20} color={colors.danger} />
+                                            </TouchableOpacity>
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            ))}
+                            <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary }]} onPress={() => addExpenseRow('other')}>
+                                <Ionicons name="add-circle" size={20} color={colors.primary} />
+                                <Text style={[styles.addBtnText, { color: colors.primary }]}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Section>
+
+                    {/* 8. Visit Summary */}
+                    <Section title="Visit Summary" icon="document-text">
                         <View style={[styles.inputWrapper, { marginTop: 16 }]}>
-                            <View style={[styles.totalCard, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.primary }]}>
+                            <View style={[styles.totalCard, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
                                 <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Total Expenses</Text>
                                 <Text testID="totalVisitCostDetail" style={[styles.totalValue, { color: colors.primary }]}>₹{form.total}</Text>
                             </View>
@@ -1813,7 +1662,7 @@ export default function CreateMaintenanceScreen() {
                         </View>
                     </Section>
 
-                    {/* 7. Contact Info */}
+                    {/* 9. Contact Info */}
                     <Section title="Contact Info" icon="person-add">
                         <View style={styles.inputWrapper}>
                             <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Customer Address</Text>
@@ -1990,7 +1839,7 @@ export default function CreateMaintenanceScreen() {
                             <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.saveButtonWrapper, { backgroundColor: isDark ? '#1E293B' : '#4F46E5', borderRadius: 16 }]}
+                            style={[styles.saveButtonWrapper, { backgroundColor: isDark ? colors.surface : '#4F46E5', borderRadius: 16 }]}
                             onPress={handleSave}
                             disabled={isSaving}
                         >
@@ -2003,8 +1852,8 @@ export default function CreateMaintenanceScreen() {
                             </View>
                         </TouchableOpacity>
                     </View>
-                </KeyboardAvoidingView>
-            </ScrollView>
+                </ScrollView>
+            </KeyboardAvoidingView>
 
             {
                 datePickerMode && (
@@ -2152,12 +2001,13 @@ export default function CreateMaintenanceScreen() {
 const Section = ({ title, icon, children, style }: any) => {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
+    const isDark = colorScheme === 'dark';
 
     return (
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
             <View style={styles.sectionHeader}>
                 <LinearGradient
-                    colors={[colors.primary, colors.primary + 'CC']}
+                    colors={['#4F46E5', '#3730A3']}
                     style={styles.sectionIcon}
                 >
                     <Ionicons name={icon} size={14} color="#FFF" />
@@ -2203,7 +2053,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: '#E2E8F0',
+        borderColor: Colors.light.border,
     },
     imagePreview: {
         width: '100%',
@@ -2224,7 +2074,7 @@ const styles = StyleSheet.create({
     headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
     scrollContent: { flex: 1 },
     scrollInner: { padding: 20, paddingBottom: 100 },
-    section: { borderRadius: 28, padding: 24, marginBottom: 20, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
+    section: { borderRadius: 28, padding: 24, marginBottom: 20, borderWidth: 1 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
     sectionIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     sectionTitle: { fontSize: 13, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
@@ -2262,7 +2112,7 @@ const styles = StyleSheet.create({
     resultId: { fontSize: 12, fontWeight: '600' },
     tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
     tagText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
-    row: { flexDirection: 'row', gap: 12 },
+    row: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
     chipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
     chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
     chipText: { fontSize: 13, fontWeight: '700' },
@@ -2305,3 +2155,4 @@ const styles = StyleSheet.create({
     searchResultTitle: { fontSize: 14, fontWeight: '700' },
     searchResultSubtitle: { fontSize: 12, opacity: 0.6, marginTop: 2 }
 });
+

@@ -32,26 +32,34 @@ export const Colors = {
     placeholder: '#94A3B8',
   },
   dark: {
-    text: '#F8FAFC',
-    textSecondary: '#94A3B8',
-    background: '#0F172A', // Deep Navy (Slate 900)
-    surface: '#1E293B',    // Slate 800
-    surfaceSecondary: '#334155', // Slate 700
-    surfaceVariant: '#475569',   // Slate 600
+    text: '#F1F5F9',
+    textSecondary: '#9CA3AF', // Was #A3A3A3 — cooler, to match the surfaces.
+    /**
+     * Elevation ladder. Previously this was pure black with a #121212 surface,
+     * which left almost no separation between the page and the cards sitting on
+     * it, so the UI read as one flat black sheet. Each step is now a visible
+     * increment, which is what gives cards their edges in dark mode.
+     */
+    background: '#0B0D10',
+    surface: '#15181D',
+    surfaceSecondary: '#1D2126',
+    surfaceVariant: '#262B31',
     tint: '#38BDF8', // Light Blue
     primary: '#0EA5E9',
     primaryVariant: '#0284C7',
-    secondary: '#94A3B8',
-    icon: '#94A3B8',
-    border: 'rgba(51, 65, 85, 0.5)', // Slate 700 with opacity
-    tabIconDefault: '#475569',
+    secondary: '#9CA3AF',
+    icon: '#9CA3AF',
+    border: 'rgba(255, 255, 255, 0.09)', // Subtle border
+    // #444446 was so dark it was almost invisible against the background —
+    // inactive tabs and placeholder text were effectively unreadable.
+    tabIconDefault: '#6B7280',
     tabIconSelected: '#38BDF8',
     success: '#10B981',
     danger: '#EF4444',
     warning: '#F59E0B',
     info: '#0EA5E9',
-    cardShadow: 'rgba(0, 0, 0, 0.5)',
-    placeholder: '#475569',
+    cardShadow: 'rgba(0, 0, 0, 0.8)',
+    placeholder: '#6B7280',
   },
 };
 

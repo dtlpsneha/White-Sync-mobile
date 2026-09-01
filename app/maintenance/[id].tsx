@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiGet, apiPut, uploadFile } from '@/utils/api';
+import { parseFrappeError } from '@/utils/frappeError';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,35 +27,26 @@ import {
     View
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-const IMAGE_HOST = 'http://13.234.62.39:8080';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { API_BASE_URL, apiUrl } from '@/constants/config';
+import {
+    Contact,
+    Customer,
+    Item,
+    getAddressDisplay,
+    getContactDetails,
+    searchAddresses,
+    searchApprovingAuthorities,
+    searchContacts,
+    searchCustomers,
+    searchItems,
+} from '@/services/frappeSearch';
 
-interface Customer {
-    name: string;
-    customer_name: string;
-    customer_group?: string;
-    territory?: string;
-    customer_primary_address?: string;
-    customer_primary_contact?: string;
-}
+const IMAGE_HOST = API_BASE_URL;
 
 interface SalesExecutive {
     name: string;
     sales_person_name: string;
-}
-
-interface Item {
-    name: string;
-    item_name: string;
-    description?: string;
-}
-
-interface Contact {
-    name: string;
-    first_name: string;
-    last_name?: string;
-    email_id?: string;
-    mobile_no?: string;
 }
 
 export default function MaintenanceDetailScreen() {
@@ -64,6 +56,7 @@ export default function MaintenanceDetailScreen() {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const isDark = theme === 'dark';
+    const insets = useSafeAreaInsets();
 
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -190,7 +183,7 @@ export default function MaintenanceDetailScreen() {
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const res = await apiGet(`http://13.234.62.39:8080/api/resource/Maintenance%20Visit/${id}`, sessionCookies);
+            const res = await apiGet(apiUrl(`/api/resource/Maintenance%20Visit/${id}`), sessionCookies);
 
             if (!res.ok) throw new Error(`Failed to fetch details (Status: ${res.status})`);
 
@@ -285,39 +278,17 @@ export default function MaintenanceDetailScreen() {
         }
     };
 
+    // Same Approving Authority lookup as fetchAuthorities, feeding the sales
+    // executive picker instead.
     const fetchSalesExecutives = async (query: string = '') => {
-        const trimmedQuery = query.trim();
         setIsSearchingSalesExec(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const params = new URLSearchParams({
-                doctype: 'Approving Authority',
-                txt: trimmedQuery,
-                ignore_user_permissions: '0'
-            });
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.desk.search.search_link?${params.toString()}`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                const results = res.data?.message || res.data?.results || [];
-                setSalesExecutives(results);
-                setShowSalesExecResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setSalesExecutives([]);
-                setShowSalesExecResults(true);
-            }
-        } catch (err) {
-            console.warn('Sales Executive Fetch Failed:', err);
-            setSearchError('Network error');
-            setSalesExecutives([]);
-            setShowSalesExecResults(true);
-        } finally {
-            setIsSearchingSalesExec(false);
-        }
+        const result = await searchApprovingAuthorities(query);
+        if (!result.ok) setSearchError(result.error);
+        setSalesExecutives(result.data);
+        setShowSalesExecResults(true);
+        setIsSearchingSalesExec(false);
     };
 
     useEffect(() => {
@@ -328,100 +299,39 @@ export default function MaintenanceDetailScreen() {
     }, [salesExecQuery]);
 
     const fetchCustomers = async (query: string = '') => {
-        const trimmedQuery = query.trim();
-        if (!trimmedQuery) {
+        if (!query.trim()) {
             setCustomers([]);
             setShowResults(false);
             return;
         }
         setIsSearching(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const fields = ["name", "customer_name", "customer_group", "territory", "customer_primary_address", "customer_primary_contact"];
-            const or_filters = JSON.stringify([
-                ["customer_name", "like", `%${trimmedQuery}%`],
-                ["name", "like", `%${trimmedQuery}%`]
-            ]);
-
-            const url = `http://13.234.62.39:8080/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}&or_filters=${encodeURIComponent(or_filters)}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                setCustomers(res.data?.data || []);
-                setShowResults(true);
-            } else {
-                console.error('Customer Fetch Error:', res.status);
-                setSearchError(`Server error (${res.status})`);
-                setCustomers([]);
-                setShowResults(true);
-            }
-        } catch (err) {
-            console.warn('Customer Fetch Failed:', err);
-            setSearchError('Network error');
-            setCustomers([]);
-            setShowResults(true);
-        } finally {
-            setIsSearching(false);
-        }
+        const result = await searchCustomers(query);
+        if (!result.ok) setSearchError(result.error);
+        setCustomers(result.data);
+        setShowResults(true);
+        setIsSearching(false);
     };
 
     const fetchAuthorities = async (query: string = '') => {
-        const trimmedQuery = query.trim();
         setIsSearchingAuthority(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const params = new URLSearchParams({
-                doctype: 'Approving Authority',
-                txt: trimmedQuery,
-                ignore_user_permissions: '0'
-            });
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.desk.search.search_link?${params.toString()}`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                const results = res.data?.message || res.data?.results || [];
-                setAuthorities(results);
-                setShowAuthorityResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setAuthorities([]);
-                setShowAuthorityResults(true);
-            }
-        } catch (err) {
-            console.warn('Authority Fetch Failed:', err);
-            setSearchError('Network error');
-            setAuthorities([]);
-            setShowAuthorityResults(true);
-        } finally {
-            setIsSearchingAuthority(false);
-        }
+        const result = await searchApprovingAuthorities(query);
+        if (!result.ok) setSearchError(result.error);
+        setAuthorities(result.data);
+        setShowAuthorityResults(true);
+        setIsSearchingAuthority(false);
     };
 
     const fetchAddresses = async (customerName: string) => {
         if (!customerName) return;
         setIsSearchingAddress(true);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const filters = JSON.stringify([
-                ["Dynamic Link", "link_name", "=", customerName],
-                ["Dynamic Link", "link_doctype", "=", "Customer"]
-            ]);
-            const fields = JSON.stringify(["name", "address_title", "address_line1", "address_line2", "city", "state", "pincode"]);
-            const url = `http://13.234.62.39:8080/api/method/frappe.client.get_list?doctype=Address&filters=${encodeURIComponent(filters)}&fields=${encodeURIComponent(fields)}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-            if (res.ok) {
-                setAddresses(res.data?.message || res.data?.data || []);
-            }
-        } catch (err) {
-            console.warn('Address Fetch Failed:', err);
-        } finally {
-            setIsSearchingAddress(false);
-        }
+
+        const result = await searchAddresses(customerName);
+        if (result.ok) setAddresses(result.data);
+        setIsSearchingAddress(false);
     };
 
     useEffect(() => {
@@ -432,35 +342,18 @@ export default function MaintenanceDetailScreen() {
     }, [authorityQuery]);
 
     const fetchAddressAndContact = async (customerName: string, addressName?: string, contactName?: string) => {
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
+        if (addressName) {
+            updateForm('customer_address', await getAddressDisplay(addressName));
+        }
 
-            if (addressName) {
-                const addrRes = await apiGet(
-                    `http://13.234.62.39:8080/api/resource/Address/${encodeURIComponent(addressName)}?fields=${encodeURIComponent('["display"]')}`,
-                    sessionCookies
-                );
-                if (addrRes.ok) {
-                    updateForm('customer_address', addrRes.data?.data?.display || '');
-                }
+        if (contactName) {
+            const contact = await getContactDetails(contactName);
+            if (contact) {
+                updateForm('contact_person', contact.fullName);
+                updateForm('contact_email', contact.email);
+                updateForm('contact_mobile', contact.mobile);
+                setContactQuery(contact.fullName);
             }
-
-            if (contactName) {
-                const contRes = await apiGet(
-                    `http://13.234.62.39:8080/api/resource/Contact/${encodeURIComponent(contactName)}?fields=${encodeURIComponent('["first_name","last_name","email_id","mobile_no"]')}`,
-                    sessionCookies
-                );
-                if (contRes.ok) {
-                    const c = contRes.data?.data || {};
-                    const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.full_name || '';
-                    updateForm('contact_person', fullName);
-                    updateForm('contact_email', c.email_id || '');
-                    updateForm('contact_mobile', c.mobile_no || '');
-                    setContactQuery(fullName);
-                }
-            }
-        } catch (err) {
-            console.warn('Auto-fetch failed:', err);
         }
     };
 
@@ -486,43 +379,15 @@ export default function MaintenanceDetailScreen() {
     };
 
     const fetchContacts = async (customerName: string, query: string = '') => {
-        const trimmedQuery = query.trim();
         if (!customerName) return;
         setIsSearchingContact(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const fields = ["name", "first_name", "last_name", "email_id", "mobile_no"];
-            const filters: any[] = [
-                ["Dynamic Link", "link_name", "=", customerName],
-                ["Dynamic Link", "link_doctype", "=", "Customer"]
-            ];
-
-            if (trimmedQuery) {
-                filters.push(["first_name", "like", `%${encodeURIComponent(trimmedQuery)}%`]);
-            }
-
-            const url = `http://13.234.62.39:8080/api/method/frappe.client.get_list?doctype=Contact&fields=${encodeURIComponent(JSON.stringify(fields))}&filters=${encodeURIComponent(JSON.stringify(filters))}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                const data = res.data?.message || res.data?.data || [];
-                setContacts(data);
-                setShowContactResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setContacts([]);
-                setShowContactResults(true);
-            }
-        } catch (err) {
-            console.warn('Contact Fetch Failed:', err);
-            setSearchError('Network error');
-            setContacts([]);
-            setShowContactResults(true);
-        } finally {
-            setIsSearchingContact(false);
-        }
+        const result = await searchContacts(customerName, query);
+        if (!result.ok) setSearchError(result.error);
+        setContacts(result.data);
+        setShowContactResults(true);
+        setIsSearchingContact(false);
     };
 
     const selectContact = (c: Contact) => {
@@ -534,38 +399,14 @@ export default function MaintenanceDetailScreen() {
     };
 
     const fetchItems = async (query: string = '') => {
-        const trimmedQuery = query.trim();
         setIsSearchingItem(true);
         setSearchError(null);
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
 
-            const fields = ["name", "item_name", "description"];
-            const filters = JSON.stringify([["disabled", "=", 0], ["has_variants", "=", 0]]);
-            const or_filters = trimmedQuery ? JSON.stringify([
-                ["item_code", "like", `%${trimmedQuery}%`],
-                ["item_name", "like", `%${trimmedQuery}%`]
-            ]) : "[]";
-
-            const url = `http://13.234.62.39:8080/api/resource/Item?fields=${encodeURIComponent(JSON.stringify(fields))}&filters=${encodeURIComponent(filters)}${trimmedQuery ? `&or_filters=${encodeURIComponent(or_filters)}` : ''}&limit_page_length=100`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok) {
-                setItems(res.data?.data || []);
-                setShowItemResults(true);
-            } else {
-                setSearchError(`Server error (${res.status})`);
-                setItems([]);
-                setShowItemResults(true);
-            }
-        } catch (err) {
-            console.warn('Item Fetch Failed:', err);
-            setSearchError('Network error');
-            setItems([]);
-            setShowItemResults(true);
-        } finally {
-            setIsSearchingItem(false);
-        }
+        const result = await searchItems(query);
+        if (!result.ok) setSearchError(result.error);
+        setItems(result.data);
+        setShowItemResults(true);
+        setIsSearchingItem(false);
     };
 
     const selectItem = (item: Item, index: number) => {
@@ -895,41 +736,14 @@ export default function MaintenanceDetailScreen() {
             };
 
             const res = await apiPut(
-                `http://13.234.62.39:8080/api/resource/Maintenance%20Visit/${id}`,
+                apiUrl(`/api/resource/Maintenance%20Visit/${id}`),
                 payload,
                 sessionCookies
             );
 
             if (!res.ok) {
                 console.error('Server Error Data:', res.data);
-                let serverMsg = 'Update failed';
-
-                if (res.data) {
-                    if (res.data._server_messages) {
-                        try {
-                            const messages = JSON.parse(res.data._server_messages);
-                            serverMsg = messages.map((m: any) => {
-                                try {
-                                    return JSON.parse(m).message;
-                                } catch {
-                                    return m.message || m;
-                                }
-                            }).join('\n');
-                        } catch {
-                            serverMsg = res.data._server_messages;
-                        }
-                    } else if (res.data.message) {
-                        serverMsg = typeof res.data.message === 'object' ? JSON.stringify(res.data.message) : res.data.message;
-                    } else if (res.data.exc) {
-                        try {
-                            const exc = JSON.parse(res.data.exc);
-                            serverMsg = Array.isArray(exc) ? exc[0] : exc;
-                        } catch {
-                            serverMsg = res.data.exc;
-                        }
-                    }
-                }
-                throw new Error(serverMsg);
+                throw new Error(parseFrappeError(res.data, 'Update failed'));
             }
 
             Alert.alert("Success", "Record synced to ERPNext.", [
@@ -937,7 +751,13 @@ export default function MaintenanceDetailScreen() {
             ]);
         } catch (err) {
             console.error('Update Error:', err);
-            Alert.alert("Sync Error", "Could not save changes.");
+            // The server's actual reason was parsed into this error above and
+            // then thrown away in favour of a generic string, leaving the user
+            // with no idea which field the server rejected.
+            const msg = (err && typeof err === 'object' && 'message' in err)
+                ? String((err as any).message)
+                : 'Could not save changes.';
+            Alert.alert("Sync Error", msg);
         } finally {
             setIsSaving(false);
         }
@@ -982,7 +802,7 @@ export default function MaintenanceDetailScreen() {
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
             <View
-                style={[styles.headerGradient, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' }]}
+                style={[styles.headerGradient, { backgroundColor: isDark ? '#000000' : '#F8FAFC' }]}
             >
                 <SafeAreaView>
                     <View style={styles.header}>
@@ -998,23 +818,23 @@ export default function MaintenanceDetailScreen() {
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                 <ScrollView
                     style={styles.container}
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + insets.bottom }]}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* New Premium Header */}
                     <View style={styles.premiumHeader}>
-                        <View>
+                        <View style={{ flex: 1, marginRight: 12 }}>
                             <View style={styles.titleRow}>
                                 <Text testID="visitTitle" style={[styles.headerTitle, { color: colors.text }]}>Visit Details</Text>
                                 <View style={styles.idBadgePill} testID="visitIDBadge">
                                     <Text style={styles.idBadgeText}>{form.name}</Text>
                                 </View>
                             </View>
-                            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Complete visit information and expenses</Text>
+                            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Complete visit information</Text>
                         </View>
                         <TouchableOpacity testID="editVisitBtn" style={styles.premiumEditBtn} onPress={() => setIsEditing(!isEditing)}>
                             <Ionicons name={isEditing ? "close" : "create-outline"} size={20} color="#FFF" />
-                            <Text style={styles.premiumEditBtnText}>{isEditing ? "Cancel" : "Edit Visit"}</Text>
+                            <Text style={styles.premiumEditBtnText}>{isEditing ? "Cancel" : "Edit"}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -1057,7 +877,7 @@ export default function MaintenanceDetailScreen() {
                                     <Ionicons name="person-outline" size={14} color="rgba(255,255,255,0.7)" />
                                     <Text style={styles.heroLabel}>Customer Name</Text>
                                 </View>
-                                <Text style={styles.heroValue} numberOfLines={1}>{form.customer_name || form.customer}</Text>
+                                <Text style={styles.heroValue} numberOfLines={2}>{form.customer_name || form.customer}</Text>
                             </View>
                             <View style={styles.heroItem}>
                                 <View style={styles.heroLabelRow}>
@@ -1089,13 +909,18 @@ export default function MaintenanceDetailScreen() {
                         </View>
 
                         {form.follow_up_required === 1 && (
-                            <View style={styles.followUpAlert}>
-                                <View style={styles.alertIconBox}>
+                            <View style={[
+                                styles.followUpAlert,
+                                // The solid pastel-red panel is far too bright on a
+                                // dark background — tint it instead.
+                                isDark && { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.35)' },
+                            ]}>
+                                <View style={[styles.alertIconBox, isDark && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
                                     <Ionicons name="alert-circle" size={20} color="#EF4444" />
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.alertTitle}>Follow Up Required</Text>
-                                    <Text style={styles.alertSubtitle}>Due: {form.follow_up_due_date || 'N/A'}</Text>
+                                    <Text style={[styles.alertTitle, isDark && { color: '#FCA5A5' }]}>Follow Up Required</Text>
+                                    <Text style={[styles.alertSubtitle, isDark && { color: '#FCA5A5' }]}>Due: {form.follow_up_due_date || 'N/A'}</Text>
                                 </View>
                             </View>
                         )}
@@ -1115,15 +940,17 @@ export default function MaintenanceDetailScreen() {
                                     style={[
                                         styles.tabItem,
                                         activeTab === tab.id && styles.activeTabItem,
-                                        { backgroundColor: activeTab === tab.id ? '#FFF' : 'transparent' }
+                                        // A white pill looked out of place against the
+                                        // dark background; use the elevated surface there.
+                                        { backgroundColor: activeTab === tab.id ? (isDark ? colors.surfaceVariant : '#FFF') : 'transparent' }
                                     ]}
                                     onPress={() => setActiveTab(tab.id as any)}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                        <Ionicons name={tab.icon as any} size={14} color={activeTab === tab.id ? '#1E3A8A' : colors.textSecondary} />
+                                        <Ionicons name={tab.icon as any} size={14} color={activeTab === tab.id ? (isDark ? colors.tint : '#1E3A8A') : colors.textSecondary} />
                                         <Text style={[
                                             styles.tabText,
-                                            { color: activeTab === tab.id ? '#1E3A8A' : colors.textSecondary }
+                                            { color: activeTab === tab.id ? (isDark ? colors.tint : '#1E3A8A') : colors.textSecondary }
                                         ]}>
                                             {tab.label}
                                         </Text>
@@ -1507,7 +1334,7 @@ export default function MaintenanceDetailScreen() {
                         <Animated.View entering={FadeInDown.duration(400)}>
                             <Section title="Expenses Summary" icon="cash">
                                 <View style={{ gap: 12 }}>
-                                    <View style={[styles.totalCard, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.primary }]}>
+                                    <View style={[styles.totalCard, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
                                         <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Total Visit Cost</Text>
                                         <Text style={[styles.totalValue, { color: colors.primary }]}>₹{form.total || 0}</Text>
                                     </View>
@@ -2198,10 +2025,10 @@ export default function MaintenanceDetailScreen() {
                             setStayPicker({ ...stayPicker, visible: false });
                             return;
                         }
-                        const formatted = stayPicker.field.includes('date') 
+                        const formatted = stayPicker.field.includes('date')
                             ? date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0')
                             : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                        
+
                         updateExpenseRow('stay', stayPicker.idx, stayPicker.field, formatted);
                         setStayPicker({ ...stayPicker, visible: false });
                     }}
@@ -2255,9 +2082,10 @@ const styles = StyleSheet.create({
     premiumHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         marginBottom: 24,
         paddingHorizontal: 4,
+        gap: 8,
     },
     titleRow: {
         flexDirection: 'row',

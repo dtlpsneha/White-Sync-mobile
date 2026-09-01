@@ -117,7 +117,7 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
 
                     <View style={styles.cardBody}>
                         <View style={styles.purposeRow}>
-                            <View style={[styles.iconContainer, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+                            <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSecondary }]}>
                                 <Ionicons name="construct" size={14} color={colors.primary} />
                             </View>
                             <Text style={[styles.purposeText, { color: colors.text }]} numberOfLines={1}>

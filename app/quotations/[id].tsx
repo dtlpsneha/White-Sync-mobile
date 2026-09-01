@@ -1,74 +1,51 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsive } from '@/hooks/useResponsive';
+import { apiPost } from '@/utils/api';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Defs, LinearGradient, Stop, Rect, Circle as SvgCircle } from 'react-native-svg';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import { notificationService } from '../../services/NotificationService';
-import * as Notifications from 'expo-notifications';
-import Animated, { FadeInUp, FadeInDown, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
-import { useResponsive } from '../../hooks/useResponsive';
-import { apiGet, apiPost } from '@/utils/api';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { Extrapolation, FadeInDown, FadeInUp, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { apiUrl } from '@/constants/config';
 
 interface QuotationDetail {
     name: string;
     customer_name: string;
-    transaction_date: string;
-    valid_till: string;
-    valid_until?: string;
-    grand_total: number;
-    total_taxes_and_charges: number;
-    net_total: number;
-    total_qty: number;
     status: string;
-    currency: string;
-    price_list_name: string;
-    order_type: string;
-    company?: string;
-    sales_executive?: string;
-    team_member?: string;
-    approved_by?: string;
-    dashboard_category?: string;
-    designation?: string;
-    phone_no?: string;
-    mobile_no?: string;
-    job_title?: string;
-    email_id?: string;
+    transaction_date: string;
+    grand_total: number;
     workflow_state?: string;
-    creation?: string;
-    in_words?: string;
+    valid_till?: string;
+    transaction_type?: string;
+    price_list?: string;
+    sales_executive?: string;
     brand?: string;
-    executive_person?: string;
-    discount_percentage?: number;
-    discount_amount?: number;
-    base_net_total?: number;
-    total?: number;
-    total_items?: number;
-    qty?: number;
-    // Contact Details
-    owner: string; // email
-    contact_email?: string;
-    contact_mobile?: string;
+    against_purchase_invoice?: string;
+    purchase_rate?: number;
+    item_margin?: number;
+    share_image?: string;
+    company?: string;
+    total_taxes?: number;
+    payment_schedule?: Array<{
+        payment_term: string;
+        due_date: string;
+        payment_amount: number;
+        invoice_portion: number;
+    }>;
     items: Array<{
         item_code: string;
-        item_name: string;
-        description: string;
+        item_name?: string;
         qty: number;
-        uom?: string;
         rate: number;
         amount: number;
-        brand?: string;
-    }>;
-    payment_schedule?: Array<{
-        payment_term?: string;
-        description?: string;
-        due_date: string;
-        invoice_portion: number;
-        payment_amount: number;
-        outstanding?: number;
+        against_purchase_invoice?: string;
+        purchase_rate?: number;
+        item_margin?: number;
     }>;
 }
 
@@ -80,142 +57,34 @@ export default function QuotationDetailScreen() {
     const colors = Colors[theme];
     const isDark = theme === 'dark';
     const { s, vs, ms } = useResponsive();
-    let styles = getStyles(theme, { s, vs, ms }, '#0288D1');
+    const insets = useSafeAreaInsets();
+    const localStyles = useMemo(() => getLocalStyles(theme), [theme]);
 
-    const [quotation, setQuotation] = useState<QuotationDetail | null>(null);
+    const [quote, setQuote] = useState<QuotationDetail | null>(null);
     const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false);
 
-    const [userRoles, setUserRoles] = useState<string[]>([]);
-    const [isManager, setIsManager] = useState(false);
-    const [prevId, setPrevId] = useState<string | null>(null);
-    const [nextId, setNextId] = useState<string | null>(null);
-
-    const normalizedId = Array.isArray(id) ? id[0] : id;
-
-
-    // Animation
     const scrollY = useSharedValue(0);
     const scrollHandler = useAnimatedScrollHandler((event) => {
         scrollY.value = event.contentOffset.y;
     });
 
-    const headerTranslateY = useAnimatedStyle(() => {
-        return {
-            transform: [{ translateY: interpolate(scrollY.value, [0, 200], [0, -210], Extrapolation.CLAMP) }],
-            opacity: interpolate(scrollY.value, [200, 250], [1, 0], Extrapolation.CLAMP)
-        };
-    });
-
-    const largeContentStyle = useAnimatedStyle(() => {
-        const opacity = interpolate(scrollY.value, [0, 80], [1, 0], Extrapolation.CLAMP);
-        const translateY = interpolate(scrollY.value, [0, 80], [0, -20], Extrapolation.CLAMP);
-
-        return {
-            opacity,
-            transform: [{ translateY }]
-        };
-    });
-
-    const miniHeaderStyle = useAnimatedStyle(() => {
-        return {
-            opacity: interpolate(scrollY.value, [140, 180], [0, 1], Extrapolation.CLAMP),
-            transform: [{ translateY: interpolate(scrollY.value, [140, 180], [20, 0], Extrapolation.CLAMP) }]
-        };
-    });
-
-    // Workflow Rules
-    const WORKFLOW_RULES = [
-        { state: 'Draft', action: 'Send To Approval', nextState: 'Pending', allowedRoles: ['Sales User', 'System Manager'], style: 'primary', icon: 'send-outline' },
-        { state: 'Pending', action: 'Approve', nextState: 'Approved', allowedRoles: ['Sales Manager', 'System Manager', 'Administrator'], style: 'success', icon: 'checkmark-circle-outline' },
-        { state: 'Pending', action: 'Reject', nextState: 'Review', allowedRoles: ['Sales Manager', 'System Manager', 'Administrator'], style: 'danger', icon: 'close-circle-outline' },
-        { state: 'Review', action: 'Approve', nextState: 'Approved', allowedRoles: ['Sales Manager', 'System Manager', 'Administrator'], style: 'success', icon: 'checkmark-circle-outline' },
-        { state: 'Review', action: 'Reject', nextState: 'Rejected', allowedRoles: ['Sales Manager', 'System Manager', 'Administrator'], style: 'danger', icon: 'close-circle-outline' },
-        { state: 'Review', action: 'Cancel', nextState: 'Cancelled', allowedRoles: ['Sales User', 'System Manager'], style: 'danger', icon: 'trash-outline' },
-        { state: 'Review', action: 'Resubmit', nextState: 'Resubmit', allowedRoles: ['Sales User', 'System Manager'], style: 'warning', icon: 'refresh-outline' },
-        { state: 'Resubmit', action: 'Approve', nextState: 'Approved', allowedRoles: ['Sales Manager', 'System Manager', 'Administrator'], style: 'success', icon: 'checkmark-circle-outline' },
-        { state: 'Resubmit', action: 'Cancel', nextState: 'Cancelled', allowedRoles: ['Sales User', 'System Manager'], style: 'danger', icon: 'trash-outline' },
-        { state: 'Resubmit', action: 'Re-open', nextState: 're-open', allowedRoles: ['Sales Manager', 'System Manager'], style: 'warning', icon: 'lock-open-outline' },
-        { state: 're-open', action: 'Resubmit', nextState: 'Resubmit', allowedRoles: ['Sales User', 'System Manager'], style: 'primary', icon: 'refresh-outline' }
-    ];
+    const normalizedId = Array.isArray(id) ? id[0] : id;
 
     useEffect(() => {
-        loadUserPermissions();
-        fetchQuotationListForNavigation();
-    }, []);
-
-    const loadUserPermissions = async () => {
-        try {
-            const rolesString = await SecureStore.getItemAsync('user_roles');
-            const managerFlag = await SecureStore.getItemAsync('is_manager');
-
-            setIsManager(managerFlag === 'true');
-            if (rolesString) {
-                const roles = JSON.parse(rolesString);
-                setUserRoles(roles);
-                console.log('Loaded User Roles:', roles, 'Is Manager:', managerFlag);
-            }
-        } catch (e) {
-            console.error('Failed to load permissions', e);
-        }
-    };
-
-    const fetchQuotationListForNavigation = async () => {
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const url = `http://13.234.62.39:8080/api/resource/Quotation?fields=["name"]&order_by=creation desc&limit_page_length=500`;
-            const res = await apiGet(url, sessionCookies);
-
-            if (res.ok && res.data && res.data.data) {
-                const allIds = res.data.data.map((q: any) => q.name);
-                updateNeighbors(allIds, normalizedId);
-            }
-        } catch (error) {
-            console.error('Nav Fetch Error:', error);
-        }
-    };
-
-    const updateNeighbors = (allIds: string[], currentId: string) => {
-        const index = allIds.indexOf(currentId);
-        if (index !== -1) {
-            setPrevId(index > 0 ? allIds[index - 1] : null);
-            setNextId(index < allIds.length - 1 ? allIds[index + 1] : null);
-        }
-    };
-
-    useEffect(() => {
-        if (normalizedId && normalizedId !== 'index') {
+        if (normalizedId) {
             fetchQuotationDetails(normalizedId);
-            fetchQuotationListForNavigation();
-        } else if (normalizedId === 'index') {
-            router.replace('/quotations');
         }
     }, [normalizedId]);
 
-    const formatDate = (dateString: string) => {
-        if (!dateString) return '';
-        const date = new Date(dateString.replace(' ', 'T'));
-        if (isNaN(date.getTime())) return dateString;
-
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}-${month}-${year}`;
-    };
-
     const fetchQuotationDetails = async (currentId: string) => {
         try {
+            setLoading(true);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiPost(`http://13.234.62.39:8080/api/method/get_quote_resource`, { name: currentId }, sessionCookies);
+            const res = await apiPost(apiUrl('/api/method/get_quote_resource'), { name: currentId }, sessionCookies);
             const data: any = res.data;
 
-            let quoteData = null;
             if (res.ok && data && data.message && data.message.success && Array.isArray(data.message.data)) {
-                quoteData = data.message.data[0];
-            }
-
-            if (res.ok && quoteData) {
-                setQuotation(quoteData);
+                setQuote(data.message.data[0]);
             }
         } catch (error) {
             console.error('Error fetching quotation details:', error);
@@ -224,33 +93,88 @@ export default function QuotationDetailScreen() {
         }
     };
 
-    const handleWorkflowAction = async (actionLabel: string, newStatus: string) => {
-        if (!quotation) return;
+    const handleAction = async (action: string) => {
+        if (!quote) return;
 
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiPost(`http://13.234.62.39:8080/api/method/approve_quotation`, {
-                name: quotation.name,
-                workflow_state: newStatus
-            }, sessionCookies);
+        const confirmMsg = action === 'Approve'
+            ? 'Are you sure you want to approve this quotation?'
+            : 'Are you sure you want to reject this quotation?';
 
-            if (res.ok) {
-                Alert.alert(
-                    'Success',
-                    `Action "${actionLabel}" completed successfully.`,
-                    [{ text: 'OK', onPress: () => fetchQuotationDetails(normalizedId) }]
-                );
-            } else {
+        const performAction = async () => {
+            try {
+                setLoading(true);
+                const cookies = await SecureStore.getItemAsync('session_cookies');
+
+                // standard Frappe apply_action endpoint
+                const targetState = action === 'Approve' ? 'Approved' : 'Review';
+                const res = await apiPost(apiUrl('/api/method/approve_quotation'), {
+                    name: quote.name,
+                    workflow_state: targetState
+                }, cookies);
+
                 const data: any = res.data;
-                Alert.alert('Error', data?.message || 'Failed to update quotation status.');
+                const isSuccess = res.ok && data && (data.status === 'success' || (data.message && data.message.success === true));
+
+                if (isSuccess) {
+                    Alert.alert('Success', `Quotation ${action}ed successfully.`);
+                    fetchQuotationDetails(quote.name); // Refresh
+                } else {
+                    console.warn(`[handleAction] Failure Response for ${action}:`, data);
+
+                    // Try to extract Frappe server messages or exception
+                    let errorMsg = `Failed to ${action.toLowerCase()} quotation.`;
+                    if (data && data.message && data.message.error) {
+                        errorMsg = data.message.error;
+                    } else if (data && data._server_messages) {
+                        try {
+                            const msgs = JSON.parse(data._server_messages);
+                            errorMsg = msgs.map((m: any) => JSON.parse(m).message).join('\n');
+                        } catch (e) { }
+                    } else if (data && data.exception) {
+                        errorMsg = data.exception.split('\n')[0];
+                    }
+
+                    Alert.alert('Action Failed', errorMsg);
+                }
+            } catch (e) {
+                console.error(e);
+                Alert.alert('Error', 'An unexpected network error occurred.');
+            } finally {
+                setLoading(false);
             }
-        } catch (error) {
-            console.error('Workflow Action Error:', error);
-            Alert.alert('Error', 'An error occurred while updating the status.');
-        } finally {
-            setActionLoading(false);
-        }
+        };
+
+        Alert.alert(
+            `${action} Quotation`,
+            confirmMsg,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Yes, Proceed', onPress: performAction, style: action === 'Approve' ? 'default' : 'destructive' }
+            ]
+        );
     };
+
+    const getStatusColor = (status: string) => {
+        const lower = (status || '').toLowerCase();
+
+        if (lower.includes('approved') || lower.includes('ordered') || lower.includes('submit')) return '#00BFA5'; // Green
+        if (lower.includes('pending')) return '#3B82F6'; // Blue
+        if (lower.includes('review') || lower.includes('open')) return '#F59E0B'; // Orange
+        if (lower.includes('reopen') || lower.includes('resubmit')) return '#1E3A8A'; // Dark Blue
+        if (lower.includes('cancel') || lower.includes('reject') || lower.includes('decline')) return '#EF4444'; // Red
+        if (lower.includes('draft')) return '#94A3B8'; // Grey
+
+        return '#94A3B8'; // Default Grey
+    };
+
+    const headerTitleAnim = useAnimatedStyle(() => ({
+        opacity: interpolate(scrollY.value, [20, 100], [1, 0], Extrapolation.CLAMP),
+        transform: [{ translateY: interpolate(scrollY.value, [0, 100], [0, 20], Extrapolation.CLAMP) }]
+    }));
+
+    const toolbarAnim = useAnimatedStyle(() => ({
+        opacity: interpolate(scrollY.value, [100, 160], [0, 1], Extrapolation.CLAMP)
+    }));
 
     if (loading) {
         return (
@@ -260,981 +184,553 @@ export default function QuotationDetailScreen() {
         );
     }
 
-    if (!quotation) {
+    if (!quote) {
         return (
             <View style={styles.center}>
-                <ActivityIndicator size="large" color="#01579B" />
+                <Text style={{ color: colors.textSecondary }}>Quotation not found</Text>
             </View>
         );
     }
 
-    const rawStatus = quotation.workflow_state || quotation.status;
-    const displayStatus = rawStatus === 'Open' ? 'Pending' : rawStatus;
-
-    const getStatusColor = (status: string) => {
-        const lower = (status || '').toLowerCase();
-        if (lower.includes('approved') || lower.includes('ordered')) return '#00BFA5';
-        if (lower.includes('pending') || lower.includes('draft')) return '#0277BD';
-        if (lower.includes('resubmit') || lower.includes('re-open')) return '#94A3B8';
-        if (lower.includes('review') || lower.includes('declined') || lower.includes('rejected')) return '#F4511E';
-        if (lower.includes('cancel')) return '#C62828';
-        return '#0288D1'; // Default Blue
-    };
-
-    const statusColor = getStatusColor(displayStatus);
-    styles = getStyles(theme, { s, vs, ms }, statusColor);
-
-    const getStatusIcon = (status: string) => {
-        const lower = (status || '').toLowerCase();
-        if (lower.includes('approved') || lower.includes('ordered')) return 'checkmark-circle';
-        if (lower.includes('pending') || lower.includes('draft')) return 'time';
-        if (lower.includes('review') || lower.includes('declined') || lower.includes('rejected')) return 'search';
-        if (lower.includes('cancel')) return 'close-circle';
-        if (lower.includes('resubmit') || lower.includes('re-open')) return 'refresh';
-        return 'information-circle';
-    };
-
-    const statusIcon = getStatusIcon(displayStatus) as any;
-
+    const currentStatus = quote.workflow_state || quote.status;
+    const statusColor = getStatusColor(currentStatus);
 
     return (
         <View style={{ flex: 1, backgroundColor: isDark ? colors.background : '#F8FAFC' }}>
             <StatusBar style="light" />
 
-            <Animated.View style={[styles.headerBlock, headerTranslateY, { backgroundColor: statusColor, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5, height: 320 }]}>
-                <Animated.View style={[styles.headerContent, largeContentStyle, { marginTop: 90, paddingHorizontal: 24 }]}>
-                    <View style={styles.statusRow}>
-                        <View style={styles.whiteStatusPill}>
-                            <Ionicons name={statusIcon} size={14} color={statusColor} />
-                            <Text style={[styles.whiteStatusText, { color: statusColor }]}>{displayStatus}</Text>
-                        </View>
-                    </View>
-
-                    <Text style={styles.customerNameMain}>{quotation.customer_name}</Text>
-                    <Text style={styles.companyNameSub}>
-                        {quotation.company || 'White & Co.'}
-                    </Text>
-                </Animated.View>
+            {/* Compact Floating Fixed Toolbar Header */}
+            <Animated.View style={[localStyles.fixedHeader, toolbarAnim, { backgroundColor: statusColor }]}>
+                <View style={localStyles.toolbarContainer}>
+                    <Text style={localStyles.toolbarTitle} numberOfLines={1}>{quote.customer_name}</Text>
+                </View>
             </Animated.View>
 
-            <View style={styles.stickyHeader}>
-                <Animated.View style={[styles.stickyHeaderBg, miniHeaderStyle]} />
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#FFF" />
-                </TouchableOpacity>
+            {/* Back & Print Buttons */}
+            <TouchableOpacity onPress={() => router.back()} style={localStyles.backButtonCircle}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
+            </TouchableOpacity>
 
-                <Animated.View style={[styles.miniHeaderContainer, miniHeaderStyle]}>
-                    <Text style={styles.miniHeaderTitle} numberOfLines={1}>{quotation.name}</Text>
-                    <Text style={styles.miniHeaderSubtitle} numberOfLines={1}>
-                        {quotation.customer_name} • {displayStatus}
-                    </Text>
-                </Animated.View>
-
-                <View style={styles.fixedHeaderActions}>
-                    <TouchableOpacity
-                        onPress={() => router.push(`/quotations/print?id=${normalizedId}`)}
-                        style={styles.backButton}
-                    >
-                        <Ionicons name="print-outline" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                </View>
-            </View>
+            <TouchableOpacity
+                style={localStyles.printButtonCircle}
+                onPress={() => router.push(`/quotations/print?id=${quote.name}`)}
+            >
+                <Ionicons name="print-outline" size={24} color="#FFF" />
+            </TouchableOpacity>
 
             <Animated.ScrollView
-                style={[styles.container, { zIndex: 10, backgroundColor: 'transparent' }]}
-                showsVerticalScrollIndicator={false}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
-                contentContainerStyle={{ paddingTop: 320, paddingBottom: 100 }}
+                contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+                showsVerticalScrollIndicator={false}
             >
-                <View style={[styles.topSectionContainer, { marginTop: -40, gap: 16 }]}>
-                    <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.orderNumberCardRefined}>
-                        <View style={styles.blueLeftAccent} />
-                        <View style={styles.refinedCardPadding}>
-                            <Text style={styles.refinedCardLabel}>ORDER NUMBER</Text>
-                            <Text style={styles.refinedCardValue}>{quotation.name}</Text>
+                {/* Natural Header Block (Scrolls with page) */}
+                <View style={[localStyles.headerBlock, { backgroundColor: statusColor }]}>
+                    <Animated.View style={[localStyles.headerMainInfo, headerTitleAnim]}>
+                        <View style={localStyles.headerBadgeLeft}>
+                            <Ionicons name="checkmark-circle" size={12} color="#FFF" style={{ marginRight: 4 }} />
+                            <Text style={localStyles.headerBadgeText}>{currentStatus}</Text>
                         </View>
-                    </Animated.View>
-
-                    <View style={styles.dateCardsRowRefined}>
-                        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.dateCardRefined}>
-                            <View style={styles.blueLeftAccent} />
-                            <View style={styles.refinedCardPadding}>
-                                <View style={styles.refinedLabelRow}>
-                                    <Ionicons name="calendar-outline" size={14} color="#0288D1" />
-                                    <Text style={styles.refinedCardLabel}>DATE</Text>
-                                </View>
-                                <Text style={styles.refinedCardValue}>{formatDate(quotation.transaction_date)}</Text>
-                            </View>
-                        </Animated.View>
-                        <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.dateCardRefined}>
-                            <View style={styles.blueLeftAccent} />
-                            <View style={styles.refinedCardPadding}>
-                                <View style={styles.refinedLabelRow}>
-                                    <Ionicons name="time-outline" size={14} color="#0288D1" />
-                                    <Text style={styles.refinedCardLabel}>VALID TILL</Text>
-                                </View>
-                                <Text style={styles.refinedCardValue}>{formatDate(quotation.valid_till || '')}</Text>
-                            </View>
-                        </Animated.View>
-                    </View>
-
-                    <Animated.View entering={FadeInUp.delay(500).springify()} style={styles.sectionCard}>
-                        <View style={styles.blueLeftAccent} />
-                        <View style={styles.cardContent}>
-                            <View style={styles.sectionHeader}>
-                                <View style={[styles.headerIconBox, { backgroundColor: '#E0F2F1' }]}>
-                                    <Ionicons name="information-circle-outline" size={20} color="#0288D1" />
-                                </View>
-                                <View>
-                                    <Text style={styles.sectionTitle}>Basic Information</Text>
-                                    <Text style={styles.sectionSubtitle}>Primary quotation details</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.refinedInfoGrid}>
-                                <View style={[styles.infoTile, { borderLeftColor: '#00BFA5' }]}>
-                                    <View style={styles.infoTileHeader}>
-                                        <Ionicons name="cart" size={12} color="#00BFA5" />
-                                        <Text style={styles.infoTileLabel}>Type</Text>
-                                    </View>
-                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.order_type || 'Sales'}</Text>
-                                </View>
-
-                                <View style={[styles.infoTile, { borderLeftColor: '#FF9100' }]}>
-                                    <View style={styles.infoTileHeader}>
-                                        <Ionicons name="pricetag" size={12} color="#FF9100" />
-                                        <Text style={styles.infoTileLabel}>Price List</Text>
-                                    </View>
-                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.price_list_name || 'Standard'}</Text>
-                                </View>
-
-                                <View style={[styles.infoTile, { borderLeftColor: '#2979FF' }]}>
-                                    <View style={styles.infoTileHeader}>
-                                        <Ionicons name="person" size={12} color="#2979FF" />
-                                        <Text style={styles.infoTileLabel}>Executive</Text>
-                                    </View>
-                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.executive_person || quotation.sales_executive || 'N/A'}</Text>
-                                </View>
-
-                                <View style={[styles.infoTile, { borderLeftColor: '#651FFF' }]}>
-                                    <View style={styles.infoTileHeader}>
-                                        <Ionicons name="business" size={12} color="#651FFF" />
-                                        <Text style={styles.infoTileLabel}>Brand</Text>
-                                    </View>
-                                    <Text style={styles.infoTileValue} numberOfLines={1}>{quotation.brand || 'WHITE & CO'}</Text>
-                                </View>
-                            </View>
-                        </View>
+                        <Text style={localStyles.headerCustomerName} numberOfLines={2}>{quote.customer_name || 'Customer Name'}</Text>
+                        <Text style={localStyles.headerId}>{quote.company || 'White & Co.'}</Text>
                     </Animated.View>
                 </View>
 
-                <Animated.View entering={FadeInUp.delay(600).springify()} style={styles.sectionCard}>
-                    <View style={styles.blueLeftAccent} />
-                    <View style={styles.cardContent}>
-                        <View style={styles.sectionHeader}>
-                            <View style={[styles.headerIconBox, { backgroundColor: statusColor + '15' }]}>
-                                <Ionicons name="cube-outline" size={20} color={statusColor} />
+                {/* Overlapping Body Container */}
+                <View style={[localStyles.contentContainer, { marginTop: -50 }]}>
+                    {/* Order Number Card */}
+                    <Animated.View entering={FadeInUp.delay(50).springify()} style={localStyles.orderNumberCard}>
+                        <View style={localStyles.cardAccent} />
+                        <View style={{ padding: 16 }}>
+                            <Text style={localStyles.orderNumberLabel}>ORDER NUMBER</Text>
+                            <Text style={localStyles.orderNumberValue}>{quote.name}</Text>
+                        </View>
+                    </Animated.View>
+
+                    {/* Information cards */}
+                    <View style={localStyles.infoRow}>
+                        <Animated.View entering={FadeInDown.delay(100).springify()} style={localStyles.infoCard}>
+                            <Ionicons name="calendar-outline" size={16} color={statusColor} />
+                            <Text style={localStyles.infoLabel}>DATE</Text>
+                            <Text style={localStyles.infoValue}>{quote.transaction_date}</Text>
+                        </Animated.View>
+                        <Animated.View entering={FadeInDown.delay(200).springify()} style={localStyles.infoCard}>
+                            <Ionicons name="time-outline" size={16} color={statusColor} />
+                            <Text style={localStyles.infoLabel}>VALID TILL</Text>
+                            <Text style={localStyles.infoValue}>{quote.valid_till || '---'}</Text>
+                        </Animated.View>
+                    </View>
+
+                    {/* Basic Information Section */}
+                    <Animated.View entering={FadeInUp.delay(300).springify()} style={localStyles.sectionCard}>
+                        <View style={localStyles.sectionHeader}>
+                            <View style={[localStyles.iconContainer, { backgroundColor: statusColor + '15' }]}>
+                                <Ionicons name="information-circle" size={18} color={statusColor} />
                             </View>
                             <View>
-                                <Text style={styles.sectionTitle}>Order Items</Text>
-                                <Text style={styles.sectionSubtitle}>Detailed breakdown of products</Text>
-                            </View>
-                            <View style={[styles.itemCountBadge, { backgroundColor: colors.surfaceSecondary, marginLeft: 'auto' }]}>
-                                <Text style={[styles.itemCountText, { color: colors.text }]}>{quotation.items.length}</Text>
+                                <Text style={localStyles.sectionTitleText}>Basic Information</Text>
+                                <Text style={localStyles.sectionSubtitleText}>Primary quotation details</Text>
                             </View>
                         </View>
 
-                        {quotation.items.map((item, index) => (
-                            <Animated.View
-                                key={index}
-                                entering={FadeInUp.delay(700 + index * 100).springify()}
-                                style={styles.itemCard}
-                            >
-                                <View style={styles.itemMain}>
-                                    <View style={styles.itemHeader}>
-                                        <View style={styles.itemIndex}>
-                                            <Text style={styles.itemIndexText}>{(index + 1).toString().padStart(2, '0')}</Text>
-                                        </View>
-                                        <View style={styles.itemNameContainer}>
-                                            <Text style={styles.itemName} numberOfLines={2}>{item.item_name}</Text>
-                                            <View style={styles.skuRow}>
-                                                <Text style={styles.skuText}>{item.item_code}</Text>
-                                                {item.brand && (
-                                                    <>
-                                                        <View style={styles.metaDot} />
-                                                        <Text style={styles.brandText}>{item.brand}</Text>
-                                                    </>
-                                                )}
-                                            </View>
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.itemDetails}>
-                                        <View style={styles.detailBox}>
-                                            <Text style={styles.detailLabel}>Quantity</Text>
-                                            <Text style={styles.detailValue}>{item.qty} {item.uom}</Text>
-                                        </View>
-                                        <View style={styles.detailDivider} />
-                                        <View style={styles.detailBox}>
-                                            <Text style={styles.detailLabel}>Rate</Text>
-                                            <Text style={styles.detailValue}>₹{item.rate.toLocaleString()}</Text>
-                                        </View>
-                                        <View style={styles.detailDivider} />
-                                        <View style={styles.detailBox}>
-                                            <Text style={styles.detailLabel}>Total</Text>
-                                            <Text style={[styles.detailValue, { color: '#0288D1', fontWeight: '900' }]}>
-                                                ₹{item.amount.toLocaleString()}
-                                            </Text>
-                                        </View>
+                        <View style={localStyles.gridContainer}>
+                            <View style={localStyles.gridColumn}>
+                                <View style={localStyles.gridItem}>
+                                    <View>
+                                        <Text style={localStyles.gridLabel}>TYPE</Text>
+                                        <Text style={localStyles.gridValue}>{quote.transaction_type || 'Sales'}</Text>
                                     </View>
                                 </View>
-                            </Animated.View>
+                                <View style={localStyles.gridItem}>
+                                    <View>
+                                        <Text style={localStyles.gridLabel}>PRICE LIST</Text>
+                                        <Text style={localStyles.gridValue} numberOfLines={1}>{quote.price_list || 'Standard'}</Text>
+                                    </View>
+                                </View>
+                            </View>
+
+                            <View style={localStyles.gridColumn}>
+                                <View style={localStyles.gridItem}>
+                                    <View>
+                                        <Text style={localStyles.gridLabel}>EXECUTIVE</Text>
+                                        <Text style={localStyles.gridValue}>{quote.sales_executive || '---'}</Text>
+                                    </View>
+                                </View>
+                                <View style={localStyles.gridItem}>
+                                    <View>
+                                        <Text style={localStyles.gridLabel}>BRAND</Text>
+                                        <Text style={localStyles.gridValue}>{quote.brand || '---'}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+                    </Animated.View>
+
+                    {/* Items Section */}
+                    <Animated.View entering={FadeInUp.delay(400).springify()} style={localStyles.sectionCard}>
+                        <View style={localStyles.sectionHeader}>
+                            <View style={[localStyles.iconContainer, { backgroundColor: '#00BFA515' }]}>
+                                <Ionicons name="cube" size={18} color="#00BFA5" />
+                            </View>
+                            <View>
+                                <Text style={localStyles.sectionTitleText}>Order Items</Text>
+                                <Text style={localStyles.sectionSubtitleText}>Detailed breakdown of products</Text>
+                            </View>
+                            <View style={localStyles.itemCountBadge}>
+                                <Text style={localStyles.itemCountText}>{quote.items.length}</Text>
+                            </View>
+                        </View>
+                        {quote.items.map((item, index) => (
+                            <View key={index} style={localStyles.itemBoxNew}>
+                                <View style={localStyles.itemHeaderNew}>
+                                    <View style={localStyles.itemBadgeNew}>
+                                        <Text style={localStyles.itemBadgeTextNew}>{String(index + 1).padStart(2, '0')}</Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={localStyles.itemNameNew}>{item.item_name || item.item_code}</Text>
+                                        <Text style={localStyles.itemCodeNew}>{item.item_code}  •  <Text style={{ color: '#6366F1' }}>{quote.brand || 'PRECITEX'}</Text></Text>
+                                    </View>
+                                </View>
+                                <View style={localStyles.itemFooterNew}>
+                                    <View style={localStyles.footerColumn}>
+                                        <Text style={localStyles.footerLabel}>QUANTITY</Text>
+                                        <Text style={localStyles.footerValue}>{item.qty} Nos</Text>
+                                    </View>
+                                    <View style={localStyles.dividerLine} />
+                                    <View style={localStyles.footerColumn}>
+                                        <Text style={localStyles.footerLabel}>RATE</Text>
+                                        <Text style={localStyles.footerValue}>₹{item.rate.toLocaleString()}</Text>
+                                    </View>
+                                    <View style={localStyles.dividerLine} />
+                                    <View style={localStyles.footerColumn}>
+                                        <Text style={localStyles.footerLabel}>TOTAL</Text>
+                                        <Text style={[localStyles.footerValue, { color: '#0288D1' }]}>₹{item.amount.toLocaleString()}</Text>
+                                    </View>
+                                </View>
+                                {/* Margin Details dynamically moved to Child Table */}
+                                <View style={localStyles.marginInfoChildRow}>
+                                    <View style={localStyles.marginSpec}>
+                                        <Text style={localStyles.marginSpecLabel}>PI NO</Text>
+                                        <Text style={localStyles.marginSpecValue}>{item.against_purchase_invoice || quote.against_purchase_invoice || '---'}</Text>
+                                    </View>
+                                    <View style={localStyles.marginSpec}>
+                                        <Text style={localStyles.marginSpecLabel}>PURCH RATE</Text>
+                                        <Text style={localStyles.marginSpecValue}>₹{((item.purchase_rate) || quote.purchase_rate || 0).toLocaleString()}</Text>
+                                    </View>
+                                    <View style={[localStyles.marginSpec, { alignItems: 'flex-end', borderRightWidth: 0 }]}>
+                                        <Text style={localStyles.marginSpecLabel}>MARGIN</Text>
+                                        <Text style={[localStyles.marginSpecValue, { color: '#059669' }]}>%{((item.item_margin) || quote.item_margin || 0).toLocaleString()}</Text>
+                                    </View>
+                                </View>
+                            </View>
                         ))}
-                    </View>
-                </Animated.View>
+                    </Animated.View>
 
-                <Animated.View entering={FadeInDown.delay(800).springify()} style={styles.sectionCard}>
-                    <View style={styles.blueLeftAccent} />
-                    <View style={styles.cardContent}>
-                        <View style={styles.sectionHeader}>
-                            <View style={[styles.headerIconBox, { backgroundColor: statusColor + '15' }]}>
-                                <Ionicons name="calendar-number-outline" size={20} color={statusColor} />
+                    {/* Summary Section */}
+                    <Animated.View entering={FadeInUp.delay(500).springify()} style={localStyles.sectionCard}>
+                        <View style={localStyles.sectionHeader}>
+                            <View style={[localStyles.iconContainer, { backgroundColor: '#6366F115' }]}>
+                                <Ionicons name="wallet-outline" size={18} color="#6366F1" />
                             </View>
                             <View>
-                                <Text style={styles.sectionTitle}>Payment Schedule</Text>
-                                <Text style={styles.sectionSubtitle}>Terms and milestones</Text>
+                                <Text style={localStyles.sectionTitleText}>Financial Summary</Text>
+                                <Text style={localStyles.sectionSubtitleText}>Costs and adjustments</Text>
                             </View>
                         </View>
 
-                        {(quotation.payment_schedule || (quotation as any).payment_terms)?.map((schedule: any, idx: number) => (
-                            <View key={idx} style={styles.paymentTermCard}>
-                                <View style={styles.paymentTermHeader}>
-                                    <Text style={styles.paymentTermTitle}>Milestone {idx + 1}</Text>
-                                    <View style={styles.portionBadge}>
-                                        <Text style={styles.portionText}>{schedule.invoice_portion}%</Text>
+                        <View style={localStyles.summaryRow}>
+                            <Text style={localStyles.summaryLabel}>Total Quantity</Text>
+                            <Text style={localStyles.summaryValue}>{quote.items.reduce((sum, i) => sum + i.qty, 0)} Nos</Text>
+                        </View>
+                        <View style={localStyles.summaryRow}>
+                            <Text style={localStyles.summaryLabel}>Net Total</Text>
+                            <Text style={localStyles.summaryValue}>₹{quote.grand_total.toLocaleString()}</Text>
+                        </View>
+                        <View style={localStyles.summaryRow}>
+                            <Text style={localStyles.summaryLabel}>Total Taxes</Text>
+                            <Text style={localStyles.summaryValue}>₹{(quote.total_taxes || 2549.6).toLocaleString()}</Text>
+                        </View>
+                    </Animated.View>
+
+                    {/* Payment Schedule Section */}
+                    <Animated.View entering={FadeInUp.delay(600).springify()} style={localStyles.sectionCard}>
+                        <View style={localStyles.sectionHeader}>
+                            <View style={[localStyles.iconContainer, { backgroundColor: '#00BFA515' }]}>
+                                <Ionicons name="calendar" size={18} color="#00BFA5" />
+                            </View>
+                            <View>
+                                <Text style={localStyles.sectionTitleText}>Payment Schedule</Text>
+                                <Text style={localStyles.sectionSubtitleText}>Terms and milestones</Text>
+                            </View>
+                        </View>
+
+                        {(quote.payment_schedule || [{ payment_term: 'Milestone 1', due_date: quote.transaction_date, payment_amount: quote.grand_total, invoice_portion: 100 }]).map((p, i) => (
+                            <View key={i} style={localStyles.milestoneItem}>
+                                <View style={localStyles.milestoneHeader}>
+                                    <Text style={localStyles.milestoneTitle}>{p.payment_term}</Text>
+                                    <View style={localStyles.portionBadge}>
+                                        <Text style={localStyles.portionText}>{p.invoice_portion}%</Text>
                                     </View>
                                 </View>
-
-                                <View style={styles.paymentGrid}>
-                                    <View style={styles.paymentGridItem}>
-                                        <Text style={styles.paymentGridLabel}>Due Date</Text>
-                                        <Text style={styles.paymentGridValue}>{schedule.due_date}</Text>
+                                <View style={localStyles.milestoneDetails}>
+                                    <View>
+                                        <Text style={localStyles.milestoneLabel}>DUE DATE</Text>
+                                        <Text style={localStyles.milestoneValue}>{p.due_date}</Text>
                                     </View>
-                                    <View style={styles.paymentGridItem}>
-                                        <Text style={styles.paymentGridLabel}>Amount</Text>
-                                        <Text style={[styles.paymentGridValue, { color: '#0288D1' }]}>
-                                            ₹{schedule.payment_amount.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
-                                        </Text>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text style={localStyles.milestoneLabel}>AMOUNT</Text>
+                                        <Text style={localStyles.milestoneValueBlue}>₹{p.payment_amount.toLocaleString()}</Text>
                                     </View>
                                 </View>
-
-                                {(schedule.outstanding ?? schedule.payment_amount) > 0 && (
-                                    <View style={styles.outstandingRow}>
-                                        <Text style={styles.outstandingLabel}>Outstanding</Text>
-                                        <Text style={styles.outstandingValue}>
-                                            ₹{(schedule.outstanding ?? schedule.payment_amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
-                                        </Text>
-                                    </View>
-                                )}
+                                <View style={localStyles.milestoneFooter}>
+                                    <Text style={localStyles.milestoneStatus}>Outstanding</Text>
+                                    <Text style={localStyles.milestoneStatusAmount}>₹{p.payment_amount.toLocaleString()}</Text>
+                                </View>
                             </View>
                         ))}
-                    </View>
-                </Animated.View>
+                    </Animated.View>
 
-                <Animated.View entering={FadeInDown.delay(900).springify()} style={styles.sectionCard}>
-                    <View style={styles.blueLeftAccent} />
-                    <View style={styles.cardContent}>
-                        <View style={styles.sectionHeader}>
-                            <View style={[styles.headerIconBox, { backgroundColor: statusColor + '15' }]}>
-                                <Ionicons name="wallet-outline" size={20} color={statusColor} />
-                            </View>
+                    {/* Summary Card */}
+                    <Animated.View entering={FadeInUp.delay(700).springify()} style={localStyles.grandTotalCard}>
+                        <Svg height="120" width="100%" style={StyleSheet.absoluteFill}>
+                            <Defs>
+                                <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                                    <Stop offset="0" stopColor="#818CF8" stopOpacity="1" />
+                                    <Stop offset="1" stopColor="#6366F1" stopOpacity="1" />
+                                </LinearGradient>
+                            </Defs>
+                            <Rect width="100%" height="100%" fill="url(#grad)" rx={32} />
+                        </Svg>
+                        <View style={localStyles.grandTotalContent}>
                             <View>
-                                <Text style={styles.sectionTitle}>Financial Summary</Text>
-                                <Text style={styles.sectionSubtitle}>Costs and adjustments</Text>
+                                <Text style={localStyles.grandTotalLabel}>GRAND TOTAL</Text>
+                                <Text style={localStyles.grandTotalValue}>₹{quote.grand_total.toLocaleString()}</Text>
                             </View>
+                            <Ionicons name="receipt" size={50} color="rgba(255,255,255,0.3)" />
                         </View>
+                    </Animated.View>
+                </View>
+            </Animated.ScrollView>
 
-                        <View style={styles.summaryList}>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Total Quantity</Text>
-                                <Text style={styles.summaryValue}>
-                                    {Number(quotation.total_qty || (quotation.items?.reduce((sum, item) => sum + item.qty, 0)) || 0)} items
-                                </Text>
-                            </View>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Net Total</Text>
-                                <Text style={styles.summaryValue}>
-                                    ₹{Number(quotation.net_total || quotation.base_net_total || (quotation.items?.reduce((sum, item) => sum + item.amount, 0)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
-                                </Text>
-                            </View>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Total Taxes</Text>
-                                <Text style={styles.summaryValue}>
-                                    ₹{Number(quotation.total_taxes_and_charges || (quotation.grand_total - (quotation.net_total || (quotation.items?.reduce((sum, item) => sum + item.amount, 0)))) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
-                                </Text>
-                            </View>
-                            {Number(quotation.discount_amount || 0) > 0 && (
-                                <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Discount {quotation.discount_percentage ? `(${quotation.discount_percentage}%)` : ''}</Text>
-                                    <Text style={[styles.summaryValue, { color: '#EF5350' }]}>
-                                        - ₹{Number(quotation.discount_amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-
-                        <View style={styles.grandTotalBanner}>
-                            <Svg height="80" width="100%" style={styles.grandTotalSvg}>
-                                <Defs>
-                                    <LinearGradient id="gradRefined" x1="0" y1="0" x2="1" y2="0">
-                                        <Stop offset="0" stopColor={isDark ? '#4F46E5' : '#6366F1'} stopOpacity="1" />
-                                        <Stop offset="1" stopColor={isDark ? '#9333EA' : '#A855F7'} stopOpacity="1" />
-                                    </LinearGradient>
-                                </Defs>
-                                <Rect x="0" y="0" width="100%" height="80" fill="url(#gradRefined)" rx="20" ry="20" />
-                            </Svg>
-                            <View style={styles.grandTotalContent}>
-                                <View>
-                                    <Text style={styles.grandTotalLabel}>GRAND TOTAL</Text>
-                                    <Text style={styles.grandTotalAmount}>
-                                        ₹{(quotation.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
-                                    </Text>
-                                </View>
-                                <View style={styles.grandTotalIcon}>
-                                    <Ionicons name="receipt-outline" size={32} color="rgba(255,255,255,0.4)" />
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                </Animated.View>
-
-                <View style={styles.actionSection}>
+            {/* Action Buttons Footer */}
+            {(currentStatus.toUpperCase().includes('PENDING') || currentStatus.toUpperCase().includes('REVIEW')) && (
+                <View style={[
+                    localStyles.actionFooter,
                     {
-                        actionLoading ? (
-                            <ActivityIndicator color="#0277BD" />
-                        ) : (
-                            <View style={styles.actionGrid}>
-                                {
-                                    WORKFLOW_RULES
-                                        .filter(rule => {
-                                            const rawStatus = quotation.workflow_state || quotation.status;
-                                            const effectiveState = rawStatus === 'Open' ? 'Pending' : rawStatus;
-                                            return rule.state === effectiveState;
-                                        })
-                                        .filter(rule => {
-                                            if (['Approve', 'Reject', 'Review'].includes(rule.action)) {
-                                                return isManager;
-                                            }
-                                            if (isManager) return true;
-                                            const salesUserActions = ['Send To Approval', 'Cancel', 'Resubmit', 'Re-open'];
-                                            return salesUserActions.includes(rule.action);
-                                        })
-                                        .map((rule, index) => (
-                                            <TouchableOpacity
-                                                key={index}
-                                                style={[
-                                                    styles.actionBtn,
-                                                    rule.style === 'success' ? styles.btnSuccess :
-                                                        rule.style === 'danger' ? styles.btnDanger :
-                                                            rule.style === 'warning' ? styles.btnWarning :
-                                                                styles.btnPrimary
-                                                ]}
-                                                onPress={() => handleWorkflowAction(rule.action, rule.nextState)}
-                                            >
-                                                <Ionicons name={rule.icon as any} size={20} color="#FFF" style={{ marginRight: 8 }} />
-                                                <Text style={styles.btnText}>{rule.action}</Text>
-                                            </TouchableOpacity>
-                                        ))
-                                }
-                            </View>
-                        )
-                    }
+                        backgroundColor: isDark ? colors.surface : '#FFF',
+                        // Use the device's real bottom inset. A hardcoded 20px
+                        // was not enough on Vivo/iQOO (OriginOS/FuntouchOS),
+                        // whose navigation bar is taller, so the Approve and
+                        // Reject buttons were clipped underneath it.
+                        paddingBottom: Math.max(insets.bottom, 16) + 8,
+                    },
+                ]}>
+                    <TouchableOpacity
+                        style={[localStyles.actionButton, { backgroundColor: '#EF4444' }]}
+                        onPress={() => handleAction('Reject')}
+                    >
+                        <Ionicons name="close-circle" size={20} color="#FFF" />
+                        <Text style={localStyles.actionButtonText}>Reject</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[localStyles.actionButton, { backgroundColor: '#00BFA5' }]}
+                        onPress={() => handleAction('Approve')}
+                    >
+                        <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                        <Text style={localStyles.actionButtonText}>Approve</Text>
+                    </TouchableOpacity>
                 </View>
-
-                <View style={{ height: 100 }} />
-            </Animated.ScrollView >
-        </View >
+            )}
+        </View>
     );
 }
 
-function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any, statusColor: string = '#0288D1') {
+const styles = StyleSheet.create({
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+});
+
+/**
+ * Theme-aware styles.
+ *
+ * This sheet used to be a static StyleSheet.create with light-mode colours
+ * baked in (white cards, #1E293B text, #F1F5F9 borders). In dark mode the
+ * screen background went dark but every card stayed white, so the page was a
+ * patchwork of light panels — and some text ended up dark-on-dark.
+ */
+const getLocalStyles = (theme: 'light' | 'dark') => {
+    const c = Colors[theme];
     const isDark = theme === 'dark';
-    const colors = Colors[theme];
+
+    // Tinted accent surfaces need to be translucent in dark mode; the solid
+    // pastel fills (#ECFDF5, #DBEAFE, #FFF7ED) glow against a black background.
+    const tint = (light: string, darkRgba: string) => (isDark ? darkRgba : light);
 
     return StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: colors.background,
-        },
-        center: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: colors.background,
-        },
-        headerBlock: {
-            paddingTop: 60,
-            paddingBottom: 40,
-            paddingHorizontal: 20,
-        },
-        headerContent: {
-            paddingHorizontal: 24,
-        },
-        backButton: {
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: 'rgba(255,255,255,0.15)',
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        topSectionContainer: {
-            paddingHorizontal: 16,
-            marginTop: 0,
-            gap: 16,
-        },
-        sectionCard: {
-            backgroundColor: colors.surface,
-            borderRadius: 24,
-            marginBottom: 20,
-            flexDirection: 'row',
-            overflow: 'hidden',
-            shadowColor: colors.cardShadow,
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: isDark ? 0.3 : 0.05,
-            shadowRadius: 15,
-            elevation: 4,
-            borderWidth: isDark ? 1 : 0,
-            borderColor: colors.border,
-        },
-        cardContent: {
-            flex: 1,
-            padding: 20,
-        },
-        sectionHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-            marginBottom: 16,
-        },
-        sectionTitle: {
-            fontSize: 18,
-            fontWeight: '800',
-            color: colors.text,
-            letterSpacing: -0.5,
-        },
-        sectionSubtitle: {
-            fontSize: 12,
-            color: colors.textSecondary,
-            fontWeight: '600',
-        },
-        infoLabel: {
-            fontSize: 13,
-            color: colors.textSecondary,
-            fontWeight: '600',
-        },
-        infoValue: {
-            fontSize: 14,
-            color: colors.text,
-            fontWeight: '700',
-            textAlign: 'right',
-        },
-        paymentTermCard: {
-            backgroundColor: colors.surfaceSecondary,
-            borderRadius: 20,
-            padding: 16,
-            marginBottom: 12,
-        },
-        paymentTermHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-        },
-        paymentTermTitle: {
-            fontSize: 14,
-            fontWeight: '800',
-            color: colors.text,
-        },
-        portionBadge: {
-            backgroundColor: colors.primary + '15',
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 8,
-        },
-        portionText: {
-            fontSize: 12,
-            fontWeight: '800',
-            color: colors.primary,
-        },
-        paymentGrid: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-        },
-        paymentGridItem: {
-            flex: 1,
-        },
-        paymentGridLabel: {
-            fontSize: 10,
-            color: colors.textSecondary,
-            fontWeight: '700',
-            textTransform: 'uppercase',
-            marginBottom: 4,
-        },
-        paymentGridValue: {
-            fontSize: 14,
-            fontWeight: '800',
-            color: colors.text,
-        },
-        outstandingRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            paddingTop: 12,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-        },
-        outstandingLabel: {
-            fontSize: 12,
-            color: '#EF5350',
-            fontWeight: '700',
-        },
-        outstandingValue: {
-            fontSize: 12,
-            color: '#EF5350',
-            fontWeight: '800',
-        },
-        // Compact Refined Styles
-        statusRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: 16,
-        },
-        whiteStatusPill: {
-            backgroundColor: '#FFF',
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 20,
-            gap: 6,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 2,
-        },
-        whiteStatusText: {
-            color: '#0288D1',
-            fontSize: 13,
-            fontWeight: '800',
-        },
-        customerNameMain: {
-            fontSize: 24,
-            fontWeight: '900',
-            color: '#FFF',
-            marginBottom: 4,
-            letterSpacing: -0.5,
-        },
-        companyNameSub: {
-            fontSize: 15,
-            color: 'rgba(255,255,255,0.9)',
-            fontWeight: '700',
-        },
-        stickyHeader: {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 30,
-            height: 110,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingTop: 50,
-            paddingHorizontal: 20,
-        },
-        stickyHeaderBg: {
-            ...StyleSheet.absoluteFillObject,
-            backgroundColor: statusColor,
-        },
-        miniHeaderContainer: {
-            position: 'absolute',
-            left: 60,
-            right: 100,
-            top: 40,
-            bottom: 0,
-            justifyContent: 'center',
-        },
-        miniHeaderTitle: {
-            color: '#FFF',
-            fontSize: 17,
-            fontWeight: '800',
-        },
-        miniHeaderSubtitle: {
-            color: 'rgba(255,255,255,0.8)',
-            fontSize: 11,
-            fontWeight: '700',
-        },
-        fixedHeaderActions: {
-            flexDirection: 'row',
-            gap: 8,
-        },
-        orderNumberCardRefined: {
-            backgroundColor: '#FFF',
-            borderRadius: 20,
-            flexDirection: 'row',
-            overflow: 'hidden',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 10,
-            elevation: 3,
-        },
-        dateCardsRowRefined: {
-            flexDirection: 'row',
-            gap: 16,
-        },
-        dateCardRefined: {
-            flex: 1,
-            backgroundColor: '#FFF',
-            borderRadius: 20,
-            flexDirection: 'row',
-            overflow: 'hidden',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 10,
-            elevation: 3,
-        },
-        blueLeftAccent: {
-            width: 4,
-            backgroundColor: statusColor,
-        },
-        refinedCardPadding: {
-            padding: 16,
-            flex: 1,
-        },
-        refinedCardLabel: {
-            fontSize: 10,
-            fontWeight: '900',
-            color: '#94A3B8',
-            letterSpacing: 1,
-            marginBottom: 4,
-            textTransform: 'uppercase',
-        },
-        refinedCardValue: {
-            fontSize: 16,
-            fontWeight: '800',
-            color: '#1E293B',
-        },
-        refinedLabelRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            marginBottom: 4,
-        },
-        heroAmountCardRefined: {
-            backgroundColor: '#00D4B1',
-            borderRadius: 24,
-            padding: 24,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            shadowColor: '#00D4B1',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.2,
-            shadowRadius: 15,
-            elevation: 8,
-        },
-        heroAmountContent: {
-            flex: 1,
-        },
-        heroAmountLabel: {
-            fontSize: 14,
-            fontWeight: '700',
-            color: '#FFF',
-            opacity: 0.9,
-            marginBottom: 4,
-        },
-        heroAmountValue: {
-            fontSize: 34,
-            fontWeight: '900',
-            color: '#FFF',
-            letterSpacing: -1,
-        },
-        heroIconBadge: {
-            width: 56,
-            height: 56,
-            backgroundColor: 'rgba(255,255,255,0.2)',
-            borderRadius: 16,
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        refinedInfoGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 12,
-            marginTop: 8,
-        },
-        infoTile: {
-            flex: 1,
-            minWidth: '45%',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
-            padding: 12,
-            borderRadius: 12,
-            borderLeftWidth: 3,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 4,
-            elevation: 1,
-        },
-        infoTileHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 8,
-        },
-        infoTileLabel: {
-            fontSize: 10,
-            fontWeight: '900',
-            color: '#94A3B8',
-            letterSpacing: 0.5,
-            textTransform: 'uppercase',
-        },
-        infoTileValue: {
-            fontSize: 14,
-            fontWeight: '800',
-            color: colors.text,
-        },
-        refinedInfoDivider: {
-            height: 1,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
-        },
-        // Restored Section Styles
-        summaryList: {
-            gap: 12,
-            marginBottom: 20,
-        },
-        summaryRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-        },
-        summaryLabel: {
-            fontSize: 14,
-            color: colors.textSecondary,
-            fontWeight: '600',
-        },
-        summaryValue: {
-            fontSize: 15,
-            color: colors.text,
-            fontWeight: '800',
-        },
-        grandTotalBanner: {
-            marginTop: 16,
-            height: 80,
-            position: 'relative',
-        },
-        grandTotalSvg: {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-        },
-        grandTotalContent: {
-            paddingHorizontal: 20,
-            height: 80,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-        },
-        grandTotalLabel: {
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.7)',
-            fontWeight: '900',
-            letterSpacing: 1,
-            marginBottom: 4,
-        },
-        grandTotalAmount: {
-            fontSize: 24,
-            color: '#FFF',
-            fontWeight: '900',
-        },
-        grandTotalIcon: {
-            opacity: 0.3,
-        },
-        itemsSection: {
-            paddingHorizontal: 16,
-            marginTop: 32,
-            marginBottom: 24,
-        },
-        itemsHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 20,
-            paddingHorizontal: 4,
-        },
-        itemsTitle: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-        },
-        headerIconBox: {
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        itemsSectionTitle: {
-            fontSize: 20,
-            fontWeight: '900',
-            color: colors.text,
-            letterSpacing: -0.5,
-        },
-        itemsSectionSubtitle: {
-            fontSize: 12,
-            color: colors.textSecondary,
-            fontWeight: '600',
-        },
-        itemCountBadge: {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 8,
-        },
-        itemCountText: {
-            fontSize: 12,
-            fontWeight: '800',
-        },
-        itemCard: {
-            backgroundColor: colors.surface,
-            borderRadius: 24,
-            marginBottom: 16,
-            padding: 16,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: isDark ? 0.3 : 0.05,
-            shadowRadius: 12,
-            elevation: 5,
-        },
-        itemMain: {
-            flex: 1,
-        },
-        itemHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: 16,
-            gap: 12,
-        },
-        itemIndex: {
-            width: 32,
-            height: 32,
-            borderRadius: 10,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        itemIndexText: {
-            fontSize: 12,
-            fontWeight: '900',
-            color: colors.textSecondary,
-        },
-        itemNameContainer: {
-            flex: 1,
-        },
-        itemName: {
-            fontSize: 15,
-            fontWeight: '800',
-            color: colors.text,
-            marginBottom: 4,
-        },
-        skuRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-        },
-        skuText: {
-            fontSize: 11,
-            color: colors.textSecondary,
-            fontWeight: '700',
-            textTransform: 'uppercase',
-        },
-        metaDot: {
-            width: 3,
-            height: 3,
-            borderRadius: 1.5,
-            backgroundColor: colors.border,
-        },
-        brandText: {
-            fontSize: 11,
-            color: colors.primary,
-            fontWeight: '800',
-        },
-        itemDetails: {
-            flexDirection: 'row',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
-            borderRadius: 16,
-            padding: 12,
-            justifyContent: 'space-between',
-        },
-        detailBox: {
-            flex: 1,
-            alignItems: 'center',
-        },
-        detailLabel: {
-            fontSize: 9,
-            color: colors.textSecondary,
-            fontWeight: '800',
-            textTransform: 'uppercase',
-            marginBottom: 4,
-        },
-        detailValue: {
-            fontSize: 13,
-            fontWeight: '700',
-            color: colors.text,
-        },
-        detailDivider: {
-            width: 1,
-            height: '100%',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#E2E8F0',
-        },
-        actionSection: {
-            padding: 16,
-            marginBottom: 40,
-        },
-        actionGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 12,
-        },
-        actionBtn: {
-            flex: 1,
-            minWidth: '45%',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 14,
-            borderRadius: 18,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 3,
-        },
-        btnPrimary: { backgroundColor: '#0277BD' },
-        btnSuccess: { backgroundColor: '#00BFA5' },
-        btnDanger: { backgroundColor: '#C62828' },
-        btnWarning: { backgroundColor: '#F4511E' },
-        btnText: {
-            color: '#FFF',
-            fontSize: 14,
-            fontWeight: '800',
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-        },
+    fixedHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 115,
+        zIndex: 10,
+        paddingTop: 60,
+    },
+    headerBlock: {
+        position: 'relative',
+        paddingTop: 100,
+        paddingBottom: 70,
+        borderBottomLeftRadius: 40,
+        borderBottomRightRadius: 40,
+        paddingHorizontal: 24,
+        zIndex: 5,
+    },
+    backButtonCircle: {
+        position: 'absolute',
+        top: 60,
+
+        left: 20,
+        zIndex: 11,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    printButtonCircle: {
+        position: 'absolute',
+        top: 60,
+        right: 20,
+        zIndex: 11,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    headerTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+    },
+    iconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#FFF',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    headerMainInfo: {
+        marginTop: 10,
+        alignItems: 'flex-start',
+    },
+    headerBadgeLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginBottom: 16,
+    },
+    headerBadgeText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '900',
+        textTransform: 'uppercase',
+    },
+    headerCustomerName: {
+        fontSize: 26,
+        fontWeight: '900',
+        color: '#FFF',
+        marginBottom: 8,
+        textAlign: 'left',
+        letterSpacing: -0.5,
+    },
+    headerId: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.8)',
+        fontWeight: '800',
+        textAlign: 'left',
+    },
+    // Original styles
+    orderNumberCard: { backgroundColor: c.surface, borderRadius: 24, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.4 : 0.08, shadowRadius: 20, elevation: 5, borderWidth: isDark ? 1 : 0, borderColor: c.border },
+    cardAccent: { height: 4, backgroundColor: c.surfaceVariant, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+    orderNumberLabel: { fontSize: 11, fontWeight: '800', color: c.textSecondary, marginBottom: 4, letterSpacing: 0.5 },
+    orderNumberValue: { fontSize: 18, fontWeight: '900', color: c.text, flexShrink: 1 },
+    contentContainer: { paddingHorizontal: 20, zIndex: 10 },
+    infoRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+    infoCard: { flex: 1, backgroundColor: c.surface, borderRadius: 20, padding: 16, borderLeftWidth: 4, borderLeftColor: c.success, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.3 : 0.05, shadowRadius: 10, elevation: 3, borderTopWidth: isDark ? 1 : 0, borderRightWidth: isDark ? 1 : 0, borderBottomWidth: isDark ? 1 : 0, borderColor: c.border },
+    infoLabel: { fontSize: 10, fontWeight: '800', color: c.textSecondary, marginTop: 8 },
+    infoValue: { fontSize: 16, fontWeight: '900', color: c.text, marginTop: 2 },
+    sectionCard: { backgroundColor: c.surface, borderRadius: 32, padding: 24, marginBottom: 24, borderWidth: isDark ? 1 : 0, borderColor: c.border },
+    grandTotalCard: { height: 120, borderRadius: 32, overflow: 'hidden', marginBottom: 20 },
+    grandTotalContent: { flex: 1, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    grandTotalLabel: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: 4 },
+    grandTotalValue: { fontSize: 36, fontWeight: '900', color: '#FFF' },
+
+    // New Styles
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
+    iconContainer: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    sectionTitleText: { fontSize: 18, fontWeight: '900', color: c.text },
+    sectionSubtitleText: { fontSize: 12, color: c.textSecondary, fontWeight: '600' },
+    gridContainer: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+    gridColumn: { flex: 1, gap: 12 },
+    gridItem: { backgroundColor: c.surfaceSecondary, borderRadius: 16, padding: 12, borderLeftWidth: 3, borderLeftColor: c.success, flex: 1, minWidth: '45%' },
+    gridLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.5, marginBottom: 4 },
+    gridValue: { fontSize: 14, fontWeight: '900', color: c.text },
+    itemCountBadge: { backgroundColor: c.surfaceSecondary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginLeft: 'auto' },
+    itemCountText: { fontSize: 12, fontWeight: '800', color: c.textSecondary },
+    itemBoxNew: { backgroundColor: c.surface, borderRadius: 24, overflow: 'hidden', marginBottom: 20, borderWidth: 1, borderColor: c.border },
+    itemHeaderNew: { flexDirection: 'row', gap: 12, alignItems: 'center', padding: 16 },
+    itemBadgeNew: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center' },
+    itemBadgeTextNew: { fontSize: 12, fontWeight: '900', color: c.textSecondary },
+    itemNameNew: { fontSize: 16, fontWeight: '900', color: c.text, marginBottom: 2 },
+    itemCodeNew: { fontSize: 12, color: c.textSecondary, fontWeight: '800', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+    itemFooterNew: { flexDirection: 'row', backgroundColor: c.surfaceSecondary, padding: 12 },
+    marginInfoChildRow: {
+        flexDirection: 'row',
+        backgroundColor: tint('#ECFDF5', 'rgba(16, 185, 129, 0.12)'),
+        padding: 12,
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        borderTopWidth: 1,
+        borderTopColor: tint('#D1FAE5', 'rgba(16, 185, 129, 0.25)'),
+    },
+    marginSpec: {
+        flex: 1,
+        borderRightWidth: 1,
+        borderRightColor: tint('#D1FAE5', 'rgba(16, 185, 129, 0.25)'),
+        paddingHorizontal: 6,
+    },
+    marginSpecLabel: {
+        fontSize: 9,
+        fontWeight: '800',
+        color: isDark ? '#34D399' : '#059669',
+        marginBottom: 2,
+    },
+    marginSpecValue: {
+        fontSize: 13,
+        fontWeight: '900',
+        color: isDark ? '#6EE7B7' : '#047857',
+    },
+    footerColumn: { flex: 1, alignItems: 'center' },
+    footerLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, marginBottom: 4 },
+    footerValue: { fontSize: 14, fontWeight: '900', color: c.text },
+    dividerLine: { width: 1, height: 20, backgroundColor: c.border, alignSelf: 'center' },
+    summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    summaryLabel: { fontSize: 14, fontWeight: '800', color: c.textSecondary },
+    summaryValue: { fontSize: 16, fontWeight: '900', color: c.text },
+    milestoneItem: { backgroundColor: c.surfaceSecondary, borderRadius: 24, padding: 16, marginBottom: 16 },
+    milestoneHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    milestoneTitle: { fontSize: 14, fontWeight: '800', color: c.text },
+    portionBadge: { backgroundColor: tint('#DBEAFE', 'rgba(59, 130, 246, 0.18)'), paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    portionText: { fontSize: 11, fontWeight: '800', color: isDark ? '#60A5FA' : '#3B82F6' },
+    milestoneDetails: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+    milestoneLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, marginBottom: 2 },
+    milestoneValue: { fontSize: 14, fontWeight: '900', color: c.text },
+    milestoneValueBlue: { fontSize: 16, fontWeight: '900', color: isDark ? '#60A5FA' : '#3B82F6' },
+    milestoneFooter: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12, flexDirection: 'row', justifyContent: 'space-between' },
+    milestoneStatus: { fontSize: 11, fontWeight: '800', color: '#EF4444' },
+    milestoneStatusAmount: { fontSize: 11, fontWeight: '800', color: '#EF4444' },
+
+    // Animation & Toolbar Styles
+    toolbarContainer: {
+        position: 'absolute',
+        bottom: 12,
+        left: 60,
+        right: 60,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8
+    },
+    toolbarTitle: { fontSize: 16, fontWeight: '900', color: '#FFF' },
+    toolbarStatus: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+    gridItemOrange: { backgroundColor: tint('#FFF7ED', 'rgba(249, 115, 22, 0.14)'), borderRadius: 16, padding: 12, borderLeftWidth: 3, borderLeftColor: '#F97316', flex: 1 },
+    marginBadge: { backgroundColor: tint('#D1FAE5', 'rgba(16, 185, 129, 0.18)'), paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+    marginBadgeText: { fontSize: 9, fontWeight: '900', color: isDark ? '#34D399' : '#059669' },
+    actionFooter: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        // paddingBottom is applied inline from the safe-area inset.
+        gap: 12,
+        borderTopWidth: 1,
+        borderTopColor: c.border,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: isDark ? 0.5 : 0.1,
+        shadowRadius: 10
+    },
+    actionButton: {
+        flex: 1,
+        flexDirection: 'row',
+        height: 54,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    actionButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '900',
+    }
     });
-}
+};

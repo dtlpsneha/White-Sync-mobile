@@ -4,6 +4,7 @@
     },
     "build": {
         "development": {
+            "channel": "development",
             "developmentClient": true,
             "distribution": "internal",
             "android": {
@@ -11,13 +12,22 @@
             }
         },
         "preview": {
+            "channel": "preview",
             "distribution": "internal",
             "android": {
                 "buildType": "apk",
                 "image": "latest"
+            },
+            "env": {
+                "ORG_GRADLE_PROJECT_reactNativeArchitectures": "armeabi-v7a,arm64-v8a"
             }
         },
-        "production": {}
+        "production": {
+            "channel": "production",
+            "env": {
+                "ORG_GRADLE_PROJECT_reactNativeArchitectures": "armeabi-v7a,arm64-v8a"
+            }
+        }
     },
     "submit": {
         "production": {}
