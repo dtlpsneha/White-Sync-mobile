@@ -171,10 +171,14 @@ export default function HomeScreen() {
 
         const start = () => {
             if (interval) return;
+            // Was 30s — on a live server with frequent real quotation activity,
+            // that meant a fresh network request plus a burst of separate
+            // notifications every half-minute. 3 minutes keeps the dashboard
+            // reasonably current without hammering battery/network.
             interval = setInterval(() => {
                 fetchStats();
                 checkForNewPending(false);
-            }, 30000);
+            }, 180000);
         };
 
         const stop = () => {
@@ -334,7 +338,13 @@ export default function HomeScreen() {
                 // Skip notifications on initial load to avoid "Dashboard Notification" annoyance
                 if (previousIds.length > 0 && !isInitialLoad) {
                     const newQuotes = quotes.filter((q: any) => !previousIds.includes(q.name));
-                    for (const quote of newQuotes) {
+                    // A live server can surface several genuinely new quotations in one
+                    // poll (real sales activity, not a dedup bug) — one notification per
+                    // quote turned into a burst of popups. Batch them into a single
+                    // notification instead; only fall back to the detailed single-quote
+                    // message when there's exactly one.
+                    if (newQuotes.length === 1) {
+                        const quote = newQuotes[0];
                         const formattedAmount = quote.grand_total
                             ? `${quote.currency || ''} ${Number(quote.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                             : '';
@@ -342,6 +352,15 @@ export default function HomeScreen() {
                             `📄 New Quotation`,
                             `${quote.customer_name} quotation of ${formattedAmount} for approval.`,
                             { id: quote.name },
+                            "QUOTATION_WORKFLOW"
+                        );
+                    } else if (newQuotes.length > 1) {
+                        const names = newQuotes.slice(0, 2).map((q: any) => q.customer_name).join(', ');
+                        const rest = newQuotes.length - 2;
+                        await notificationService.postLocalNotification(
+                            `📄 ${newQuotes.length} New Quotations`,
+                            `${names}${rest > 0 ? ` and ${rest} more` : ''} for approval.`,
+                            { ids: newQuotes.map((q: any) => q.name) },
                             "QUOTATION_WORKFLOW"
                         );
                     }
@@ -527,6 +546,60 @@ export default function HomeScreen() {
                                         <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Habasit Calculator</Text>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
                                             <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>Calculate Price</Text>
+                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            </Animated.View>
+
+                            {/* Daily Sales Report Card */}
+                            <Animated.View
+                                key="daily-sales-report"
+                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 3)).springify()}
+                                style={[styles.statusCard, { backgroundColor: '#F59E0B' }]} // Amber for Daily Sales Report
+                            >
+                                <TouchableOpacity
+                                    style={styles.cardContent}
+                                    onPress={() => router.push('/daily-sales-report')}
+                                >
+                                    <View style={styles.statusHeader}>
+                                        <Text style={styles.statusTitle}>Daily Sales Report</Text>
+                                        <View style={styles.statusIconContainer}>
+                                            <Ionicons name="bar-chart-outline" size={ms(18)} color="#FFF" />
+                                        </View>
+                                    </View>
+                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Ionicons name="bar-chart" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
+                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Sales &amp; Collection</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>View Report</Text>
+                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            </Animated.View>
+
+                            {/* Sales Invoice History Card */}
+                            <Animated.View
+                                key="sales-invoice-history"
+                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 4)).springify()}
+                                style={[styles.statusCard, { backgroundColor: '#0891B2' }]} // Cyan for Sales Invoice History
+                            >
+                                <TouchableOpacity
+                                    style={styles.cardContent}
+                                    onPress={() => router.push('/daily-sales-report/invoice-history')}
+                                >
+                                    <View style={styles.statusHeader}>
+                                        <Text style={styles.statusTitle}>Invoice History</Text>
+                                        <View style={styles.statusIconContainer}>
+                                            <Ionicons name="receipt-outline" size={ms(18)} color="#FFF" />
+                                        </View>
+                                    </View>
+                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Ionicons name="receipt" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
+                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Sales Invoice History</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>View Invoices</Text>
                                             <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
                                         </View>
                                     </View>
