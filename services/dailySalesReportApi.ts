@@ -97,6 +97,28 @@ const failure = (error: string): { ok: false; error: string } => ({ ok: false, e
 const session = () => SecureStore.getItemAsync('session_cookies');
 
 /**
+ * These four accounts are restricted server-side (in the "Get Daily Report
+ * Summary" / "Get Sales Invoice History Data" Server Scripts) to only ever
+ * see their own data, regardless of what Sales Executive filter is
+ * requested — that's the real enforcement, not this. This mirror exists so
+ * the mobile UI can pre-fill their own name and hide the picker for them,
+ * since letting them "choose" another executive would visibly do nothing.
+ */
+export const RESTRICTED_EXECUTIVE_NAMES: Record<string, string> = {
+    'sales1@whitenco.net': 'N.Purushothaman',
+    'sales2@whitenco.net': 'V.Nagaraj',
+    'sales3@whitenco.net': 'S.P.Pandiyan',
+    'sales4@whitenco.net': 'S.Manikandan',
+};
+
+/** Returns the logged-in user's own Approving Authority display name if they're one of the four restricted executives, else null. */
+export async function getOwnRestrictedExecutiveName(): Promise<string | null> {
+    const userId = await SecureStore.getItemAsync('user_id');
+    if (!userId) return null;
+    return RESTRICTED_EXECUTIVE_NAMES[userId] || null;
+}
+
+/**
  * Server brand value -> display label. Mirrors BRAND_LABELS in the ERPNext
  * "Daily Sales Report" Client Script so the mobile view matches the desktop
  * dashboard exactly (most brand codes are already human-readable and pass

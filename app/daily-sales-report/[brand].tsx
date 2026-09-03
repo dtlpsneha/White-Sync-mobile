@@ -12,8 +12,11 @@ import { DailySummaryRow, brandLabel, getDailySummary } from '@/services/dailySa
 const NAVY = '#0E1E3B';
 const DANGER = '#DC3545';
 
-function formatAmount(value: number | undefined) {
-    const n = (value || 0) / 100000;
+type DisplayUnit = 'absolute' | 'lacs';
+
+function formatAmount(value: number | undefined, display: DisplayUnit) {
+    const divisor = display === 'lacs' ? 100000 : 1;
+    const n = (value || 0) / divisor;
     return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -29,12 +32,15 @@ const BreakdownRow = ({ label, caption, value, alt, colors, styles }: any) => (
 
 export default function BrandDetailScreen() {
     const router = useRouter();
-    const params = useLocalSearchParams<{ brand: string; fiscalYear: string; month: string; date: string; salesExecutive?: string }>();
+    const params = useLocalSearchParams<{ brand: string; fiscalYear: string; month: string; date: string; salesExecutive?: string; display?: string }>();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const { s, vs, ms } = useResponsive();
     const styles = useMemo(() => getStyles({ s, vs, ms }), [s, vs, ms]);
+
+    const display: DisplayUnit = params.display === 'absolute' ? 'absolute' : 'lacs';
+    const unitSuffix = display === 'lacs' ? ' L' : '';
 
     const [row, setRow] = useState<DailySummaryRow | null>(null);
     const [loading, setLoading] = useState(true);
@@ -61,9 +67,9 @@ export default function BrandDetailScreen() {
         const name = brandLabel(row.brand);
         const message =
             `${name} — Daily Sales Report\n\n` +
-            `Total Sales (Up to Date): ₹${formatAmount(row.sales_mtd)} L\n` +
-            `Total Collection (Up to Date): ₹${formatAmount(row.collection_mtd)} L\n` +
-            `Payment Pending: ₹${formatAmount(row.payment_pending)} L\n\n` +
+            `Total Sales (Up to Date): ₹${formatAmount(row.sales_mtd, display)}${unitSuffix}\n` +
+            `Total Collection (Up to Date): ₹${formatAmount(row.collection_mtd, display)}${unitSuffix}\n` +
+            `Payment Pending: ₹${formatAmount(row.payment_pending, display)}${unitSuffix}\n\n` +
             `As on ${params.date}`;
         try {
             await Share.share({ message });
@@ -102,7 +108,7 @@ export default function BrandDetailScreen() {
                                 <Ionicons name="warning-outline" size={15} color={DANGER} />
                             </View>
                         </View>
-                        <Text style={[styles.statValue, { color: DANGER }]}>₹{formatAmount(row.payment_pending)} L</Text>
+                        <Text style={[styles.statValue, { color: DANGER }]}>₹{formatAmount(row.payment_pending, display)}{unitSuffix}</Text>
                         <Text style={[styles.statCaption, { color: '#7A2020' }]}>Requires immediate attention</Text>
                     </View>
 
@@ -111,9 +117,9 @@ export default function BrandDetailScreen() {
                         <Text style={[styles.sectionHeaderText, { color: colors.text }]}>Sales Breakdown</Text>
                     </View>
                     <View style={[styles.breakdownList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        <BreakdownRow label="As On" caption="Today's figures" value={`₹${formatAmount(row.sales_as_on)} L`} colors={colors} styles={styles} />
-                        <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.sales_mtd)} L`} alt colors={colors} styles={styles} />
-                        <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.sales_fytd)} L`} colors={colors} styles={styles} />
+                        <BreakdownRow label="As On Date" caption="Today's figures" value={`₹${formatAmount(row.sales_as_on, display)}${unitSuffix}`} colors={colors} styles={styles} />
+                        <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.sales_mtd, display)}${unitSuffix}`} alt colors={colors} styles={styles} />
+                        <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.sales_fytd, display)}${unitSuffix}`} colors={colors} styles={styles} />
                     </View>
 
                     <View style={[styles.sectionHeader, { backgroundColor: colors.surfaceSecondary }]}>
@@ -121,9 +127,9 @@ export default function BrandDetailScreen() {
                         <Text style={[styles.sectionHeaderText, { color: colors.text }]}>Collection Breakdown</Text>
                     </View>
                     <View style={[styles.breakdownList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        <BreakdownRow label="As On" caption="Today's figures" value={`₹${formatAmount(row.collection_as_on)} L`} colors={colors} styles={styles} />
-                        <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.collection_mtd)} L`} alt colors={colors} styles={styles} />
-                        <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.collection_fytd)} L`} colors={colors} styles={styles} />
+                        <BreakdownRow label="As On Date" caption="Today's figures" value={`₹${formatAmount(row.collection_as_on, display)}${unitSuffix}`} colors={colors} styles={styles} />
+                        <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.collection_mtd, display)}${unitSuffix}`} alt colors={colors} styles={styles} />
+                        <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.collection_fytd, display)}${unitSuffix}`} colors={colors} styles={styles} />
                     </View>
 
                     <TouchableOpacity style={[styles.shareBtn, { backgroundColor: NAVY }]} onPress={onShare}>

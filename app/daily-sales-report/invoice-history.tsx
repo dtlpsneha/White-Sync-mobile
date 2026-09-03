@@ -28,6 +28,7 @@ import {
     SalesExecutive,
     brandLabel,
     getFiscalYears,
+    getOwnRestrictedExecutiveName,
     getSalesExecutives,
     getSalesInvoiceHistory,
     getUsedBrands,
@@ -188,7 +189,18 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, colors
     );
 }
 
-const InvoiceCard = ({ item, colors, styles }: { item: InvoiceHistoryRow; colors: any; styles: any }) => {
+/**
+ * With a full fiscal year or a wide date range, the server can return
+ * thousands of rows (backend cap is 5000 — see the "truncated" banner
+ * below). Mounting that many heavy card views in one synchronous React
+ * pass is what actually caused the lag: the JS thread blocks right when
+ * the data arrives, so the screen looks frozen/stuck rather than the
+ * network being slow. Rendering rows in capped batches — more revealed as
+ * the user scrolls near the bottom — keeps each render pass small.
+ */
+const PAGE_SIZE = 30;
+
+const InvoiceCard = React.memo(function InvoiceCard({ item, colors, styles }: { item: InvoiceHistoryRow; colors: any; styles: any }) {
     const paid = item.payment_status === 'Payment Paid';
     return (
         <View style={[styles.invoiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -218,7 +230,7 @@ const InvoiceCard = ({ item, colors, styles }: { item: InvoiceHistoryRow; colors
             </View>
         </View>
     );
-};
+});
 
 export default function InvoiceHistoryScreen() {
     const router = useRouter();
@@ -232,6 +244,9 @@ export default function InvoiceHistoryScreen() {
     const [executives, setExecutives] = useState<SalesExecutive[]>([]);
     const [brands, setBrands] = useState<string[]>([]);
     const [ready, setReady] = useState(false);
+    // Non-null only for the four restricted executives — their own name,
+    // pre-filled and locked (see the real enforcement server-side).
+    const [ownExecutiveName, setOwnExecutiveName] = useState<string | null>(null);
 
     const [fiscalYear, setFiscalYear] = useState('');
     const [month, setMonth] = useState('April');
@@ -259,12 +274,19 @@ export default function InvoiceHistoryScreen() {
     const [showToPicker, setShowToPicker] = useState(false);
     const [picker, setPicker] = useState<PickerState>(EMPTY_PICKER);
 
+    // How many rows are actually mounted right now — see the PAGE_SIZE note
+    // above InvoiceCard. Reset to the first page whenever a new result set
+    // comes in.
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    useEffect(() => { setVisibleCount(PAGE_SIZE); }, [history]);
+
     useEffect(() => {
         (async () => {
-            const [fyRes, execRes, brandRes] = await Promise.all([getFiscalYears(), getSalesExecutives(), getUsedBrands()]);
+            const [fyRes, execRes, brandRes, ownName] = await Promise.all([getFiscalYears(), getSalesExecutives(), getUsedBrands(), getOwnRestrictedExecutiveName()]);
             const list = fyRes.ok ? fyRes.data : [];
+            const execList = execRes.ok ? execRes.data : [];
             setFiscalYears(list);
-            if (execRes.ok) setExecutives(execRes.data);
+            setExecutives(execList);
             if (brandRes.ok) setBrands(brandRes.data);
 
             const t = today();
@@ -273,6 +295,14 @@ export default function InvoiceHistoryScreen() {
             setMonth(monthFromDate(t));
             setFromDate(t.slice(0, 8) + '01');
             setToDate(t);
+
+            if (ownName) {
+                setOwnExecutiveName(ownName);
+                const ownId = execList.find(e => e.name === ownName)?.id || '';
+                setSalesExecutive(ownId);
+                setDraftSalesExecutive(ownId);
+            }
+
             setReady(true);
         })();
     }, []);
@@ -409,11 +439,15 @@ export default function InvoiceHistoryScreen() {
               * scrolling ancestor to be clipped by.
               */}
             <View style={{ zIndex: 20, backgroundColor: colors.background }}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8, paddingRight: s(18) }}>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: NAVY }]} onPress={openFiltersSheet}><Text style={styles.chipTextActive}>FY {fiscalYear}</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{month}</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ddmm(fromDate)} – {ddmm(toDate)}</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text></TouchableOpacity>
+                    {ownExecutiveName ? (
+                        <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName}</Text></View>
+                    ) : (
+                        <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text></TouchableOpacity>
+                    )}
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{brandLabelFor(brand)}</Text></TouchableOpacity>
                 </ScrollView>
 
@@ -433,6 +467,12 @@ export default function InvoiceHistoryScreen() {
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchHistory(true)} tintColor={colors.text} />}
+                onScroll={({ nativeEvent }) => {
+                    const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+                    const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
+                    if (nearBottom) setVisibleCount(c => Math.min(c + PAGE_SIZE, rows.length));
+                }}
+                scrollEventThrottle={200}
             >
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
@@ -463,7 +503,12 @@ export default function InvoiceHistoryScreen() {
                         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No invoices found for these filters</Text>
                     </View>
                 ) : (
-                    rows.map((row, idx) => <InvoiceCard key={`${row.invoice_no}-${idx}`} item={row} colors={colors} styles={styles} />)
+                    <>
+                        {rows.slice(0, visibleCount).map((row, idx) => <InvoiceCard key={`${row.invoice_no}-${idx}`} item={row} colors={colors} styles={styles} />)}
+                        {visibleCount < rows.length && (
+                            <ActivityIndicator size="small" color={NAVY} style={{ marginTop: vs(16) }} />
+                        )}
+                    </>
                 )}
             </ScrollView>
 
@@ -485,7 +530,17 @@ export default function InvoiceHistoryScreen() {
                             <FieldBlock label="Month" value={draftMonth} onPress={openMonthPicker} colors={colors} styles={styles} />
                             <FieldBlock label="From Date" value={draftFromDate} onPress={() => { setShowToPicker(false); setShowFromPicker(v => !v); }} colors={colors} styles={styles} />
                             <FieldBlock label="To Date" value={draftToDate} onPress={() => { setShowFromPicker(false); setShowToPicker(v => !v); }} colors={colors} styles={styles} />
-                            <FieldBlock label="Sales Executive" value={execLabel(draftSalesExecutive)} onPress={openExecPicker} colors={colors} styles={styles} />
+                            {ownExecutiveName ? (
+                                <View style={styles.fieldBlock}>
+                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Sales Executive</Text>
+                                    <View style={[styles.selectBox, { borderColor: colors.border }]}>
+                                        <Text style={[styles.selectValue, { color: colors.text }]}>{ownExecutiveName}</Text>
+                                        <Ionicons name="lock-closed" size={13} color={colors.textSecondary} />
+                                    </View>
+                                </View>
+                            ) : (
+                                <FieldBlock label="Sales Executive" value={execLabel(draftSalesExecutive)} onPress={openExecPicker} colors={colors} styles={styles} />
+                            )}
                             <FieldBlock label="Brand" value={brandLabelFor(draftBrand)} onPress={openBrandPicker} colors={colors} styles={styles} />
                         </View>
 

@@ -28,6 +28,7 @@ import {
     brandLabel,
     getDailySummary,
     getFiscalYears,
+    getOwnRestrictedExecutiveName,
     getSalesExecutives,
     sortSummaryRows,
 } from '@/services/dailySalesReportApi';
@@ -120,6 +121,9 @@ export default function DailySalesReportScreen() {
     const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>([]);
     const [executives, setExecutives] = useState<SalesExecutive[]>([]);
     const [ready, setReady] = useState(false);
+    // Non-null only for the four restricted executives — their own name,
+    // pre-filled and locked (see the real enforcement server-side).
+    const [ownExecutiveName, setOwnExecutiveName] = useState<string | null>(null);
 
     // Committed filters — drive the actual fetch.
     const [fiscalYear, setFiscalYear] = useState('');
@@ -151,10 +155,11 @@ export default function DailySalesReportScreen() {
 
     useEffect(() => {
         (async () => {
-            const [fyRes, execRes] = await Promise.all([getFiscalYears(), getSalesExecutives()]);
+            const [fyRes, execRes, ownName] = await Promise.all([getFiscalYears(), getSalesExecutives(), getOwnRestrictedExecutiveName()]);
             const list = fyRes.ok ? fyRes.data : [];
+            const execList = execRes.ok ? execRes.data : [];
             setFiscalYears(list);
-            if (execRes.ok) setExecutives(execRes.data);
+            setExecutives(execList);
 
             const y = yesterday();
             const currentFy = findCurrentFy(list, y) || list[0];
@@ -164,6 +169,14 @@ export default function DailySalesReportScreen() {
             setMonthOptions(opts);
             setMonth(defaultMonth);
             setDate(y);
+
+            if (ownName) {
+                setOwnExecutiveName(ownName);
+                const ownId = execList.find(e => e.name === ownName)?.id || '';
+                setSalesExecutive(ownId);
+                setDraftSalesExecutive(ownId);
+            }
+
             setReady(true);
         })();
     }, []);
@@ -276,7 +289,7 @@ export default function DailySalesReportScreen() {
     const goToBrand = (row: DailySummaryRow) => {
         router.push({
             pathname: '/daily-sales-report/[brand]',
-            params: { brand: row.brand, fiscalYear, month, date, salesExecutive },
+            params: { brand: row.brand, fiscalYear, month, date, salesExecutive, display },
         });
     };
 
@@ -320,16 +333,22 @@ export default function DailySalesReportScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8, paddingRight: s(18) }}>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: NAVY }]} onPress={openFiltersSheet}>
                         <Text style={styles.chipTextActive}>FY {fiscalYear}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}>
                         <Text style={[styles.chipText, { color: colors.textSecondary }]}>{month}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}>
-                        <Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text>
-                    </TouchableOpacity>
+                    {ownExecutiveName ? (
+                        <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}>
+                            <Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName}</Text>
+                        </View>
+                    ) : (
+                        <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}>
+                            <Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}>
                         <Text style={[styles.chipText, { color: colors.textSecondary }]}>{DISPLAY_LABELS[display]}</Text>
                     </TouchableOpacity>
@@ -475,7 +494,20 @@ export default function DailySalesReportScreen() {
                                 style={{ alignSelf: 'center', marginBottom: vs(14) }}
                             />
                         )}
-                        <FieldBlock full label="Sales Executive" value={execLabel(draftSalesExecutive)} onPress={openExecPicker} icon="people-outline" colors={colors} styles={styles} />
+                        {ownExecutiveName ? (
+                            <View style={styles.fieldBlockFull}>
+                                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Sales Executive</Text>
+                                <View style={[styles.selectBox, { borderColor: colors.border }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <Ionicons name="people-outline" size={15} color={colors.textSecondary} />
+                                        <Text style={[styles.selectValue, { color: colors.text }]}>{ownExecutiveName}</Text>
+                                    </View>
+                                    <Ionicons name="lock-closed" size={13} color={colors.textSecondary} />
+                                </View>
+                            </View>
+                        ) : (
+                            <FieldBlock full label="Sales Executive" value={execLabel(draftSalesExecutive)} onPress={openExecPicker} icon="people-outline" colors={colors} styles={styles} />
+                        )}
 
                         <View style={styles.fieldBlockFull}>
                             <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Display Unit</Text>
