@@ -73,6 +73,7 @@ export interface InvoiceHistoryRow {
     payment_status: string;
     profit: number;
     margin: number;
+    discount_percentage: number;
 }
 
 export interface InvoiceHistoryMeta {
@@ -208,6 +209,7 @@ export async function getSalesInvoiceHistory(params: {
     brand?: string;
     customer?: string;
     item?: string;
+    paymentStatus?: string;
 }): Promise<ApiResult<InvoiceHistory>> {
     try {
         const qs = new URLSearchParams({
@@ -219,6 +221,7 @@ export async function getSalesInvoiceHistory(params: {
             brand: params.brand || '',
             customer: params.customer || '',
             item: params.item || '',
+            payment_status: params.paymentStatus || '',
         });
         const res = await apiGet(apiUrl(`/api/method/get_sales_invoice_history_data?${qs.toString()}`), await session());
         if (!res.ok) return failure(`Server error (${res.status})`);

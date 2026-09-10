@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, TouchableOpacity, View, LayoutChangeEvent, Text } from 'react-native';
+import { Keyboard, Platform, StyleSheet, TouchableOpacity, View, LayoutChangeEvent, Text } from 'react-native';
 import Animated, { 
     useAnimatedStyle, 
     useSharedValue, 
@@ -24,6 +24,24 @@ export const FloatingNav = () => {
     const colors = Colors[theme];
     const insets = useSafeAreaInsets();
     const { ms } = useResponsive();
+
+    // The bar is position:absolute pinned to the screen bottom, so it doesn't move out of
+    // the way when the keyboard opens — it ends up floating in the middle of the screen,
+    // on top of whatever's above the keyboard (e.g. search results). Hiding it while the
+    // keyboard is open is simpler and more predictable than trying to reposition it above
+    // a keyboard whose height varies by device/IME. `Will` events give an earlier, smoother
+    // hide on iOS; Android only reliably fires the `Did` variants.
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+    useEffect(() => {
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+        const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+        const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     // Navigation Items with specific colors
     const navItems = useMemo(() => [
@@ -93,6 +111,8 @@ export const FloatingNav = () => {
             )
         };
     });
+
+    if (keyboardVisible) return null;
 
     return (
         <View style={[styles.container, { bottom: Math.max(insets.bottom, 20) + 10 }]}>

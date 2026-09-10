@@ -223,6 +223,7 @@ const InvoiceCard = React.memo(function InvoiceCard({ item, colors, styles }: { 
                 <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.invoice_total_value)}</Text></View>
                 <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Profit</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.profit)}</Text></View>
                 <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.margin)}</Text></View>
+                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Discount %</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.discount_percentage)}</Text></View>
             </View>
             <View style={styles.invoiceFoot}>
                 <Ionicons name="person-circle-outline" size={13} color={colors.textSecondary} />
@@ -256,6 +257,7 @@ export default function InvoiceHistoryScreen() {
     const [brand, setBrand] = useState('');
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [item, setItem] = useState<Item | null>(null);
+    const [paymentStatus, setPaymentStatus] = useState('');
 
     const [draftFiscalYear, setDraftFiscalYear] = useState('');
     const [draftMonth, setDraftMonth] = useState('April');
@@ -263,6 +265,7 @@ export default function InvoiceHistoryScreen() {
     const [draftToDate, setDraftToDate] = useState('');
     const [draftSalesExecutive, setDraftSalesExecutive] = useState('');
     const [draftBrand, setDraftBrand] = useState('');
+    const [draftPaymentStatus, setDraftPaymentStatus] = useState('');
 
     const [history, setHistory] = useState<InvoiceHistory | null>(null);
     const [loading, setLoading] = useState(true);
@@ -311,7 +314,7 @@ export default function InvoiceHistoryScreen() {
         if (!ready) return;
         fetchHistory();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ready, fiscalYear, month, fromDate, toDate, salesExecutive, brand, customer, item]);
+    }, [ready, fiscalYear, month, fromDate, toDate, salesExecutive, brand, customer, item, paymentStatus]);
 
     // Guards against out-of-order responses: if filters change again before an
     // in-flight request resolves, its response is discarded rather than
@@ -324,7 +327,7 @@ export default function InvoiceHistoryScreen() {
         setFetchError(null);
         const res = await getSalesInvoiceHistory({
             fiscalYear, month, fromDate, toDate, salesExecutive, brand,
-            customer: customer?.name, item: item?.name,
+            customer: customer?.name, item: item?.name, paymentStatus,
         });
         if (requestId !== requestIdRef.current) return;
         // On failure, clear the stale list rather than leaving the previous
@@ -346,6 +349,7 @@ export default function InvoiceHistoryScreen() {
         setDraftToDate(toDate);
         setDraftSalesExecutive(salesExecutive);
         setDraftBrand(brand);
+        setDraftPaymentStatus(paymentStatus);
         setShowFromPicker(false);
         setShowToPicker(false);
         setFiltersSheetVisible(true);
@@ -358,6 +362,7 @@ export default function InvoiceHistoryScreen() {
         setToDate(draftToDate);
         setSalesExecutive(draftSalesExecutive);
         setBrand(draftBrand);
+        setPaymentStatus(draftPaymentStatus);
         setShowFromPicker(false);
         setShowToPicker(false);
         setFiltersSheetVisible(false);
@@ -407,11 +412,34 @@ export default function InvoiceHistoryScreen() {
     const openMonthPicker = () => setPicker({ visible: true, title: 'Month', options: MONTHS.map(m => ({ label: m, value: m })), selectedValue: draftMonth, onSelect: onSelectDraftMonth });
     const openExecPicker = () => setPicker({ visible: true, title: 'Sales Executive', options: [{ label: 'All', value: '' }, ...executives.map(e => ({ label: e.name, value: e.id }))], selectedValue: draftSalesExecutive, onSelect: setDraftSalesExecutive });
     const openBrandPicker = () => setPicker({ visible: true, title: 'Brand', options: [{ label: 'All', value: '' }, ...brands.map(b => ({ label: brandLabel(b), value: b }))], selectedValue: draftBrand, onSelect: setDraftBrand });
+    const openPaymentStatusPicker = () => setPicker({
+        visible: true,
+        title: 'Payment Status',
+        options: [{ label: 'All', value: '' }, { label: 'Payment Pending', value: 'Payment Pending' }, { label: 'Payment Paid', value: 'Payment Paid' }],
+        selectedValue: draftPaymentStatus,
+        onSelect: setDraftPaymentStatus,
+    });
 
     const execLabel = (id: string) => executives.find(e => e.id === id)?.name || 'All';
     const brandLabelFor = (b: string) => (b ? brandLabel(b) : 'All');
+    const paymentStatusLabelFor = (p: string) => p || 'All';
 
-    const rows = history?.rows || [];
+    const rows = useMemo(() => history?.rows || [], [history]);
+
+    // Derived from whatever page of rows the server actually returned (capped at 5000,
+    // see `history.truncated`) — a client-side aggregate of already-fetched data, the
+    // same pattern app/home.tsx uses for quote totals, not a second network call.
+    const pendingSummary = useMemo(() => {
+        let count = 0;
+        let amount = 0;
+        for (const row of rows) {
+            if (row.payment_status === 'Payment Pending') {
+                count += 1;
+                amount += row.invoice_total_value;
+            }
+        }
+        return { count, amount };
+    }, [rows]);
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -449,6 +477,9 @@ export default function InvoiceHistoryScreen() {
                         <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text></TouchableOpacity>
                     )}
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{brandLabelFor(brand)}</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.chip, { backgroundColor: paymentStatus ? NAVY : colors.surfaceSecondary }]} onPress={openFiltersSheet}>
+                        <Text style={paymentStatus ? styles.chipTextActive : [styles.chipText, { color: colors.textSecondary }]}>{paymentStatusLabelFor(paymentStatus)}</Text>
+                    </TouchableOpacity>
                 </ScrollView>
 
                 <View style={styles.searchGrid}>
@@ -478,6 +509,16 @@ export default function InvoiceHistoryScreen() {
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
                     {history && <Text style={[styles.countNum, { color: NAVY }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
                 </View>
+
+                {history && pendingSummary.count > 0 && (
+                    <View style={[styles.pendingSummary, { backgroundColor: DANGER + '14', borderColor: DANGER + '30' }]}>
+                        <Ionicons name="alert-circle-outline" size={15} color={DANGER} />
+                        <Text style={{ color: DANGER, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                            {pendingSummary.count} pending · ₹{formatPlain(pendingSummary.amount)} outstanding
+                            {history.truncated ? ' (of rows shown — narrow filters for the full total)' : ''}
+                        </Text>
+                    </View>
+                )}
 
                 {history?.truncated && (
                     <View style={[styles.truncBanner, { backgroundColor: DANGER + '18' }]}>
@@ -542,6 +583,7 @@ export default function InvoiceHistoryScreen() {
                                 <FieldBlock label="Sales Executive" value={execLabel(draftSalesExecutive)} onPress={openExecPicker} colors={colors} styles={styles} />
                             )}
                             <FieldBlock label="Brand" value={brandLabelFor(draftBrand)} onPress={openBrandPicker} colors={colors} styles={styles} />
+                            <FieldBlock label="Payment Status" value={paymentStatusLabelFor(draftPaymentStatus)} onPress={openPaymentStatusPicker} colors={colors} styles={styles} />
                         </View>
 
                         {/*
@@ -629,6 +671,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         countNum: { fontSize: ms(11), fontWeight: '800' },
 
         truncBanner: { marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12) },
+        pendingSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12), borderWidth: 1 },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(60), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
