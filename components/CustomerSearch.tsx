@@ -16,7 +16,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -195,11 +195,21 @@ export function CustomerSearchResults({
                 </View>
             )}
 
-            {!state.searching &&
-                !state.error &&
-                state.results.map((item) => (
-                    <CustomerResultRow key={item.party_id} item={item} onPress={onSelect} />
-                ))}
+            {!state.searching && !state.error && state.results.length > 0 && (
+                // `maxHeight` on the panel View only clips overflow — it doesn't make the
+                // content scrollable. The ScrollView needs its own `maxHeight` to know when
+                // to start scrolling instead of just cutting rows off past the limit.
+                <ScrollView
+                    style={{ maxHeight }}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    {state.results.map((item) => (
+                        <CustomerResultRow key={item.party_id} item={item} onPress={onSelect} />
+                    ))}
+                </ScrollView>
+            )}
 
             {state.disambiguating && (
                 <Text style={[styles.tip, { color: colors.textSecondary, borderTopColor: colors.border }]}>

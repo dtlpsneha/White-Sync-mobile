@@ -542,7 +542,22 @@ export default function InvoiceHistoryScreen() {
     const brandLabelFor = (b: string) => (b ? brandLabel(b).toUpperCase() : 'All');
     const paymentStatusLabelFor = (p: string) => (p ? p : 'All');
 
-    const rows = history?.rows || [];
+    const rows = useMemo(() => history?.rows || [], [history]);
+
+    // Derived from whatever page of rows the server actually returned (capped at 5000,
+    // see `history.truncated`) — a client-side aggregate of already-fetched data, the
+    // same pattern app/home.tsx uses for quote totals, not a second network call.
+    const pendingSummary = useMemo(() => {
+        let count = 0;
+        let amount = 0;
+        for (const row of rows) {
+            if (row.payment_status === 'Payment Pending') {
+                count += 1;
+                amount += row.invoice_total_value;
+            }
+        }
+        return { count, amount };
+    }, [rows]);
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -602,7 +617,9 @@ export default function InvoiceHistoryScreen() {
                         <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text></TouchableOpacity>
                     )}
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{brandLabelFor(brand)}</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{paymentStatusLabelFor(paymentStatus)}</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.chip, { backgroundColor: paymentStatus ? NAVY : colors.surfaceSecondary }]} onPress={openFiltersSheet}>
+                        <Text style={paymentStatus ? styles.chipTextActive : [styles.chipText, { color: colors.textSecondary }]}>{paymentStatusLabelFor(paymentStatus)}</Text>
+                    </TouchableOpacity>
                 </ScrollView>
 
                 <View style={styles.searchGrid}>
@@ -633,6 +650,16 @@ export default function InvoiceHistoryScreen() {
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
                     {history && <Text style={[styles.countNum, { color: NAVY }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
                 </View>
+
+                {history && pendingSummary.count > 0 && (
+                    <View style={[styles.pendingSummary, { backgroundColor: DANGER + '14', borderColor: DANGER + '30' }]}>
+                        <Ionicons name="alert-circle-outline" size={15} color={DANGER} />
+                        <Text style={{ color: DANGER, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                            {pendingSummary.count} pending · ₹{formatPlain(pendingSummary.amount)} outstanding
+                            {history.truncated ? ' (of rows shown — narrow filters for the full total)' : ''}
+                        </Text>
+                    </View>
+                )}
 
                 {history?.truncated && (
                     <View style={[styles.truncBanner, { backgroundColor: DANGER + '18' }]}>
@@ -805,6 +832,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         countNum: { fontSize: ms(11), fontWeight: '800' },
 
         truncBanner: { marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12) },
+        pendingSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12), borderWidth: 1 },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(60), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },

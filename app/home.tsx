@@ -15,8 +15,12 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
+import { getDailySummary } from '../services/dailySalesReportApi';
 
 import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { QuickActionCard } from '@/components/dashboard/QuickActionCard';
+import { SectionHeader } from '@/components/dashboard/SectionHeader';
 import { FloatingNav } from '@/components/FloatingNav';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
@@ -27,6 +31,22 @@ import { useResponsive } from '../hooks/useResponsive';
 import { apiUrl } from '@/constants/config';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+/**
+ * Cancelled needs its own red, distinct from the theme's `danger` token — Review
+ * already uses `danger` (they're the same shade, `#F4511E`), and collapsing both onto
+ * one color would make two different statuses read as one on the dashboard.
+ */
+const CANCELLED_COLOR = '#C62828';
+
+/** Quick Action accent colors — used only as icon/chip tints now (see QuickActionCard),
+ * not full-tile backgrounds, so unlike the KpiCard colors these don't need theme tokens. */
+const QUICK_ACTION_COLORS = {
+    salesOrders: '#6366F1',
+    calculator: '#10B981',
+    dailySalesReport: '#F59E0B',
+    invoiceHistory: '#0891B2',
+};
 
 const DonutSegment = ({ center, radius, strokeWidth, color, percentage, rotation, progress }: any) => {
     const circumference = 2 * Math.PI * radius;
@@ -157,6 +177,12 @@ export default function HomeScreen() {
     const [isManager, setIsManager] = useState(false);
     const [hasSession, setHasSession] = useState(false);
 
+    const [paymentPending, setPaymentPending] = useState<{
+        outstanding: number;
+        collectionMtd: number;
+        salesMtd: number;
+    } | null>(null);
+
     useEffect(() => { loadData(); }, []);
 
     useEffect(() => {
@@ -179,6 +205,7 @@ export default function HomeScreen() {
             interval = setInterval(() => {
                 fetchStats();
                 checkForNewPending(false);
+                fetchPaymentPendingSummary();
             }, 180000);
         };
 
@@ -216,6 +243,7 @@ export default function HomeScreen() {
             }
             await fetchStats();
             await checkForNewPending(true);
+            await fetchPaymentPendingSummary();
         }
         setLoading(false);
     };
@@ -231,7 +259,7 @@ export default function HomeScreen() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([fetchStats(), checkForNewPending(false)]);
+        await Promise.all([fetchStats(), checkForNewPending(false), fetchPaymentPendingSummary()]);
         setRefreshing(false);
     };
 
@@ -313,6 +341,32 @@ export default function HomeScreen() {
             }
         } catch (error) {
             console.error('[Home] Fetch stats error:', error);
+        }
+    };
+
+    /**
+     * `get_daily_report_summary` (via `getDailySummary`) already computes an
+     * inception-to-date "payment pending" total server-side, with a fallback for native
+     * Sales Invoices that were never routed through the External Sales Invoice import
+     * pipeline — unlike `get_sales_invoice_history_data`, which has no such fallback. That
+     * makes this endpoint the safe, complete source for a dashboard-wide pending total;
+     * empty fiscalYear/month/date asks the server for its own defaults (as-on = yesterday,
+     * current FY/month), the same default view the desktop page shows.
+     */
+    const fetchPaymentPendingSummary = async () => {
+        try {
+            const result = await getDailySummary({ fiscalYear: '', month: '', date: '' });
+            if (result.ok) {
+                setPaymentPending({
+                    outstanding: result.data.totals.payment_pending,
+                    collectionMtd: result.data.totals.collection_mtd,
+                    salesMtd: result.data.totals.sales_mtd,
+                });
+            } else {
+                console.warn('[Home] Payment pending summary fetch failed:', result.error);
+            }
+        } catch (error) {
+            console.error('[Home] Payment pending summary fetch error:', error);
         }
     };
 
@@ -436,7 +490,11 @@ export default function HomeScreen() {
                             <AiSearchBar />
                         </View>
 
-                        <View style={styles.gridContainer}>
+                        <SectionHeader
+                            title="Quotations"
+                            subtitle="Live status overview — tap a card to filter"
+                        />
+                        <View style={styles.kpiGrid}>
                             {Object.keys(statsMap).map((statusKey, index) => {
                                 const status = statsMap[statusKey];
                                 const isPending = statusKey.toUpperCase() === 'PENDING';
@@ -444,11 +502,11 @@ export default function HomeScreen() {
                                 const isReview = statusKey.toUpperCase() === 'REVIEW' || statusKey.toUpperCase() === 'DECLINED';
                                 const isCancelled = statusKey.toUpperCase() === 'CANCELLED' || statusKey.toUpperCase() === 'REJECTED';
 
-                                const cardColor = isPending ? '#0277BD' :
-                                    isApproved ? '#00BFA5' :
-                                        isReview ? '#F4511E' :
-                                            isCancelled ? '#C62828' :
-                                                '#64748B'; // Default Slate for others
+                                const cardColor = isPending ? colors.info :
+                                    isApproved ? colors.success :
+                                        isReview ? colors.danger :
+                                            isCancelled ? CANCELLED_COLOR :
+                                                colors.secondary; // Default for any other status
 
                                 const iconName = isPending ? 'time-outline' :
                                     isApproved ? 'trending-up-outline' :
@@ -457,159 +515,27 @@ export default function HomeScreen() {
                                                 'document-text-outline';
 
                                 return (
-                                    <Animated.View
+                                    <KpiCard
                                         key={statusKey}
-                                        entering={FadeInDown.delay(100 * (index + 1)).springify()}
-                                        style={[styles.statusCard, { backgroundColor: cardColor }]}
-                                    >
-                                        <TouchableOpacity
-                                            style={styles.cardContent}
-                                            onPress={() => router.push({ pathname: '/quotations', params: { filter: statusKey } })}
-                                        >
-                                            <View style={styles.statusHeader}>
-                                                <Text style={styles.statusTitle}>{statusKey}</Text>
-                                                <View style={styles.statusIconContainer}>
-                                                    <Ionicons name={iconName as any} size={ms(18)} color="#FFF" />
-                                                </View>
-                                            </View>
-                                            <View style={styles.statusBody}>
-                                                <View style={styles.statRow}>
-                                                    <View style={styles.statLabelContainer}>
-                                                        <Ionicons name="document-text-outline" size={ms(14)} color="rgba(255,255,255,0.8)" />
-                                                        <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quotes</Text>
-                                                    </View>
-                                                    <Text style={styles.statValue} numberOfLines={1}>{status.quotes}</Text>
-                                                </View>
-                                                <View style={styles.statRow}>
-                                                    <View style={styles.statLabelContainer}>
-                                                        <Ionicons name="cash-outline" size={ms(14)} color="rgba(255,255,255,0.8)" />
-                                                        <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Values</Text>
-                                                    </View>
-                                                    <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
-                                                        {status.value.toLocaleString('en-IN')}
-                                                    </Text>
-                                                </View>
-                                                <View style={styles.statRow}>
-                                                    <View style={styles.statLabelContainer}>
-                                                        <Ionicons name="people-outline" size={ms(14)} color="rgba(255,255,255,0.8)" />
-                                                        <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Customers</Text>
-                                                    </View>
-                                                    <Text style={styles.statValue} numberOfLines={1}>{status.customers}</Text>
-                                                </View>
-                                            </View>
-                                        </TouchableOpacity>
-                                    </Animated.View>
+                                        title={statusKey}
+                                        icon={iconName as any}
+                                        color={cardColor}
+                                        delay={100 * (index + 1)}
+                                        onPress={() => router.push({ pathname: '/quotations', params: { filter: statusKey } })}
+                                        rows={[
+                                            { icon: 'document-text-outline', label: 'Quotes', value: String(status.quotes) },
+                                            { icon: 'cash-outline', label: 'Values', value: status.value.toLocaleString('en-IN') },
+                                            { icon: 'people-outline', label: 'Customers', value: String(status.customers) },
+                                        ]}
+                                    />
                                 );
                             })}
-
-                            <Animated.View
-                                key="sales-orders"
-                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 1)).springify()}
-                                style={[styles.statusCard, { backgroundColor: '#6366F1' }]} // Indigo for Sales Orders
-                            >
-                                <TouchableOpacity
-                                    style={styles.cardContent}
-                                    onPress={() => router.push('/sales-orders')}
-                                >
-                                    <View style={styles.statusHeader}>
-                                        <Text style={styles.statusTitle}>Sales Orders</Text>
-                                        <View style={styles.statusIconContainer}>
-                                            <Ionicons name="cart-outline" size={ms(18)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
-                                        <Ionicons name="cart" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
-                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>View All Orders</Text>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
-                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>Manage Orders</Text>
-                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-
-                            {/* Price Calculator Card */}
-                            <Animated.View
-                                key="price-calculator"
-                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 2)).springify()}
-                                style={[styles.statusCard, { backgroundColor: '#10B981' }]} // Emerald green for Calculator
-                            >
-                                <TouchableOpacity
-                                    style={styles.cardContent}
-                                    onPress={() => router.push('/price-calculator')}
-                                >
-                                    <View style={styles.statusHeader}>
-                                        <Text style={styles.statusTitle}>Price Calculator</Text>
-                                        <View style={styles.statusIconContainer}>
-                                            <Ionicons name="calculator-outline" size={ms(18)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
-                                        <Ionicons name="calculator" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
-                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Habasit Calculator</Text>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
-                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>Calculate Price</Text>
-                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-
-                            {/* Daily Sales Report Card */}
-                            <Animated.View
-                                key="daily-sales-report"
-                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 3)).springify()}
-                                style={[styles.statusCard, { backgroundColor: '#F59E0B' }]} // Amber for Daily Sales Report
-                            >
-                                <TouchableOpacity
-                                    style={styles.cardContent}
-                                    onPress={() => router.push('/daily-sales-report')}
-                                >
-                                    <View style={styles.statusHeader}>
-                                        <Text style={styles.statusTitle}>Daily Sales Report</Text>
-                                        <View style={styles.statusIconContainer}>
-                                            <Ionicons name="bar-chart-outline" size={ms(18)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
-                                        <Ionicons name="bar-chart" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
-                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Sales &amp; Collection</Text>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
-                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>View Report</Text>
-                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-
-                            {/* Sales Invoice History Card */}
-                            <Animated.View
-                                key="sales-invoice-history"
-                                entering={FadeInDown.delay(100 * (Object.keys(statsMap).length + 4)).springify()}
-                                style={[styles.statusCard, { backgroundColor: '#0891B2' }]} // Cyan for Sales Invoice History
-                            >
-                                <TouchableOpacity
-                                    style={styles.cardContent}
-                                    onPress={() => router.push('/daily-sales-report/invoice-history')}
-                                >
-                                    <View style={styles.statusHeader}>
-                                        <Text style={styles.statusTitle}>Invoice History</Text>
-                                        <View style={styles.statusIconContainer}>
-                                            <Ionicons name="receipt-outline" size={ms(18)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                    <View style={[styles.statusBody, { justifyContent: 'center', alignItems: 'center' }]}>
-                                        <Ionicons name="receipt" size={ms(48)} color="rgba(255,255,255,0.2)" style={{ position: 'absolute' }} />
-                                        <Text style={[styles.statValue, { fontSize: ms(16), textAlign: 'center', flex: 0 }]}>Sales Invoice History</Text>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vs(8), gap: 4 }}>
-                                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: ms(10), fontWeight: '700' }}>View Invoices</Text>
-                                            <Ionicons name="arrow-forward" size={ms(12)} color="#FFF" />
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
                         </View>
 
+                        <SectionHeader
+                            title="Quotation Performance"
+                            subtitle="Approval trends across all quotations"
+                        />
                         <Animated.View entering={FadeInUp.delay(500).duration(800)} style={styles.donutCard}>
                             <View style={styles.donutHeader}>
                                 <View><Text style={styles.donutTitle}>Donut Chart</Text><Text style={styles.donutSubtitle}>Quote distribution overview</Text></View>
@@ -620,11 +546,11 @@ export default function HomeScreen() {
                                     data={Object.keys(statsMap).map(k => statsMap[k].quotes)}
                                     colors={Object.keys(statsMap).map(k => {
                                         const uk = k.toUpperCase();
-                                        if (uk === 'PENDING') return '#0277BD';
-                                        if (uk === 'APPROVED') return '#00BFA5';
-                                        if (uk === 'REVIEW' || uk === 'DECLINED') return '#F4511E';
-                                        if (uk === 'CANCELLED' || uk === 'REJECTED') return '#C62828';
-                                        return '#64748B';
+                                        if (uk === 'PENDING') return colors.info;
+                                        if (uk === 'APPROVED') return colors.success;
+                                        if (uk === 'REVIEW' || uk === 'DECLINED') return colors.danger;
+                                        if (uk === 'CANCELLED' || uk === 'REJECTED') return CANCELLED_COLOR;
+                                        return colors.secondary;
                                     })}
                                     centerText={summaryStats.totalQuotes.toString()}
                                 />
@@ -640,6 +566,67 @@ export default function HomeScreen() {
                             <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{summaryStats.conversionRate}</Text></View></View>
                             <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
                         </Animated.View>
+
+                        {paymentPending && (
+                            <>
+                                <SectionHeader
+                                    title="Payments"
+                                    subtitle="Company-wide, as of the last business day"
+                                />
+                                <View style={styles.kpiGrid}>
+                                    <KpiCard
+                                        title="Payment Pending"
+                                        icon="alert-circle-outline"
+                                        color={colors.danger}
+                                        onPress={() => router.push('/daily-sales-report')}
+                                        rows={[
+                                            { icon: 'cash-outline', label: 'Outstanding', value: paymentPending.outstanding.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }) },
+                                            { icon: 'checkmark-done-outline', label: 'Collected MTD', value: paymentPending.collectionMtd.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }) },
+                                            { icon: 'trending-up-outline', label: 'Sales MTD', value: paymentPending.salesMtd.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }) },
+                                        ]}
+                                    />
+                                </View>
+                            </>
+                        )}
+
+                        <SectionHeader
+                            title="Quick Actions"
+                            subtitle="Reports & tools"
+                        />
+                        <View style={styles.quickActionsList}>
+                            <QuickActionCard
+                                title="Sales Orders"
+                                subtitle="Manage orders"
+                                icon="cart-outline"
+                                color={QUICK_ACTION_COLORS.salesOrders}
+                                delay={100}
+                                onPress={() => router.push('/sales-orders')}
+                            />
+                            <QuickActionCard
+                                title="Price Calculator"
+                                subtitle="Habasit belt price calculator"
+                                icon="calculator-outline"
+                                color={QUICK_ACTION_COLORS.calculator}
+                                delay={150}
+                                onPress={() => router.push('/price-calculator')}
+                            />
+                            <QuickActionCard
+                                title="Daily Sales Report"
+                                subtitle="Sales & collection summary"
+                                icon="bar-chart-outline"
+                                color={QUICK_ACTION_COLORS.dailySalesReport}
+                                delay={200}
+                                onPress={() => router.push('/daily-sales-report')}
+                            />
+                            <QuickActionCard
+                                title="Invoice History"
+                                subtitle="Sales invoice records"
+                                icon="receipt-outline"
+                                color={QUICK_ACTION_COLORS.invoiceHistory}
+                                delay={250}
+                                onPress={() => router.push('/daily-sales-report/invoice-history')}
+                            />
+                        </View>
                     </>
                 )}
             </ScrollView>
@@ -649,7 +636,7 @@ export default function HomeScreen() {
     );
 }
 
-function getStyles(theme: 'light' | 'dark', { s, vs, ms, width }: any) {
+function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
     const isDark = theme === 'dark';
     const colors = Colors[theme];
     return StyleSheet.create({
@@ -677,27 +664,8 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms, width }: any) {
         paddingHorizontal: 20,
         marginBottom: 18,
     },
-    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: s(16), gap: s(16) },
-        statusCard: {
-            width: (width - s(52)) / 2,
-            borderRadius: ms(24),
-            overflow: 'hidden',
-            aspectRatio: 0.85,
-            elevation: 4,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 10,
-        },
-        cardContent: { flex: 1, padding: ms(20) },
-        statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-        statusTitle: { fontSize: ms(12), fontWeight: '900', color: '#FFF', opacity: 0.9, letterSpacing: 0.5 },
-        statusIconContainer: { width: ms(32), height: ms(32), borderRadius: ms(12), backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
-        statusBody: { flex: 1, justifyContent: 'center', gap: vs(12) },
-        statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: s(4), marginBottom: vs(4) },
-        statLabelContainer: { flexDirection: 'row', alignItems: 'center', gap: s(4), flex: 0.8 },
-        statLabel: { fontSize: ms(9), color: 'rgba(255,255,255,0.8)', fontWeight: '700' },
-        statValue: { fontSize: ms(14), fontWeight: '900', color: '#FFF', flex: 1.5, textAlign: 'right' },
+    kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(16), gap: s(16) },
+    quickActionsList: { paddingHorizontal: s(16), paddingBottom: s(16), gap: vs(10) },
         donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(24), elevation: 5 },
         donutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: vs(24) },
         donutTitle: { fontSize: ms(20), fontWeight: '900', color: colors.text },
