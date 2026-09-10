@@ -434,9 +434,9 @@ export default function DailySalesReportScreen() {
                                     <View style={styles.brandTop}>
                                         <View style={styles.brandId}>
                                             <View style={[styles.brandAvatar, { backgroundColor: colors.surfaceSecondary }]}>
-                                                <Text style={[styles.brandAvatarText, { color: colors.text }]}>{brandLabel(row.brand)[0]}</Text>
+                                                <Text style={[styles.brandAvatarText, { color: colors.text }]}>{brandLabel(row.brand)[0]?.toUpperCase()}</Text>
                                             </View>
-                                            <Text style={[styles.brandName, { color: colors.text }]}>{brandLabel(row.brand)}</Text>
+                                            <Text style={[styles.brandName, { color: colors.text }]}>{brandLabel(row.brand).toUpperCase()}</Text>
                                         </View>
                                         <View style={styles.viewLink}>
                                             <Text style={[styles.viewLinkText, { color: colors.text }]}>View Details</Text>

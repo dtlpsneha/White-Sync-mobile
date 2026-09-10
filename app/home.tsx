@@ -15,7 +15,6 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
-import { getDailySummary } from '../services/dailySalesReportApi';
 
 import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -177,12 +176,6 @@ export default function HomeScreen() {
     const [isManager, setIsManager] = useState(false);
     const [hasSession, setHasSession] = useState(false);
 
-    const [paymentPending, setPaymentPending] = useState<{
-        outstanding: number;
-        collectionMtd: number;
-        salesMtd: number;
-    } | null>(null);
-
     useEffect(() => { loadData(); }, []);
 
     useEffect(() => {
@@ -205,7 +198,6 @@ export default function HomeScreen() {
             interval = setInterval(() => {
                 fetchStats();
                 checkForNewPending(false);
-                fetchPaymentPendingSummary();
             }, 180000);
         };
 
@@ -243,7 +235,6 @@ export default function HomeScreen() {
             }
             await fetchStats();
             await checkForNewPending(true);
-            await fetchPaymentPendingSummary();
         }
         setLoading(false);
     };
@@ -259,7 +250,7 @@ export default function HomeScreen() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([fetchStats(), checkForNewPending(false), fetchPaymentPendingSummary()]);
+        await Promise.all([fetchStats(), checkForNewPending(false)]);
         setRefreshing(false);
     };
 
@@ -341,32 +332,6 @@ export default function HomeScreen() {
             }
         } catch (error) {
             console.error('[Home] Fetch stats error:', error);
-        }
-    };
-
-    /**
-     * `get_daily_report_summary` (via `getDailySummary`) already computes an
-     * inception-to-date "payment pending" total server-side, with a fallback for native
-     * Sales Invoices that were never routed through the External Sales Invoice import
-     * pipeline — unlike `get_sales_invoice_history_data`, which has no such fallback. That
-     * makes this endpoint the safe, complete source for a dashboard-wide pending total;
-     * empty fiscalYear/month/date asks the server for its own defaults (as-on = yesterday,
-     * current FY/month), the same default view the desktop page shows.
-     */
-    const fetchPaymentPendingSummary = async () => {
-        try {
-            const result = await getDailySummary({ fiscalYear: '', month: '', date: '' });
-            if (result.ok) {
-                setPaymentPending({
-                    outstanding: result.data.totals.payment_pending,
-                    collectionMtd: result.data.totals.collection_mtd,
-                    salesMtd: result.data.totals.sales_mtd,
-                });
-            } else {
-                console.warn('[Home] Payment pending summary fetch failed:', result.error);
-            }
-        } catch (error) {
-            console.error('[Home] Payment pending summary fetch error:', error);
         }
     };
 
@@ -566,28 +531,6 @@ export default function HomeScreen() {
                             <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{summaryStats.conversionRate}</Text></View></View>
                             <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
                         </Animated.View>
-
-                        {paymentPending && (
-                            <>
-                                <SectionHeader
-                                    title="Payments"
-                                    subtitle="Company-wide, as of the last business day"
-                                />
-                                <View style={styles.kpiGrid}>
-                                    <KpiCard
-                                        title="Payment Pending"
-                                        icon="alert-circle-outline"
-                                        color={colors.danger}
-                                        onPress={() => router.push('/daily-sales-report')}
-                                        rows={[
-                                            { icon: 'cash-outline', label: 'Outstanding', value: paymentPending.outstanding.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }) },
-                                            { icon: 'checkmark-done-outline', label: 'Collected MTD', value: paymentPending.collectionMtd.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }) },
-                                            { icon: 'trending-up-outline', label: 'Sales MTD', value: paymentPending.salesMtd.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }) },
-                                        ]}
-                                    />
-                                </View>
-                            </>
-                        )}
 
                         <SectionHeader
                             title="Quick Actions"

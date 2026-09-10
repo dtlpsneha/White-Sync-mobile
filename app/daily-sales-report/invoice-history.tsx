@@ -111,14 +111,21 @@ const FieldBlock = ({ label, value, onPress, colors, styles }: any) => (
  * Reuses the existing Frappe link-field search (searchCustomers / searchItems)
  * — no new search logic, just a compact field+dropdown wrapper.
  *
- * The results dropdown is a plain absolutely-positioned View. It must live
- * OUTSIDE the FlatList's scrolling content (a fixed section above the list,
- * not inside ListHeaderComponent) — FlatList cells on Android each get their
- * own compositing layer, so a dropdown nested inside the header gets painted
- * UNDER the list items below it regardless of zIndex. A Modal would dodge
- * that, but opening a new native window mid-typing dismisses the keyboard on
- * Android, which is worse. As a plain sibling of the FlatList (not nested in
- * its virtualized content), ordinary zIndex stacking works correctly.
+ * Redesigned to match `components/CustomerSearch.tsx`'s proven approach: the
+ * results panel is a normal, in-flow View directly below the field — NOT
+ * absolutely positioned. An earlier version anchored the dropdown with
+ * `position: 'absolute'` inside a header section pinned ABOVE a separately
+ * scrolling invoice list, with its own zIndex/elevation stacking and a
+ * tap-outside overlay to fight the resulting touch/scroll conflicts. That
+ * still broke once the keyboard opened: Android resizes the whole window to
+ * fit above the keyboard (`adjustResize`), and a pinned, non-scrolling
+ * header doesn't shrink to follow — anything the absolute dropdown extended
+ * past the new, shorter window edge became genuinely unreachable, not just
+ * badly laid out. Putting this field inside the SAME ScrollView as the rest
+ * of the page (see the screen body below) sidesteps the whole class of bug:
+ * the page's own scroll reveals whatever the resized window doesn't fit,
+ * exactly like it already does for `components/CustomerSearch.tsx` elsewhere
+ * in this app.
  */
 function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCode, open, setOpen, colors, styles }: {
     placeholder: string;
@@ -127,9 +134,6 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
     onClear: () => void;
     search: (query: string) => Promise<{ ok: boolean; data: any[] }>;
     showCode?: boolean;
-    // Controlled, not local state — a parent-level tap-outside overlay needs
-    // to be able to close this from outside, which a local useState (or a
-    // one-way onOpenChange notify callback) can't support.
     open: boolean;
     setOpen: (v: boolean) => void;
     colors: any;
@@ -174,29 +178,41 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
     if (value && !open) {
         return (
             <View style={[styles.searchField, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.searchFieldValue, { color: colors.text }]} numberOfLines={1}>{value}</Text>
-                <TouchableOpacity onPress={onClear}><Ionicons name="close-circle" size={16} color={colors.textSecondary} /></TouchableOpacity>
+                <View style={styles.searchFieldRow}>
+                    <Text style={[styles.searchFieldValue, { color: colors.text }]} numberOfLines={1}>{value}</Text>
+                    <TouchableOpacity onPress={onClear}><Ionicons name="close-circle" size={16} color={colors.textSecondary} /></TouchableOpacity>
+                </View>
             </View>
         );
     }
 
     return (
-        <View style={[styles.searchField, { backgroundColor: colors.surface, borderColor: colors.border, zIndex: 20 }]}>
-            <Ionicons name="search" size={14} color={colors.textSecondary} />
-            <TextInput
-                style={[styles.searchFieldInput, { color: colors.text }]}
-                placeholder={placeholder}
-                placeholderTextColor={colors.textSecondary}
-                value={query}
-                onChangeText={t => { setQuery(t); updateOpen(true); }}
-                onFocus={() => updateOpen(true)}
-                onBlur={() => updateOpen(false)}
-            />
-            {query.length > 0 && (
-                <TouchableOpacity onPress={() => setQuery('')}>
-                    <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-            )}
+        <View style={[styles.searchField, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.searchFieldRow}>
+                <Ionicons name="search" size={14} color={colors.textSecondary} />
+                <TextInput
+                    style={[styles.searchFieldInput, { color: colors.text }]}
+                    placeholder={placeholder}
+                    placeholderTextColor={colors.textSecondary}
+                    value={query}
+                    onChangeText={t => { setQuery(t); updateOpen(true); }}
+                    onFocus={() => updateOpen(true)}
+                />
+                {query.length > 0 && (
+                    <TouchableOpacity onPress={() => setQuery('')}>
+                        <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                )}
+                {/* Closes this field's own dropdown without touching the other field's —
+                  * mirrors CustomerSearch.tsx, which has no open/close state at all
+                  * beyond the query itself, but this field also shows a "used" list on
+                  * an empty query (see the effect above), so it needs an explicit close. */}
+                {open && (
+                    <TouchableOpacity onPress={() => updateOpen(false)} hitSlop={8}>
+                        <Ionicons name="chevron-up" size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                )}
+            </View>
             {open && (
                 <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     {loading ? (
@@ -210,12 +226,7 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
                             {query.trim() ? 'No matches' : 'No options for the current filters'}
                         </Text>
                     ) : (
-                        // A fixed `height` here (not maxHeight) — Yoga/Android can
-                        // measure a ScrollView sized only by maxHeight as tall as
-                        // its own content for scroll-gesture purposes even while
-                        // the parent visually clips it to the shorter box, which
-                        // silently disables scrolling despite looking correct.
-                        <ScrollView style={{ height: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                        <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                             {(showAll ? results : results.slice(0, 10)).map((r, idx) => (
                                 <TouchableOpacity
                                     key={r.name || idx}
@@ -370,15 +381,12 @@ export default function InvoiceHistoryScreen() {
         })();
     }, [ready, brand, fromDate, toDate]);
 
-    // Two separate ScrollViews visually overlap here (the dropdown and the
-    // main invoice list below it) without being nested, so Android routes
-    // swipes over the dropdown to whichever view it resolves the gesture to
-    // — nestedScrollEnabled only helps for true parent/child nesting. The
-    // reliable fix is removing the competing scrollable entirely: disable
-    // the main list's scroll while any dropdown is open.
+    // Controlled (not local state inside LinkSearchField) only so the two fields can
+    // be kept mutually exclusive below — opening one closes the other, since both now
+    // render in-flow in the same page and having both open at once would just be two
+    // stacked panels competing for attention.
     const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
     const [itemDropdownOpen, setItemDropdownOpen] = useState(false);
-    const anyDropdownOpen = customerDropdownOpen || itemDropdownOpen;
 
     // A blank query means the field was just tapped, not typed into — show
     // the "used" list right away (matching the ERP dashboard's on-focus
@@ -544,21 +552,6 @@ export default function InvoiceHistoryScreen() {
 
     const rows = useMemo(() => history?.rows || [], [history]);
 
-    // Derived from whatever page of rows the server actually returned (capped at 5000,
-    // see `history.truncated`) — a client-side aggregate of already-fetched data, the
-    // same pattern app/home.tsx uses for quote totals, not a second network call.
-    const pendingSummary = useMemo(() => {
-        let count = 0;
-        let amount = 0;
-        for (const row of rows) {
-            if (row.payment_status === 'Payment Pending') {
-                count += 1;
-                amount += row.invoice_total_value;
-            }
-        }
-        return { count, amount };
-    }, [rows]);
-
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
@@ -580,27 +573,27 @@ export default function InvoiceHistoryScreen() {
             </SafeAreaView>
 
             {/*
-              * Chips + search fields are pinned here, OUTSIDE the scrollable
-              * list below — not just for the FlatList-vs-touch issue (fixed by
-              * switching the list to a plain ScrollView), but because a
-              * ScrollView also clips its own content to its scrollable
-              * viewport bounds. Nesting the search field inside that
-              * scrollable content clipped the dropdown as soon as it tried to
-              * extend past the field's own layout box. As a sibling ABOVE the
-              * scrollable list (not a descendant of it), the dropdown has no
-              * scrolling ancestor to be clipped by.
+              * Filters, chips, and search fields now live INSIDE this same
+              * ScrollView, as ordinary in-flow content — not pinned above it in a
+              * separate non-scrolling section. See the note on LinkSearchField
+              * above for why: a pinned header can't shrink when the keyboard
+              * opens and resizes the window, so anything a dropdown grew past
+              * the new edge became unreachable. Being part of the normal page
+              * flow means the page's own scroll (and the OS's keyboard-resize
+              * handling) reveals it instead, the same way it already works for
+              * `components/CustomerSearch.tsx` elsewhere in this app.
               */}
-            {/*
-              * elevation here (not just zIndex) matters once the tap-outside
-              * overlay below exists: Android's elevation stacking is only
-              * compared among direct siblings at each level, so without an
-              * explicit value here this section (and the dropdown nested
-              * inside it) defaults to elevation 0 — below the overlay's own
-              * elevation — even though zIndex alone would visually paint it
-              * on top. That mismatch is what let the dropdown list correctly
-              * while silently eating its own scroll/tap gestures.
-              */}
-            <View style={{ zIndex: 20, elevation: 20, backgroundColor: colors.background }}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchHistory(true)} tintColor={colors.text} />}
+                onScroll={({ nativeEvent }) => {
+                    const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+                    const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
+                    if (nearBottom) setVisibleCount(c => Math.min(c + PAGE_SIZE, rows.length));
+                }}
+                scrollEventThrottle={200}
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.filtersRow}>
                     <TouchableOpacity style={[styles.filtersBtn, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={openFiltersSheet}>
                         <Ionicons name="options-outline" size={15} color={colors.text} />
@@ -623,43 +616,35 @@ export default function InvoiceHistoryScreen() {
                 </ScrollView>
 
                 <View style={styles.searchGrid}>
-                    <LinkSearchField placeholder="All Customers" value={customer?.customer_name || ''} onSelect={(c: Customer) => setCustomer(c)} onClear={() => setCustomer(null)} search={customerSearch} open={customerDropdownOpen} setOpen={setCustomerDropdownOpen} colors={colors} styles={styles} />
-                    <LinkSearchField placeholder="All Items" value={item?.item_name || ''} onSelect={(i: Item) => setItem(i)} onClear={() => setItem(null)} search={itemSearch} showCode open={itemDropdownOpen} setOpen={setItemDropdownOpen} colors={colors} styles={styles} />
+                    <LinkSearchField
+                        placeholder="All Customers"
+                        value={customer?.customer_name || ''}
+                        onSelect={(c: Customer) => setCustomer(c)}
+                        onClear={() => setCustomer(null)}
+                        search={customerSearch}
+                        open={customerDropdownOpen}
+                        setOpen={(v) => { setCustomerDropdownOpen(v); if (v) setItemDropdownOpen(false); }}
+                        colors={colors}
+                        styles={styles}
+                    />
+                    <LinkSearchField
+                        placeholder="All Items"
+                        value={item?.item_name || ''}
+                        onSelect={(i: Item) => setItem(i)}
+                        onClear={() => setItem(null)}
+                        search={itemSearch}
+                        showCode
+                        open={itemDropdownOpen}
+                        setOpen={(v) => { setItemDropdownOpen(v); if (v) setCustomerDropdownOpen(false); }}
+                        colors={colors}
+                        styles={styles}
+                    />
                 </View>
-            </View>
 
-            {/*
-              * A plain ScrollView, not FlatList: FlatList cells on Android each
-              * render in their own compositing layer, which was intercepting
-              * swipe gestures meant for the dropdown above (swipes over it were
-              * scrolling the list behind it instead, independent of the
-              * clipping issue this second fix addresses).
-              */}
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                scrollEnabled={!anyDropdownOpen}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchHistory(true)} tintColor={colors.text} />}
-                onScroll={({ nativeEvent }) => {
-                    const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
-                    const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
-                    if (nearBottom) setVisibleCount(c => Math.min(c + PAGE_SIZE, rows.length));
-                }}
-                scrollEventThrottle={200}
-            >
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
                     {history && <Text style={[styles.countNum, { color: NAVY }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
                 </View>
-
-                {history && pendingSummary.count > 0 && (
-                    <View style={[styles.pendingSummary, { backgroundColor: DANGER + '14', borderColor: DANGER + '30' }]}>
-                        <Ionicons name="alert-circle-outline" size={15} color={DANGER} />
-                        <Text style={{ color: DANGER, fontSize: 12, fontWeight: '700', flex: 1 }}>
-                            {pendingSummary.count} pending · ₹{formatPlain(pendingSummary.amount)} outstanding
-                            {history.truncated ? ' (of rows shown — narrow filters for the full total)' : ''}
-                        </Text>
-                    </View>
-                )}
 
                 {history?.truncated && (
                     <View style={[styles.truncBanner, { backgroundColor: DANGER + '18' }]}>
@@ -693,23 +678,6 @@ export default function InvoiceHistoryScreen() {
                     </>
                 )}
             </ScrollView>
-
-            {/*
-              * scrollEnabled={false} above stops the list from scrolling but
-              * doesn't reliably stop it from still winning the touch — on
-              * Android it can swallow the gesture as its own without either
-              * view actually moving. This absorbs the touch before it ever
-              * reaches the list: a plain (non-scrolling) View, positioned
-              * between the list (z 0) and the dropdown's own zIndex/elevation
-              * (30/8), so the dropdown still wins over it. Doubles as
-              * tap-outside-to-close.
-              */}
-            {anyDropdownOpen && (
-                <Pressable
-                    style={[StyleSheet.absoluteFillObject, { zIndex: 15, elevation: 10 }]}
-                    onPress={() => { setCustomerDropdownOpen(false); setItemDropdownOpen(false); }}
-                />
-            )}
 
             <Modal visible={filtersSheetVisible} transparent animationType="slide" onRequestClose={closeFiltersSheet}>
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -820,19 +788,26 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         chipText: { fontSize: ms(12), fontWeight: '700' },
         chipTextActive: { fontSize: ms(12), fontWeight: '700', color: '#fff' },
 
-        searchGrid: { flexDirection: 'row', gap: s(10), paddingHorizontal: s(18), marginTop: vs(14) },
-        searchField: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: ms(14), paddingHorizontal: s(12), paddingVertical: vs(10), position: 'relative' },
+        // Stacked, not side-by-side — two fields in a row meant whichever one's
+        // dropdown was open (taller) left a dead gap next to the other (short) one,
+        // and customer names wrapped to 2-3 lines in the half-width column. Full width
+        // each, matching the single-field layout `components/CustomerSearch.tsx` uses.
+        searchGrid: { gap: s(10), paddingHorizontal: s(18), marginTop: vs(14) },
+        searchField: { flex: 1, borderWidth: 1, borderRadius: ms(14), paddingHorizontal: s(12), paddingVertical: vs(10) },
+        searchFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         searchFieldValue: { flex: 1, fontSize: ms(12.5), fontWeight: '600' },
         searchFieldInput: { flex: 1, fontSize: ms(12.5), fontWeight: '600' },
-        searchDropdown: { position: 'absolute', top: '100%', left: 0, right: 0, borderWidth: 1, borderRadius: ms(12), marginTop: 4, maxHeight: 220, overflow: 'hidden', zIndex: 30, elevation: 8 },
-        searchResultRow: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+        // In-flow now, not absolutely positioned — see the note on LinkSearchField.
+        // The divider line above it (not a full box border) is what visually
+        // separates it from the input row while staying part of the same card.
+        searchDropdown: { borderTopWidth: 1, marginTop: vs(10), paddingTop: vs(6) },
+        searchResultRow: { paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: StyleSheet.hairlineWidth },
 
         countRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: s(18), marginTop: vs(18), marginBottom: vs(2) },
         countText: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
         countNum: { fontSize: ms(11), fontWeight: '800' },
 
         truncBanner: { marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12) },
-        pendingSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12), borderWidth: 1 },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(60), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
