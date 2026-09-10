@@ -82,13 +82,52 @@ export async function searchCustomers(query: string): Promise<SearchResult<Custo
 
         const res = await apiGet(apiUrl(
             `/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}` +
-            `&or_filters=${encodeURIComponent(orFilters)}&limit_page_length=100`
+            `&or_filters=${encodeURIComponent(orFilters)}&limit_page_length=0`
         ), await session());
 
         if (!res.ok) return failure(`Server error (${res.status}). Please try again.`);
         return { ok: true, data: res.data?.data || res.data?.message || [] };
     } catch {
         return failure('Network error. Please check your connection.');
+    }
+}
+
+/**
+ * Fetch full Customer/Item records for a known list of names/codes — used to
+ * populate the "browse" list shown when a filter field is tapped with no
+ * query typed yet (matching the ERP dashboard's own on-focus dropdown),
+ * where callers already have the valid name list from getUsedCustomers/
+ * getUsedItems and just need display fields (customer_name / item_name).
+ */
+export async function getCustomersByNames(names: string[]): Promise<SearchResult<Customer>> {
+    if (!names.length) return { ok: true, data: [] };
+    try {
+        const fields = ['name', 'customer_name', 'customer_group', 'territory', 'customer_primary_address', 'customer_primary_contact'];
+        const filters = JSON.stringify([['name', 'in', names]]);
+        const res = await apiGet(apiUrl(
+            `/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+            `&filters=${encodeURIComponent(filters)}&limit_page_length=${names.length}`
+        ), await session());
+        if (!res.ok) return failure(`Server error (${res.status})`);
+        return { ok: true, data: res.data?.data || [] };
+    } catch {
+        return failure('Network error');
+    }
+}
+
+export async function getItemsByCodes(codes: string[]): Promise<SearchResult<Item>> {
+    if (!codes.length) return { ok: true, data: [] };
+    try {
+        const fields = ['name', 'item_name', 'description'];
+        const filters = JSON.stringify([['name', 'in', codes]]);
+        const res = await apiGet(apiUrl(
+            `/api/resource/Item?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+            `&filters=${encodeURIComponent(filters)}&limit_page_length=${codes.length}`
+        ), await session());
+        if (!res.ok) return failure(`Server error (${res.status})`);
+        return { ok: true, data: res.data?.data || [] };
+    } catch {
+        return failure('Network error');
     }
 }
 
@@ -184,7 +223,7 @@ export async function searchItems(query = ''): Promise<SearchResult<Item>> {
             `/api/resource/Item?fields=${encodeURIComponent(JSON.stringify(fields))}` +
             `&filters=${encodeURIComponent(filters)}` +
             (trimmed ? `&or_filters=${encodeURIComponent(orFilters)}` : '') +
-            `&limit_page_length=100`
+            `&limit_page_length=0`
         ), await session());
 
         if (!res.ok) return failure(`Server error (${res.status})`);

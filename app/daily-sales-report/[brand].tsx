@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -62,22 +62,6 @@ export default function BrandDetailScreen() {
         })();
     }, [params.brand, params.fiscalYear, params.month, params.date, params.salesExecutive]);
 
-    const onShare = async () => {
-        if (!row) return;
-        const name = brandLabel(row.brand);
-        const message =
-            `${name} — Daily Sales Report\n\n` +
-            `Total Sales (Up to Date): ₹${formatAmount(row.sales_mtd, display)}${unitSuffix}\n` +
-            `Total Collection (Up to Date): ₹${formatAmount(row.collection_mtd, display)}${unitSuffix}\n` +
-            `Payment Pending: ₹${formatAmount(row.payment_pending, display)}${unitSuffix}\n\n` +
-            `As on ${params.date}`;
-        try {
-            await Share.share({ message });
-        } catch {
-            // user cancelled or share sheet unavailable — nothing to recover
-        }
-    };
-
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
@@ -131,11 +115,6 @@ export default function BrandDetailScreen() {
                         <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.collection_mtd, display)}${unitSuffix}`} alt colors={colors} styles={styles} />
                         <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.collection_fytd, display)}${unitSuffix}`} colors={colors} styles={styles} />
                     </View>
-
-                    <TouchableOpacity style={[styles.shareBtn, { backgroundColor: NAVY }]} onPress={onShare}>
-                        <Ionicons name="share-social-outline" size={16} color="#fff" />
-                        <Text style={styles.shareBtnText}>Share Summary</Text>
-                    </TouchableOpacity>
                 </ScrollView>
             )}
         </View>
@@ -170,7 +149,5 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         bRowCaption: { fontSize: ms(11.5), fontWeight: '600' },
         bRowValue: { fontSize: ms(16), fontWeight: '800' },
 
-        shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: ms(14), paddingVertical: vs(15), marginTop: vs(22) },
-        shareBtnText: { color: '#fff', fontSize: ms(13.5), fontWeight: '800' },
     });
 }

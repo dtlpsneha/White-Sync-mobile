@@ -81,7 +81,7 @@ function monthEndDate(fy: FiscalYear | undefined, month: string, cap: string): s
 }
 
 type DisplayUnit = 'absolute' | 'lacs';
-const DISPLAY_LABELS: Record<DisplayUnit, string> = { absolute: 'Absolute', lacs: 'Lacs' };
+const DISPLAY_LABELS: Record<DisplayUnit, string> = { absolute: 'Rupees', lacs: 'Lacs' };
 
 function formatAmount(value: number | undefined, display: DisplayUnit) {
     const divisor = display === 'lacs' ? 100000 : 1;
@@ -280,11 +280,13 @@ export default function DailySalesReportScreen() {
     });
     const openExecPicker = () => setPicker({
         visible: true, title: 'Sales Executive',
-        options: [{ label: 'All Executives', value: '' }, ...executives.map(e => ({ label: e.name, value: e.id }))],
+        options: [{ label: 'All Executives', value: '' }, ...executives.map(e => ({ label: e.name.toUpperCase(), value: e.id }))],
         selectedValue: draftSalesExecutive, onSelect: setDraftSalesExecutive,
     });
 
-    const execLabel = (id: string) => executives.find(e => e.id === id)?.name || 'All Executives';
+    // Display only — matches the ERP dashboard's uppercase Sales Executive
+    // rendering. The underlying id/name used for filtering is untouched.
+    const execLabel = (id: string) => (executives.find(e => e.id === id)?.name || 'All Executives').toUpperCase();
 
     const goToBrand = (row: DailySummaryRow) => {
         router.push({
@@ -342,7 +344,7 @@ export default function DailySalesReportScreen() {
                     </TouchableOpacity>
                     {ownExecutiveName ? (
                         <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}>
-                            <Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName}</Text>
+                            <Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName.toUpperCase()}</Text>
                         </View>
                     ) : (
                         <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}>
@@ -500,7 +502,7 @@ export default function DailySalesReportScreen() {
                                 <View style={[styles.selectBox, { borderColor: colors.border }]}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                         <Ionicons name="people-outline" size={15} color={colors.textSecondary} />
-                                        <Text style={[styles.selectValue, { color: colors.text }]}>{ownExecutiveName}</Text>
+                                        <Text style={[styles.selectValue, { color: colors.text }]}>{ownExecutiveName.toUpperCase()}</Text>
                                     </View>
                                     <Ionicons name="lock-closed" size={13} color={colors.textSecondary} />
                                 </View>
