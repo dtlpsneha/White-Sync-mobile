@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
 
+import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
 import { FloatingNav } from '@/components/FloatingNav';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
@@ -431,7 +432,9 @@ export default function HomeScreen() {
                             <TouchableOpacity onPress={handleLogout} style={styles.profileButton}><View style={styles.avatar}><Text style={styles.avatarText}>{userName ? userName[0].toUpperCase() : 'U'}</Text></View></TouchableOpacity>
                         </View>
 
-
+                        <View style={styles.aiSearchWrap}>
+                            <AiSearchBar />
+                        </View>
 
                         <View style={styles.gridContainer}>
                             {Object.keys(statsMap).map((statusKey, index) => {
@@ -640,6 +643,7 @@ export default function HomeScreen() {
                     </>
                 )}
             </ScrollView>
+            {!permissionDenied && <AiBubble />}
             <FloatingNav />
         </SafeAreaView>
     );
@@ -669,7 +673,11 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms, width }: any) {
         avatarText: { fontSize: ms(20), fontWeight: '900', color: '#FFF' },
         topActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: s(24), gap: s(8) },
         iconButton: { width: ms(40), height: ms(40), borderRadius: ms(20), backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-        gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: s(16), gap: s(16) },
+        aiSearchWrap: {
+        paddingHorizontal: 20,
+        marginBottom: 18,
+    },
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: s(16), gap: s(16) },
         statusCard: {
             width: (width - s(52)) / 2,
             borderRadius: ms(24),
