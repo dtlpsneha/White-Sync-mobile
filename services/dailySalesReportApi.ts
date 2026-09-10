@@ -68,12 +68,13 @@ export interface InvoiceHistoryRow {
     description: string;
     qty: number;
     unit_price: number;
+    list_price: number;
+    discount_percentage: number;
     total_value: number;
     invoice_total_value: number;
     payment_status: string;
     profit: number;
     margin: number;
-    discount_percentage: number;
 }
 
 export interface InvoiceHistoryMeta {
@@ -172,6 +173,42 @@ export async function getSalesExecutives(): Promise<ApiResult<SalesExecutive[]>>
 export async function getUsedBrands(): Promise<ApiResult<string[]>> {
     try {
         const res = await apiGet(apiUrl('/api/method/get_used_brands'), await session());
+        if (!res.ok) return failure(`Server error (${res.status})`);
+        return { ok: true, data: res.data?.message || [] };
+    } catch {
+        return failure('Network error');
+    }
+}
+
+/**
+ * Customers/items that actually appear in invoices for the given brand/date
+ * range — mirrors the ERP "Sales Invoice History" tab's own filter narrowing
+ * (get_used_customers / get_used_items), so the mobile search doesn't offer
+ * a customer or item that would return zero rows for the current filters.
+ */
+export async function getUsedCustomers(params: { brand?: string; fromDate?: string; toDate?: string }): Promise<ApiResult<string[]>> {
+    try {
+        const qs = new URLSearchParams({
+            brand: params.brand || '',
+            from_date: params.fromDate || '',
+            to_date: params.toDate || '',
+        });
+        const res = await apiGet(apiUrl(`/api/method/get_used_customers?${qs.toString()}`), await session());
+        if (!res.ok) return failure(`Server error (${res.status})`);
+        return { ok: true, data: res.data?.message || [] };
+    } catch {
+        return failure('Network error');
+    }
+}
+
+export async function getUsedItems(params: { brand?: string; fromDate?: string; toDate?: string }): Promise<ApiResult<string[]>> {
+    try {
+        const qs = new URLSearchParams({
+            brand: params.brand || '',
+            from_date: params.fromDate || '',
+            to_date: params.toDate || '',
+        });
+        const res = await apiGet(apiUrl(`/api/method/get_used_items?${qs.toString()}`), await session());
         if (!res.ok) return failure(`Server error (${res.status})`);
         return { ok: true, data: res.data?.message || [] };
     } catch {

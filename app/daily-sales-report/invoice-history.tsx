@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Modal,
@@ -20,7 +20,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
-import { Customer, Item, searchCustomers, searchItems } from '@/services/frappeSearch';
+import { Customer, Item, getCustomersByNames, getItemsByCodes, searchCustomers, searchItems } from '@/services/frappeSearch';
 import {
     FiscalYear,
     InvoiceHistory,
@@ -32,6 +32,8 @@ import {
     getSalesExecutives,
     getSalesInvoiceHistory,
     getUsedBrands,
+    getUsedCustomers,
+    getUsedItems,
 } from '@/services/dailySalesReportApi';
 
 /**
@@ -40,13 +42,14 @@ import {
  * Script, which anchors on "today" and offers all 12 months unbounded —
  * kept as a direct port of that verified logic, not a redesign.
  */
-const MONTHS = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
 const CAL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function pad(n: number) { return n < 10 ? `0${n}` : `${n}`; }
 function toIso(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function today() { return toIso(new Date()); }
 function ddmm(iso: string) { const p = iso.split('-'); return p.length === 3 ? `${p[2]}-${p[1]}` : iso; }
+/** ISO "YYYY-MM-DD" -> "DD-MM-YYYY" — matches the ERP dashboard's date column format. */
+function ddmmyyyy(iso: string) { const p = iso.split('-'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso; }
 
 function monthFromDate(dateStr: string) {
     return CAL_MONTHS[new Date(`${dateStr}T00:00:00Z`).getUTCMonth()];
@@ -117,30 +120,56 @@ const FieldBlock = ({ label, value, onPress, colors, styles }: any) => (
  * Android, which is worse. As a plain sibling of the FlatList (not nested in
  * its virtualized content), ordinary zIndex stacking works correctly.
  */
-function LinkSearchField({ placeholder, value, onSelect, onClear, search, colors, styles }: {
+function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCode, open, setOpen, colors, styles }: {
     placeholder: string;
     value: string;
     onSelect: (item: any) => void;
     onClear: () => void;
     search: (query: string) => Promise<{ ok: boolean; data: any[] }>;
+    showCode?: boolean;
+    // Controlled, not local state — a parent-level tap-outside overlay needs
+    // to be able to close this from outside, which a local useState (or a
+    // one-way onOpenChange notify callback) can't support.
+    open: boolean;
+    setOpen: (v: boolean) => void;
     colors: any;
     styles: any;
 }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<any[]>([]);
-    const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [retryTick, setRetryTick] = useState(0);
+    // Shows only the first 10 by default; "Show all N" reveals the rest.
+    // Resets whenever the query changes so a new search starts collapsed.
+    const [showAll, setShowAll] = useState(false);
 
+    const updateOpen = setOpen;
+
+    // Runs on focus too (not just while typing), with no debounce for the
+    // blank-query case — matches the ERP dashboard, which shows the current
+    // "used" list as soon as the field is tapped, before anything is typed.
+    // Distinguishes a failed fetch from a genuinely empty result so "no
+    // matches" and "couldn't load" aren't shown identically.
     useEffect(() => {
-        if (!query.trim()) { setResults([]); return; }
+        if (!open) return;
         let cancelled = false;
         setLoading(true);
+        setError(null);
+        setShowAll(false);
         const handle = setTimeout(async () => {
             const res = await search(query);
-            if (!cancelled) { setResults(res.ok ? res.data : []); setLoading(false); }
-        }, 300);
+            if (cancelled) return;
+            if (res.ok) {
+                setResults(res.data);
+            } else {
+                setResults([]);
+                setError((res as any).error || 'Could not load');
+            }
+            setLoading(false);
+        }, query.trim() ? 300 : 0);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [query]);
+    }, [query, open, retryTick, search]);
 
     if (value && !open) {
         return (
@@ -159,28 +188,57 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, colors
                 placeholder={placeholder}
                 placeholderTextColor={colors.textSecondary}
                 value={query}
-                onChangeText={t => { setQuery(t); setOpen(true); }}
-                onFocus={() => setOpen(true)}
+                onChangeText={t => { setQuery(t); updateOpen(true); }}
+                onFocus={() => updateOpen(true)}
+                onBlur={() => updateOpen(false)}
             />
-            {open && query.trim().length > 0 && (
+            {query.length > 0 && (
+                <TouchableOpacity onPress={() => setQuery('')}>
+                    <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+            )}
+            {open && (
                 <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     {loading ? (
                         <ActivityIndicator size="small" color={NAVY} style={{ padding: 10 }} />
+                    ) : error ? (
+                        <TouchableOpacity style={{ padding: 10 }} onPress={() => setRetryTick(t => t + 1)}>
+                            <Text style={{ color: DANGER, fontSize: 12, fontWeight: '700' }}>{error} — tap to retry</Text>
+                        </TouchableOpacity>
                     ) : results.length === 0 ? (
-                        <Text style={{ padding: 10, color: colors.textSecondary, fontSize: 12 }}>No matches</Text>
+                        <Text style={{ padding: 10, color: colors.textSecondary, fontSize: 12 }}>
+                            {query.trim() ? 'No matches' : 'No options for the current filters'}
+                        </Text>
                     ) : (
-                        <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                            {results.slice(0, 8).map((r, idx) => (
+                        // A fixed `height` here (not maxHeight) — Yoga/Android can
+                        // measure a ScrollView sized only by maxHeight as tall as
+                        // its own content for scroll-gesture purposes even while
+                        // the parent visually clips it to the shorter box, which
+                        // silently disables scrolling despite looking correct.
+                        <ScrollView style={{ height: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                            {(showAll ? results : results.slice(0, 10)).map((r, idx) => (
                                 <TouchableOpacity
                                     key={r.name || idx}
                                     style={[styles.searchResultRow, { borderBottomColor: colors.border }]}
-                                    onPress={() => { onSelect(r); setQuery(''); setOpen(false); }}
+                                    onPress={() => { onSelect(r); setQuery(''); updateOpen(false); }}
                                 >
                                     <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>
                                         {r.customer_name || r.item_name || r.name}
                                     </Text>
+                                    {showCode && !!r.item_name && (
+                                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+                                            {r.name}
+                                        </Text>
+                                    )}
                                 </TouchableOpacity>
                             ))}
+                            {!showAll && results.length > 10 && (
+                                <TouchableOpacity style={{ padding: 10 }} onPress={() => setShowAll(true)}>
+                                    <Text style={{ color: NAVY, fontSize: 12, fontWeight: '700' }}>
+                                        Show all {results.length} results
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
                         </ScrollView>
                     )}
                 </View>
@@ -200,7 +258,9 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, colors
  */
 const PAGE_SIZE = 30;
 
-const InvoiceCard = React.memo(function InvoiceCard({ item, colors, styles }: { item: InvoiceHistoryRow; colors: any; styles: any }) {
+const MASK = '••••';
+
+const InvoiceCard = React.memo(function InvoiceCard({ item, revealed, colors, styles }: { item: InvoiceHistoryRow; revealed: boolean; colors: any; styles: any }) {
     const paid = item.payment_status === 'Payment Paid';
     return (
         <View style={[styles.invoiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -211,7 +271,7 @@ const InvoiceCard = React.memo(function InvoiceCard({ item, colors, styles }: { 
                 </View>
             </View>
             <Text style={[styles.invoiceSub, { color: colors.textSecondary }]}>
-                {item.date} · {brandLabel(item.brand)} · {item.customer}
+                {ddmmyyyy(item.date)} · {brandLabel(item.brand).toUpperCase()} · {item.customer}
             </Text>
             {!!item.description && <Text style={[styles.invoiceDesc, { color: colors.text }]} numberOfLines={2}>{item.description}</Text>}
             <View style={[styles.metricGrid, { borderTopColor: colors.border }]}>
@@ -221,13 +281,16 @@ const InvoiceCard = React.memo(function InvoiceCard({ item, colors, styles }: { 
             </View>
             <View style={styles.metricGridNoBorder}>
                 <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.invoice_total_value)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Profit</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.profit)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.margin)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Discount %</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.discount_percentage)}</Text></View>
+                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>LP26</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.list_price)}</Text></View>
+                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>DIS%</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.discount_percentage)}</Text></View>
+            </View>
+            <View style={styles.metricGridNoBorder}>
+                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Profit</Text><Text style={[styles.mValue, { color: colors.text }]}>{revealed ? formatPlain(item.profit) : MASK}</Text></View>
+                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]}>{revealed ? formatPlain(item.margin) : MASK}</Text></View>
             </View>
             <View style={styles.invoiceFoot}>
                 <Ionicons name="person-circle-outline" size={13} color={colors.textSecondary} />
-                <Text style={[styles.invoiceFootText, { color: colors.textSecondary }]}>{item.sales_executive || '—'}</Text>
+                <Text style={[styles.invoiceFootText, { color: colors.textSecondary }]}>{item.sales_executive ? item.sales_executive.toUpperCase() : '—'}</Text>
             </View>
         </View>
     );
@@ -277,11 +340,78 @@ export default function InvoiceHistoryScreen() {
     const [showToPicker, setShowToPicker] = useState(false);
     const [picker, setPicker] = useState<PickerState>(EMPTY_PICKER);
 
+    // Single toggle for the whole list — matches the ERP dashboard's header
+    // eye icon, which reveals/hides Profit and Margin % for every row at
+    // once rather than one at a time. LP26/DIS% are not masked.
+    const [profitRevealed, setProfitRevealed] = useState(false);
+
     // How many rows are actually mounted right now — see the PAGE_SIZE note
     // above InvoiceCard. Reset to the first page whenever a new result set
     // comes in.
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     useEffect(() => { setVisibleCount(PAGE_SIZE); }, [history]);
+
+    // Narrows the Customer/Item search to names that actually appear in the
+    // currently filtered invoices — mirrors the ERP dashboard's own
+    // get_used_customers/get_used_items narrowing, so picking a customer or
+    // item can't land on a selection with zero rows for these filters. null
+    // means "not loaded yet" and leaves search unrestricted, same as ERP.
+    const [validCustomerNames, setValidCustomerNames] = useState<string[] | null>(null);
+    const [validItemCodes, setValidItemCodes] = useState<string[] | null>(null);
+    useEffect(() => {
+        if (!ready) return;
+        (async () => {
+            const [custRes, itemRes] = await Promise.all([
+                getUsedCustomers({ brand, fromDate, toDate }),
+                getUsedItems({ brand, fromDate, toDate }),
+            ]);
+            setValidCustomerNames(custRes.ok ? custRes.data : null);
+            setValidItemCodes(itemRes.ok ? itemRes.data : null);
+        })();
+    }, [ready, brand, fromDate, toDate]);
+
+    // Two separate ScrollViews visually overlap here (the dropdown and the
+    // main invoice list below it) without being nested, so Android routes
+    // swipes over the dropdown to whichever view it resolves the gesture to
+    // — nestedScrollEnabled only helps for true parent/child nesting. The
+    // reliable fix is removing the competing scrollable entirely: disable
+    // the main list's scroll while any dropdown is open.
+    const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+    const [itemDropdownOpen, setItemDropdownOpen] = useState(false);
+    const anyDropdownOpen = customerDropdownOpen || itemDropdownOpen;
+
+    // A blank query means the field was just tapped, not typed into — show
+    // the "used" list right away (matching the ERP dashboard's on-focus
+    // dropdown) instead of the empty result plain search returns for "".
+    // While validCustomerNames/validItemCodes is still null (the background
+    // getUsedCustomers/getUsedItems fetch hasn't resolved yet), report a
+    // "still loading" failure rather than a false empty result — otherwise
+    // tapping the field right as the screen opens (or right after changing
+    // brand/date) permanently shows "no options" if that tap wins the race
+    // against the fetch. Memoized with useCallback so LinkSearchField's own
+    // effect can safely depend on `search` and re-run once the real list
+    // arrives, instead of only re-fetching on the next keystroke.
+    const customerSearch = useCallback(async (query: string) => {
+        if (!query.trim()) {
+            if (validCustomerNames === null) return { ok: false as const, error: 'Still loading', data: [] };
+            if (!validCustomerNames.length) return { ok: true as const, data: [] };
+            return await getCustomersByNames(validCustomerNames);
+        }
+        const res = await searchCustomers(query);
+        if (!res.ok || validCustomerNames === null) return res;
+        return { ok: true as const, data: res.data.filter(c => validCustomerNames.includes(c.name)) };
+    }, [validCustomerNames]);
+
+    const itemSearch = useCallback(async (query: string) => {
+        if (!query.trim()) {
+            if (validItemCodes === null) return { ok: false as const, error: 'Still loading', data: [] };
+            if (!validItemCodes.length) return { ok: true as const, data: [] };
+            return await getItemsByCodes(validItemCodes);
+        }
+        const res = await searchItems(query);
+        if (!res.ok || validItemCodes === null) return res;
+        return { ok: true as const, data: res.data.filter(i => validItemCodes.includes(i.name)) };
+    }, [validItemCodes]);
 
     useEffect(() => {
         (async () => {
@@ -375,13 +505,6 @@ export default function InvoiceHistoryScreen() {
         setDraftFromDate(monthStartDate(fy, draftMonth, t));
         setDraftToDate(monthEndDate(fy, draftMonth, t));
     };
-    const onSelectDraftMonth = (m: string) => {
-        const fy = findFy(fiscalYears, draftFiscalYear);
-        const t = today();
-        setDraftMonth(m);
-        setDraftFromDate(monthStartDate(fy, m, t));
-        setDraftToDate(monthEndDate(fy, m, t));
-    };
     const applyFromDate = (selected: Date) => setDraftFromDate(toIso(selected));
     const applyToDate = (selected: Date) => {
         const t = today();
@@ -409,20 +532,15 @@ export default function InvoiceHistoryScreen() {
     };
 
     const openFyPicker = () => setPicker({ visible: true, title: 'Fiscal Year', options: fiscalYears.map(fy => ({ label: fy.name, value: fy.name })), selectedValue: draftFiscalYear, onSelect: onSelectDraftFy });
-    const openMonthPicker = () => setPicker({ visible: true, title: 'Month', options: MONTHS.map(m => ({ label: m, value: m })), selectedValue: draftMonth, onSelect: onSelectDraftMonth });
-    const openExecPicker = () => setPicker({ visible: true, title: 'Sales Executive', options: [{ label: 'All', value: '' }, ...executives.map(e => ({ label: e.name, value: e.id }))], selectedValue: draftSalesExecutive, onSelect: setDraftSalesExecutive });
-    const openBrandPicker = () => setPicker({ visible: true, title: 'Brand', options: [{ label: 'All', value: '' }, ...brands.map(b => ({ label: brandLabel(b), value: b }))], selectedValue: draftBrand, onSelect: setDraftBrand });
-    const openPaymentStatusPicker = () => setPicker({
-        visible: true,
-        title: 'Payment Status',
-        options: [{ label: 'All', value: '' }, { label: 'Payment Pending', value: 'Payment Pending' }, { label: 'Payment Paid', value: 'Payment Paid' }],
-        selectedValue: draftPaymentStatus,
-        onSelect: setDraftPaymentStatus,
-    });
+    const openExecPicker = () => setPicker({ visible: true, title: 'Sales Executive', options: [{ label: 'All', value: '' }, ...executives.map(e => ({ label: e.name.toUpperCase(), value: e.id }))], selectedValue: draftSalesExecutive, onSelect: setDraftSalesExecutive });
+    const openBrandPicker = () => setPicker({ visible: true, title: 'Brand', options: [{ label: 'All', value: '' }, ...brands.map(b => ({ label: brandLabel(b).toUpperCase(), value: b }))], selectedValue: draftBrand, onSelect: setDraftBrand });
+    const openPaymentStatusPicker = () => setPicker({ visible: true, title: 'Payment Status', options: [{ label: 'All', value: '' }, { label: 'Payment Paid', value: 'Payment Paid' }, { label: 'Payment Pending', value: 'Payment Pending' }], selectedValue: draftPaymentStatus, onSelect: setDraftPaymentStatus });
 
-    const execLabel = (id: string) => executives.find(e => e.id === id)?.name || 'All';
-    const brandLabelFor = (b: string) => (b ? brandLabel(b) : 'All');
-    const paymentStatusLabelFor = (p: string) => p || 'All';
+    // Display only — matches the ERP dashboard's uppercase Sales Executive
+    // rendering. The underlying id/name used for filtering is untouched.
+    const execLabel = (id: string) => (executives.find(e => e.id === id)?.name || 'All').toUpperCase();
+    const brandLabelFor = (b: string) => (b ? brandLabel(b).toUpperCase() : 'All');
+    const paymentStatusLabelFor = (p: string) => (p ? p : 'All');
 
     const rows = useMemo(() => history?.rows || [], [history]);
 
@@ -451,7 +569,13 @@ export default function InvoiceHistoryScreen() {
                         <Ionicons name="chevron-back" size={22} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.topbarTitle, { color: colors.text }]}>Sales Invoice History</Text>
-                    <View style={{ width: 30 }} />
+                    <TouchableOpacity
+                        style={{ width: 30, alignItems: 'flex-end' }}
+                        onPress={() => setProfitRevealed(v => !v)}
+                        accessibilityLabel={profitRevealed ? 'Hide Profit & Margin %' : 'Show Profit & Margin %'}
+                    >
+                        <Ionicons name={profitRevealed ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.text} />
+                    </TouchableOpacity>
                 </View>
             </SafeAreaView>
 
@@ -466,13 +590,29 @@ export default function InvoiceHistoryScreen() {
               * scrollable list (not a descendant of it), the dropdown has no
               * scrolling ancestor to be clipped by.
               */}
-            <View style={{ zIndex: 20, backgroundColor: colors.background }}>
+            {/*
+              * elevation here (not just zIndex) matters once the tap-outside
+              * overlay below exists: Android's elevation stacking is only
+              * compared among direct siblings at each level, so without an
+              * explicit value here this section (and the dropdown nested
+              * inside it) defaults to elevation 0 — below the overlay's own
+              * elevation — even though zIndex alone would visually paint it
+              * on top. That mismatch is what let the dropdown list correctly
+              * while silently eating its own scroll/tap gestures.
+              */}
+            <View style={{ zIndex: 20, elevation: 20, backgroundColor: colors.background }}>
+                <View style={styles.filtersRow}>
+                    <TouchableOpacity style={[styles.filtersBtn, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={openFiltersSheet}>
+                        <Ionicons name="options-outline" size={15} color={colors.text} />
+                        <Text style={[styles.filtersBtnText, { color: colors.text }]}>Filters</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8, paddingRight: s(18) }}>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: NAVY }]} onPress={openFiltersSheet}><Text style={styles.chipTextActive}>FY {fiscalYear}</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{month}</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ddmm(fromDate)} – {ddmm(toDate)}</Text></TouchableOpacity>
                     {ownExecutiveName ? (
-                        <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName}</Text></View>
+                        <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName.toUpperCase()}</Text></View>
                     ) : (
                         <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text></TouchableOpacity>
                     )}
@@ -483,8 +623,8 @@ export default function InvoiceHistoryScreen() {
                 </ScrollView>
 
                 <View style={styles.searchGrid}>
-                    <LinkSearchField placeholder="All Customers" value={customer?.customer_name || ''} onSelect={(c: Customer) => setCustomer(c)} onClear={() => setCustomer(null)} search={searchCustomers} colors={colors} styles={styles} />
-                    <LinkSearchField placeholder="All Items" value={item?.item_name || ''} onSelect={(i: Item) => setItem(i)} onClear={() => setItem(null)} search={searchItems} colors={colors} styles={styles} />
+                    <LinkSearchField placeholder="All Customers" value={customer?.customer_name || ''} onSelect={(c: Customer) => setCustomer(c)} onClear={() => setCustomer(null)} search={customerSearch} open={customerDropdownOpen} setOpen={setCustomerDropdownOpen} colors={colors} styles={styles} />
+                    <LinkSearchField placeholder="All Items" value={item?.item_name || ''} onSelect={(i: Item) => setItem(i)} onClear={() => setItem(null)} search={itemSearch} showCode open={itemDropdownOpen} setOpen={setItemDropdownOpen} colors={colors} styles={styles} />
                 </View>
             </View>
 
@@ -497,6 +637,7 @@ export default function InvoiceHistoryScreen() {
               */}
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
+                scrollEnabled={!anyDropdownOpen}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchHistory(true)} tintColor={colors.text} />}
                 onScroll={({ nativeEvent }) => {
                     const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
@@ -545,13 +686,30 @@ export default function InvoiceHistoryScreen() {
                     </View>
                 ) : (
                     <>
-                        {rows.slice(0, visibleCount).map((row, idx) => <InvoiceCard key={`${row.invoice_no}-${idx}`} item={row} colors={colors} styles={styles} />)}
+                        {rows.slice(0, visibleCount).map((row, idx) => <InvoiceCard key={`${row.invoice_no}-${idx}`} item={row} revealed={profitRevealed} colors={colors} styles={styles} />)}
                         {visibleCount < rows.length && (
                             <ActivityIndicator size="small" color={NAVY} style={{ marginTop: vs(16) }} />
                         )}
                     </>
                 )}
             </ScrollView>
+
+            {/*
+              * scrollEnabled={false} above stops the list from scrolling but
+              * doesn't reliably stop it from still winning the touch — on
+              * Android it can swallow the gesture as its own without either
+              * view actually moving. This absorbs the touch before it ever
+              * reaches the list: a plain (non-scrolling) View, positioned
+              * between the list (z 0) and the dropdown's own zIndex/elevation
+              * (30/8), so the dropdown still wins over it. Doubles as
+              * tap-outside-to-close.
+              */}
+            {anyDropdownOpen && (
+                <Pressable
+                    style={[StyleSheet.absoluteFillObject, { zIndex: 15, elevation: 10 }]}
+                    onPress={() => { setCustomerDropdownOpen(false); setItemDropdownOpen(false); }}
+                />
+            )}
 
             <Modal visible={filtersSheetVisible} transparent animationType="slide" onRequestClose={closeFiltersSheet}>
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -568,14 +726,13 @@ export default function InvoiceHistoryScreen() {
 
                         <View style={styles.fieldGrid}>
                             <FieldBlock label="Fiscal Year" value={draftFiscalYear || '—'} onPress={openFyPicker} colors={colors} styles={styles} />
-                            <FieldBlock label="Month" value={draftMonth} onPress={openMonthPicker} colors={colors} styles={styles} />
                             <FieldBlock label="From Date" value={draftFromDate} onPress={() => { setShowToPicker(false); setShowFromPicker(v => !v); }} colors={colors} styles={styles} />
                             <FieldBlock label="To Date" value={draftToDate} onPress={() => { setShowFromPicker(false); setShowToPicker(v => !v); }} colors={colors} styles={styles} />
                             {ownExecutiveName ? (
                                 <View style={styles.fieldBlock}>
                                     <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Sales Executive</Text>
                                     <View style={[styles.selectBox, { borderColor: colors.border }]}>
-                                        <Text style={[styles.selectValue, { color: colors.text }]}>{ownExecutiveName}</Text>
+                                        <Text style={[styles.selectValue, { color: colors.text }]}>{ownExecutiveName.toUpperCase()}</Text>
                                         <Ionicons name="lock-closed" size={13} color={colors.textSecondary} />
                                     </View>
                                 </View>
@@ -654,7 +811,11 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
 
         scrollContent: { paddingBottom: vs(40) },
 
-        chipScroll: { marginTop: vs(16), paddingLeft: s(18) },
+        filtersRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: s(18), paddingTop: vs(16) },
+        filtersBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: ms(12), paddingVertical: vs(9), paddingHorizontal: s(14) },
+        filtersBtnText: { fontSize: ms(13), fontWeight: '700' },
+
+        chipScroll: { marginTop: vs(10), paddingLeft: s(18) },
         chip: { paddingHorizontal: s(16), paddingVertical: vs(8), borderRadius: 999 },
         chipText: { fontSize: ms(12), fontWeight: '700' },
         chipTextActive: { fontSize: ms(12), fontWeight: '700', color: '#fff' },
