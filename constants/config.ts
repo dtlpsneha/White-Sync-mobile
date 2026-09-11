@@ -17,16 +17,18 @@ export const apiUrl = (path: string) =>
 
 /**
  * SmartOps — a SEPARATE backend from ERPNext above, used only by the AI chat screen
- * (`app/ai-chat.tsx` via `services/smartopsApi.ts`). Different host port, different
- * auth model, different transport; nothing else in this app talks to it.
+ * (`app/ai-chat.tsx` via `services/smartopsApi.ts`). Different host, different auth
+ * model, different transport; nothing else in this app talks to it.
  *
- * Both services happen to run on the same box: ERPNext is published on :8080, while the
- * SmartOps API itself binds to 127.0.0.1:8100 there and is only reachable from outside
- * through nginx. :8200 is that nginx vhost — plaintext HTTP, and marked "temporary,
- * remove once TLS is up" in its own server config — so this is expected to become
- * `https://smartops.whitenco.net` once that domain is fully live. One constant to change.
+ * Now served over real HTTPS at its own domain (2026-09-11), which also carries the
+ * SmartOps web dashboard at the same host — this replaced the old plaintext
+ * `http://194.238.18.59:8200` (a temporary nginx vhost, same box as ERPNext, port-based
+ * only, no TLS). That old address also depended on a firewall rule scoped to one IP
+ * range, which is why it only worked over office Wi-Fi and never over mobile data — the
+ * domain isn't affected by that (fixed server-side, but the previous URL is best
+ * retired anyway now that a real domain exists).
  */
-export const SMARTOPS_API_BASE_URL = 'http://194.238.18.59:8200';
+export const SMARTOPS_API_BASE_URL = 'https://smartops.dtlp.tech';
 
 /** Build a full SmartOps API URL from a path such as `/bff/v1/chat`. */
 export const smartopsUrl = (path: string) =>
