@@ -75,6 +75,7 @@ export async function searchCustomers(query: string): Promise<SearchResult<Custo
 
     try {
         const fields = ['name', 'customer_name', 'customer_group', 'territory', 'customer_primary_address', 'customer_primary_contact'];
+        const filters = JSON.stringify([['disabled', '=', 0]]);
         const orFilters = JSON.stringify([
             ['customer_name', 'like', `%${escapeLike(trimmed)}%`],
             ['name', 'like', `%${escapeLike(trimmed)}%`],
@@ -82,6 +83,7 @@ export async function searchCustomers(query: string): Promise<SearchResult<Custo
 
         const res = await apiGet(apiUrl(
             `/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+            `&filters=${encodeURIComponent(filters)}` +
             `&or_filters=${encodeURIComponent(orFilters)}&limit_page_length=0`
         ), await session());
 
@@ -103,7 +105,7 @@ export async function getCustomersByNames(names: string[]): Promise<SearchResult
     if (!names.length) return { ok: true, data: [] };
     try {
         const fields = ['name', 'customer_name', 'customer_group', 'territory', 'customer_primary_address', 'customer_primary_contact'];
-        const filters = JSON.stringify([['name', 'in', names]]);
+        const filters = JSON.stringify([['name', 'in', names], ['disabled', '=', 0]]);
         const res = await apiGet(apiUrl(
             `/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}` +
             `&filters=${encodeURIComponent(filters)}&limit_page_length=${names.length}`
