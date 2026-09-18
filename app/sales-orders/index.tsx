@@ -8,7 +8,6 @@ import SalesOrderList from '@/components/SalesOrderList';
 import { apiPost } from '@/utils/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { FloatingNav } from '@/components/FloatingNav';
 import { useResponsive } from '@/hooks/useResponsive';
 import { apiUrl } from '@/constants/config';
 
@@ -121,8 +120,6 @@ export default function SalesOrderScreen() {
             >
                 <Ionicons name="add" size={32} color="#FFF" />
             </TouchableOpacity>
-
-            <FloatingNav />
         </View>
     );
 }

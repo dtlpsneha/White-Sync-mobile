@@ -1,8 +1,9 @@
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     ActivityIndicator,
     StyleSheet,
@@ -64,6 +65,8 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const isDark = theme === 'dark';
+    const { s, vs, ms } = useResponsive();
+    const styles = useMemo(() => getStyles({ s, vs, ms }), [s, vs, ms]);
 
     const handleRecordPress = (record: MaintenanceRecord) => {
         router.push({
@@ -212,110 +215,112 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
     );
 };
 
-const styles = StyleSheet.create({
-    container: { flex: 1 },
-    centerContainer: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-    listContent: { gap: 16 },
-    itemCard: {
-        borderRadius: 28,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.05)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.05,
-        shadowRadius: 16,
-        elevation: 4,
-        overflow: 'hidden'
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 20
-    },
-    customerInfo: { flex: 1, marginRight: 12 },
-    customerName: { fontSize: 20, fontWeight: '900', letterSpacing: -0.6, marginBottom: 4 },
-    idRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    idText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', opacity: 0.6 },
-    dot: { width: 3, height: 3, borderRadius: 1.5, opacity: 0.3 },
-    typeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', opacity: 0.6 },
-    statusChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-        borderWidth: 1,
-        gap: 6
-    },
-    statusIndicator: { width: 6, height: 6, borderRadius: 3 },
-    statusText: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
-    cardBody: { gap: 14, marginBottom: 20 },
-    purposeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    iconContainer: {
-        width: 32,
-        height: 32,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    purposeText: { fontSize: 14, fontWeight: '700', opacity: 0.9 },
-    metaRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-    metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    metaText: { fontSize: 12, fontWeight: '600', opacity: 0.7 },
-    cardFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.03)'
-    },
-    costBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 14,
-        gap: 8
-    },
-    costLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', opacity: 0.6 },
-    costValue: { fontSize: 15, fontWeight: '900' },
-    badgeGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    followUpBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        borderWidth: 1,
-        gap: 4
-    },
-    badgeTextText: { fontSize: 9, fontWeight: '900', textTransform: 'uppercase' },
-    actionBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(0,0,0,0.02)',
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    followUpAlert: {
-        marginTop: 16,
-        marginHorizontal: -24,
-        marginBottom: -24,
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.02)'
-    },
-    followUpAlertText: { fontSize: 11, fontWeight: '800' },
-    emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 16 },
-    emptyText: { fontSize: 15, fontWeight: '700' }
-});
+function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) => number; ms: (n: number) => number }) {
+    return StyleSheet.create({
+        container: { flex: 1 },
+        centerContainer: { padding: ms(36), justifyContent: 'center', alignItems: 'center' },
+        listContent: { gap: vs(14) },
+        itemCard: {
+            borderRadius: ms(24),
+            padding: ms(20),
+            borderWidth: 1,
+            borderColor: 'rgba(0,0,0,0.05)',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.05,
+            shadowRadius: 16,
+            elevation: 4,
+            overflow: 'hidden'
+        },
+        cardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: vs(18)
+        },
+        customerInfo: { flex: 1, marginRight: s(10) },
+        customerName: { fontSize: ms(16), fontWeight: '900', letterSpacing: -0.4, marginBottom: vs(3) },
+        idRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        idText: { fontSize: ms(10), fontWeight: '700', textTransform: 'uppercase', opacity: 0.6 },
+        dot: { width: 3, height: 3, borderRadius: 1.5, opacity: 0.3 },
+        typeText: { fontSize: ms(10), fontWeight: '700', textTransform: 'uppercase', opacity: 0.6 },
+        statusChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: s(10),
+            paddingVertical: vs(5),
+            borderRadius: ms(10),
+            borderWidth: 1,
+            gap: 6
+        },
+        statusIndicator: { width: 6, height: 6, borderRadius: 3 },
+        statusText: { fontSize: ms(9), fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
+        cardBody: { gap: vs(12), marginBottom: vs(18) },
+        purposeRow: { flexDirection: 'row', alignItems: 'center', gap: s(10) },
+        iconContainer: {
+            width: ms(28),
+            height: ms(28),
+            borderRadius: ms(9),
+            justifyContent: 'center',
+            alignItems: 'center'
+        },
+        purposeText: { fontSize: ms(12.5), fontWeight: '700', opacity: 0.9 },
+        metaRow: { flexDirection: 'row', alignItems: 'center', gap: s(14) },
+        metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        metaText: { fontSize: ms(11), fontWeight: '600', opacity: 0.7 },
+        cardFooter: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: vs(14),
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(0,0,0,0.03)'
+        },
+        costBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: s(12),
+            paddingVertical: vs(7),
+            borderRadius: ms(12),
+            gap: s(7)
+        },
+        costLabel: { fontSize: ms(9), fontWeight: '800', textTransform: 'uppercase', opacity: 0.6 },
+        costValue: { fontSize: ms(13.5), fontWeight: '900' },
+        badgeGroup: { flexDirection: 'row', alignItems: 'center', gap: s(9) },
+        followUpBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: s(7),
+            paddingVertical: vs(3),
+            borderRadius: ms(8),
+            borderWidth: 1,
+            gap: 4
+        },
+        badgeTextText: { fontSize: ms(8.5), fontWeight: '900', textTransform: 'uppercase' },
+        actionBtn: {
+            width: ms(28),
+            height: ms(28),
+            borderRadius: ms(14),
+            backgroundColor: 'rgba(0,0,0,0.02)',
+            justifyContent: 'center',
+            alignItems: 'center'
+        },
+        followUpAlert: {
+            marginTop: vs(14),
+            marginHorizontal: -ms(20),
+            marginBottom: -ms(20),
+            paddingHorizontal: s(20),
+            paddingVertical: vs(11),
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: s(7),
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(0,0,0,0.02)'
+        },
+        followUpAlertText: { fontSize: ms(10.5), fontWeight: '800' },
+        emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: vs(50), gap: 14 },
+        emptyText: { fontSize: ms(14), fontWeight: '700' }
+    });
+}
 
 export default MaintenanceList;

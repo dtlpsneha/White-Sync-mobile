@@ -1,15 +1,14 @@
-import { FloatingNav } from '@/components/FloatingNav';
 import MaintenanceList from '@/components/MaintenanceList';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { apiGet } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
 
@@ -63,6 +62,8 @@ export default function MaintenanceScreen() {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const isDark = theme === 'dark';
+    const { s, vs, ms } = useResponsive();
+    const styles = getStyles({ s, vs, ms });
 
     const [records, setRecords] = useState<MaintenanceRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -139,19 +140,24 @@ export default function MaintenanceScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View style={[styles.headerGradient, { backgroundColor: isDark ? '#000000' : '#FFFFFF' }]}>
-                <SafeAreaView>
+            <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
+                <LinearGradient
+                    colors={isDark ? ['#0B3D91', '#01579B'] : ['#0288D1', '#01579B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.headerGradient}
+                >
                     <View style={styles.header}>
+                        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.backBtn}>
+                            <Ionicons name="chevron-back" size={ms(20)} color="#FFFFFF" />
+                        </TouchableOpacity>
                         <View>
-                            <Text style={[styles.headerTitle, { color: colors.text }]}>Visits</Text>
-                            <View style={styles.headerSubtitleRow}>
-                                <View style={[styles.subtitleAccent, { backgroundColor: colors.primary }]} />
-                                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Relationship Management</Text>
-                            </View>
+                            <Text style={styles.headerTitle}>Visits</Text>
+                            <Text style={styles.headerSubtitle}>Relationship Management</Text>
                         </View>
                     </View>
-                </SafeAreaView>
-            </View>
+                </LinearGradient>
+            </SafeAreaView>
 
             <ScrollView
                 style={styles.scrollContent}
@@ -224,7 +230,6 @@ export default function MaintenanceScreen() {
                     )}
                 </View>
             </ScrollView>
-            <FloatingNav />
 
             {/* New Floating Action Button */}
             <TouchableOpacity 
@@ -238,80 +243,96 @@ export default function MaintenanceScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1 },
-    headerGradient: { 
-        paddingBottom: 8,
-        borderBottomWidth: 1,
-        borderColor: 'rgba(0,0,0,0.05)'
-    },
-    header: { paddingHorizontal: 24, paddingVertical: 16 },
-    headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    headerTitle: { fontSize: 36, fontWeight: '900', letterSpacing: -1.5 },
-    headerSubtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-    subtitleAccent: { width: 12, height: 2, borderRadius: 1 },
-    headerSubtitle: { fontSize: 13, fontWeight: '800', opacity: 0.6, letterSpacing: 0.5, textTransform: 'uppercase' },
-    fab: {
-        position: 'absolute',
-        bottom: 150,
-        right: 24,
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#00BFA5',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        elevation: 8,
-        zIndex: 50,
-    },
-    scrollContent: { flex: 1 },
-    scrollInner: { paddingTop: 20, paddingBottom: 110 },
-    statsContainer: { marginTop: 8 },
-    statsScroll: { paddingHorizontal: 20, gap: 14, paddingBottom: 12 },
-    statWrapper: { width: 200, height: 210 },
-    statCard: { 
-        flex: 1, 
-        borderRadius: 36, 
-        padding: 24, 
-        justifyContent: 'space-between',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 8
-    },
-    statHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    statIconBox: { 
-        width: 48, 
-        height: 48, 
-        borderRadius: 18, 
-        backgroundColor: 'rgba(255,255,255,0.25)', 
-        justifyContent: 'center', 
-        alignItems: 'center' 
-    },
-    statBody: { gap: 2 },
-    statValueText: { fontSize: 44, fontWeight: '900', color: '#FFF', letterSpacing: -2 },
-    statLabelText: { fontSize: 14, fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.2 },
-    statFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-    statTrendBadge: { 
-        backgroundColor: 'rgba(255,255,255,0.15)', 
-        paddingHorizontal: 12, 
-        paddingVertical: 6, 
-        borderRadius: 12 
-    },
-    statTrendText: { fontSize: 11, fontWeight: '900', color: '#FFF', textTransform: 'uppercase', opacity: 0.9 },
-    section: { paddingHorizontal: 24, marginTop: 24 },
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
-    sectionAccent: { width: 6, height: 24, borderRadius: 3 },
-    sectionTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.8 },
-    loadingBox: { padding: 60, alignItems: 'center', gap: 12 },
-    loadingText: { fontSize: 14, fontWeight: '600' },
-    errorBox: { padding: 40, alignItems: 'center', gap: 16, backgroundColor: 'rgba(255,0,0,0.02)', borderRadius: 24 },
-    errorText: { fontSize: 14, color: '#EF4444', textAlign: 'center', fontWeight: '500' },
-    retryBtn: { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#EF4444', borderRadius: 14 },
-    retryText: { color: '#FFF', fontWeight: '700' }
-});
+function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) => number; ms: (n: number) => number }) {
+    return StyleSheet.create({
+        container: { flex: 1 },
+        headerGradient: {
+            marginHorizontal: s(16),
+            marginTop: vs(16),
+            marginBottom: vs(18),
+            borderRadius: ms(24),
+            elevation: 6,
+            shadowColor: '#01579B',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.3,
+            shadowRadius: 16,
+        },
+        header: { flexDirection: 'row', alignItems: 'center', gap: s(12), padding: ms(18) },
+        backBtn: {
+            width: ms(36),
+            height: ms(36),
+            borderRadius: ms(18),
+            backgroundColor: 'rgba(255,255,255,0.18)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.3)',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+        headerTitle: { fontSize: ms(20), fontWeight: '900', letterSpacing: -0.5, color: '#FFFFFF' },
+        headerSubtitle: { fontSize: ms(11), fontWeight: '700', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.4, marginTop: vs(2), textTransform: 'uppercase' },
+        fab: {
+            position: 'absolute',
+            bottom: vs(150),
+            right: s(24),
+            width: ms(60),
+            height: ms(60),
+            borderRadius: ms(30),
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#00BFA5',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.4,
+            shadowRadius: 10,
+            elevation: 8,
+            zIndex: 50,
+        },
+        scrollContent: { flex: 1 },
+        scrollInner: { paddingTop: vs(20), paddingBottom: vs(110) },
+        statsContainer: { marginTop: vs(8) },
+        statsScroll: { paddingHorizontal: s(20), gap: s(14), paddingBottom: vs(12) },
+        statWrapper: { width: s(190), height: vs(170) },
+        statCard: {
+            flex: 1,
+            borderRadius: ms(28),
+            padding: ms(18),
+            justifyContent: 'space-between',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 12 },
+            shadowOpacity: 0.2,
+            shadowRadius: 16,
+            elevation: 8
+        },
+        statHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+        statIconBox: {
+            width: ms(40),
+            height: ms(40),
+            borderRadius: ms(14),
+            backgroundColor: 'rgba(255,255,255,0.25)',
+            justifyContent: 'center',
+            alignItems: 'center'
+        },
+        statBody: { gap: 2 },
+        statValueText: { fontSize: ms(30), fontWeight: '900', color: '#FFF', letterSpacing: -1 },
+        statLabelText: { fontSize: ms(12), fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.2 },
+        statFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: vs(8) },
+        statTrendBadge: {
+            backgroundColor: 'rgba(255,255,255,0.15)',
+            paddingHorizontal: s(10),
+            paddingVertical: vs(5),
+            borderRadius: ms(10)
+        },
+        statTrendText: { fontSize: ms(9.5), fontWeight: '900', color: '#FFF', textTransform: 'uppercase', opacity: 0.9 },
+        section: { paddingHorizontal: s(20), marginTop: vs(22) },
+        sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: s(10), marginBottom: vs(18) },
+        sectionAccent: { width: 5, height: ms(18), borderRadius: 3 },
+        sectionTitle: { fontSize: ms(16), fontWeight: '900', letterSpacing: -0.3 },
+        loadingBox: { padding: ms(50), alignItems: 'center', gap: 12 },
+        loadingText: { fontSize: ms(13), fontWeight: '600' },
+        errorBox: { padding: ms(32), alignItems: 'center', gap: 14, backgroundColor: 'rgba(255,0,0,0.02)', borderRadius: ms(20) },
+        errorText: { fontSize: ms(13), color: '#EF4444', textAlign: 'center', fontWeight: '500' },
+        retryBtn: { paddingHorizontal: s(22), paddingVertical: vs(11), backgroundColor: '#EF4444', borderRadius: ms(12) },
+        retryText: { color: '#FFF', fontWeight: '700' }
+    });
+}
 

@@ -86,15 +86,12 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ed7c614c-e059-4629-a2e2-cae1bc505958"
+        "projectId": "f465bea0-2332-4001-9355-ed8059f4b472"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/ed7c614c-e059-4629-a2e2-cae1bc505958"
-    },
-    "owner": "sasikumar2005"
+    "owner": "prasanth20044"
   }
 }

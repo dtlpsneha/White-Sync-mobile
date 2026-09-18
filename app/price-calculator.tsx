@@ -24,8 +24,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
-import { FloatingNav } from '@/components/FloatingNav';
-import { 
+import {
     fetchGrades, 
     calculateBeltPrice, 
     Grade, 
@@ -429,8 +428,6 @@ export default function PriceCalculatorScreen() {
                     </Animated.View>
                 </View>
             </Modal>
-
-            <FloatingNav />
         </SafeAreaView>
     );
 }
