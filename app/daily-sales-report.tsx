@@ -23,6 +23,7 @@ import { useResponsive } from '@/hooks/useResponsive';
 import {
     DailySummary,
     DailySummaryRow,
+    DailySummaryTotals,
     FiscalYear,
     SalesExecutive,
     brandLabel,
@@ -57,17 +58,28 @@ function findCurrentFy(list: FiscalYear[], anchor: string) {
     const anchorDate = new Date(`${anchor}T00:00:00Z`);
     return list.find(fy => new Date(`${fy.year_start_date}T00:00:00Z`) <= anchorDate);
 }
+// "All" is always offered alongside whatever real months are valid for the
+// fiscal year — matches the live ERPNext Client Script exactly (it prepends
+// the same option before the month list, capped the same way for the
+// current, still-in-progress FY).
 function monthOptionsForFy(fy: FiscalYear | undefined, anchor: string): string[] {
-    if (!fy) return MONTHS;
+    if (!fy) return ['All', ...MONTHS];
     const anchorDate = new Date(`${anchor}T00:00:00Z`);
     const start = new Date(`${fy.year_start_date}T00:00:00Z`);
     const end = new Date(`${fy.year_end_date}T00:00:00Z`);
-    if (!(start <= anchorDate && anchorDate <= end)) return MONTHS;
+    if (!(start <= anchorDate && anchorDate <= end)) return ['All', ...MONTHS];
     const anchorCalIdx = anchorDate.getUTCMonth();
     const maxFyIdx = anchorCalIdx >= 3 ? anchorCalIdx - 3 : anchorCalIdx + 9;
-    return MONTHS.slice(0, maxFyIdx + 1);
+    return ['All', ...MONTHS.slice(0, maxFyIdx + 1)];
 }
+// "All" has no single month to anchor a date to — the report scopes itself
+// to the whole fiscal year server-side (get_daily_report_summary: month
+// "All" makes "Up to Date" collapse to the FY start, and "as on" becomes
+// min(FY end, yesterday) regardless of whatever's in this field) — so the
+// Date field is blanked here to make that honest instead of showing a date
+// that no longer actually drives anything, matching the ERP dashboard.
 function monthEndDate(fy: FiscalYear | undefined, month: string, cap: string): string {
+    if (month === 'All') return '';
     if (!fy) return cap;
     const fyStartYear = new Date(`${fy.year_start_date}T00:00:00Z`).getUTCFullYear();
     const calIdx = CAL_MONTHS.indexOf(month);
@@ -91,21 +103,187 @@ function formatAmount(value: number | undefined, display: DisplayUnit) {
 
 /** Brand-specific navy/red accent palette from the approved design canvas — kept constant across themes (a brand accent, not a neutral), while surfaces/text still follow the app's real light/dark tokens. */
 const NAVY = '#0E1E3B';
-const DANGER = '#DC3545';
+
+/**
+ * Exact colors/structure from the live ERPNext "Daily Sales Report" Client
+ * Script's own table (fetched directly from the server, not guessed) — this
+ * table is meant to be the same one, not a mobile reinterpretation, so these
+ * are copied verbatim rather than mapped onto the app's navy/red palette.
+ */
+const TABLE_SALES_BG = '#1e3a8a';
+const TABLE_COLLECTION_BG = '#0b6e4f';
+const TABLE_PENDING_BG = '#9a5b0a';
+const TABLE_HEADER_TEXT = '#e8ecf5';
+const TABLE_SUBHEAD_TEXT = '#c7d0e6';
+const TABLE_TOTAL_BG = '#3730a3';
+const TABLE_STRIPE_BG = '#eef2fb';
+const TABLE_GROUP_BORDER = '#c7cede';
+
+/** The 7 scrollable numeric columns, in the website's own left-to-right order. */
+const TABLE_NUM_COLS: { key: keyof DailySummaryTotals; subhead: string }[] = [
+    { key: 'sales_as_on', subhead: 'As On Date' },
+    { key: 'sales_mtd', subhead: 'Up to Date' },
+    { key: 'sales_fytd', subhead: 'FY Up to Date' },
+    { key: 'collection_as_on', subhead: 'As On Date' },
+    { key: 'collection_mtd', subhead: 'Up to Date' },
+    { key: 'collection_fytd', subhead: 'FY Up to Date' },
+    { key: 'payment_pending', subhead: '' },
+];
+
+/**
+ * The Daily Sales Report table, matching the live ERPNext dashboard's own
+ * table exactly (columns, colors, grouping, Total row) — see the session
+ * plan for why: brand name frozen on the left (a phone can't show all 8
+ * columns at once the way a desktop can), the rest horizontal-scrollable.
+ * Every row across both halves shares the same fixed height so they stay
+ * vertically aligned purely by being in the same top-to-bottom flow —
+ * nothing syncs their scroll position because only the right half scrolls,
+ * and only horizontally (the whole table still scrolls vertically as one
+ * unit, as part of the screen's own outer ScrollView).
+ */
+function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
+    rows: DailySummaryRow[];
+    totals: DailySummaryTotals | undefined;
+    display: DisplayUnit;
+    colors: any;
+    s: (n: number) => number;
+    vs: (n: number) => number;
+    ms: (n: number) => number;
+}) {
+    const FROZEN_WIDTH = s(132);
+    const NUM_COL_WIDTH = s(96);
+    const HEADER_ROW1_H = vs(32);
+    const HEADER_ROW2_H = vs(26);
+    const BODY_ROW_H = vs(48);
+    const HEADER_TOTAL_H = HEADER_ROW1_H + HEADER_ROW2_H;
+
+    const headerCellStyle = { fontSize: ms(10.5), fontWeight: '800' as const, color: TABLE_HEADER_TEXT, textTransform: 'uppercase' as const, letterSpacing: 0.3, textAlign: 'center' as const };
+    const subheadCellStyle = { fontSize: ms(9), fontWeight: '700' as const, color: TABLE_SUBHEAD_TEXT, textTransform: 'uppercase' as const, textAlign: 'center' as const };
+    const numCellStyle = { fontSize: ms(11.5), fontWeight: '600' as const, textAlign: 'right' as const };
+
+    return (
+        <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: ms(12), overflow: 'hidden', marginHorizontal: s(18) }}>
+            {/* Frozen "Name of Organisation" column */}
+            <View style={{ width: FROZEN_WIDTH, borderRightWidth: 2, borderRightColor: TABLE_GROUP_BORDER }}>
+                <View style={{ height: HEADER_TOTAL_H, backgroundColor: '#312e81', justifyContent: 'center', paddingHorizontal: s(8) }}>
+                    <Text style={headerCellStyle}>Name of Organisation</Text>
+                </View>
+                {rows.map((row, idx) => {
+                    const isUnassigned = row.brand === 'Unassigned';
+                    return (
+                        <View
+                            key={row.brand}
+                            style={{
+                                height: BODY_ROW_H, justifyContent: 'center', paddingHorizontal: s(8),
+                                backgroundColor: idx % 2 === 1 ? TABLE_STRIPE_BG : colors.surface,
+                            }}
+                        >
+                            <Text
+                                style={{ fontSize: ms(11.5), fontWeight: isUnassigned ? '500' : '700', fontStyle: isUnassigned ? 'italic' : 'normal', color: isUnassigned ? colors.textSecondary : colors.text }}
+                                numberOfLines={2}
+                            >
+                                {brandLabel(row.brand).toUpperCase()}
+                            </Text>
+                        </View>
+                    );
+                })}
+                <View style={{ height: BODY_ROW_H, justifyContent: 'center', paddingHorizontal: s(8), backgroundColor: TABLE_TOTAL_BG }}>
+                    <Text style={{ fontSize: ms(11.5), fontWeight: '800', color: '#fff' }}>Total</Text>
+                </View>
+            </View>
+
+            {/* Scrollable Sales / Collection / Payment Pending columns */}
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+                <View>
+                    <View style={{ flexDirection: 'row' }}>
+                        <View style={{ flexDirection: 'column' }}>
+                            <View style={{ flexDirection: 'row', height: HEADER_ROW1_H }}>
+                                <View style={{ width: NUM_COL_WIDTH * 3, backgroundColor: TABLE_SALES_BG, justifyContent: 'center' }}>
+                                    <Text style={headerCellStyle}>Sales (Basic Value)</Text>
+                                </View>
+                                <View style={{ width: NUM_COL_WIDTH * 3, backgroundColor: TABLE_COLLECTION_BG, justifyContent: 'center', borderLeftWidth: 2, borderLeftColor: TABLE_GROUP_BORDER }}>
+                                    <Text style={headerCellStyle}>Collection (With GST)</Text>
+                                </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', height: HEADER_ROW2_H }}>
+                                {TABLE_NUM_COLS.slice(0, 6).map((col, i) => (
+                                    <View
+                                        key={col.key}
+                                        style={{
+                                            width: NUM_COL_WIDTH, justifyContent: 'center', alignItems: 'center',
+                                            backgroundColor: i < 3 ? TABLE_SALES_BG : TABLE_COLLECTION_BG,
+                                            borderLeftWidth: i === 3 ? 2 : 0, borderLeftColor: TABLE_GROUP_BORDER,
+                                        }}
+                                    >
+                                        <Text style={subheadCellStyle}>{col.subhead}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+                        <View style={{ width: NUM_COL_WIDTH, height: HEADER_TOTAL_H, backgroundColor: TABLE_PENDING_BG, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 2, borderLeftColor: TABLE_GROUP_BORDER, paddingHorizontal: s(4) }}>
+                            <Text style={[headerCellStyle, { fontSize: ms(9.5) }]}>Payment Pending (With GST)</Text>
+                        </View>
+                    </View>
+
+                    {rows.map((row, idx) => {
+                        const isUnassigned = row.brand === 'Unassigned';
+                        const rowBg = idx % 2 === 1 ? TABLE_STRIPE_BG : colors.surface;
+                        return (
+                            <View key={row.brand} style={{ flexDirection: 'row', height: BODY_ROW_H, backgroundColor: rowBg }}>
+                                {TABLE_NUM_COLS.map((col, i) => (
+                                    <View
+                                        key={col.key}
+                                        style={{
+                                            width: NUM_COL_WIDTH, justifyContent: 'center', paddingHorizontal: s(8),
+                                            borderLeftWidth: (i === 3 || i === 6) ? 2 : 0, borderLeftColor: colors.border,
+                                        }}
+                                    >
+                                        <Text
+                                            style={[numCellStyle, { color: isUnassigned ? colors.textSecondary : colors.text, fontStyle: isUnassigned ? 'italic' : 'normal' }]}
+                                            numberOfLines={1}
+                                        >
+                                            {formatAmount(row[col.key], display)}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </View>
+                        );
+                    })}
+
+                    <View style={{ flexDirection: 'row', height: BODY_ROW_H, backgroundColor: TABLE_TOTAL_BG }}>
+                        {TABLE_NUM_COLS.map((col, i) => (
+                            <View
+                                key={col.key}
+                                style={{
+                                    width: NUM_COL_WIDTH, justifyContent: 'center', paddingHorizontal: s(8),
+                                    borderLeftWidth: (i === 3 || i === 6) ? 2 : 0, borderLeftColor: '#5b55c7',
+                                }}
+                            >
+                                <Text style={[numCellStyle, { color: '#fff', fontWeight: '800' }]} numberOfLines={1}>
+                                    {formatAmount(totals?.[col.key], display)}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            </ScrollView>
+        </View>
+    );
+}
 
 type PickerOption = { label: string; value: string };
 type PickerState = { visible: boolean; title: string; options: PickerOption[]; selectedValue: string; onSelect: (v: string) => void };
 const EMPTY_PICKER: PickerState = { visible: false, title: '', options: [], selectedValue: '', onSelect: () => {} };
 
-const FieldBlock = ({ label, value, onPress, icon, full, colors, styles }: any) => (
-    <TouchableOpacity style={full ? styles.fieldBlockFull : styles.fieldBlock} onPress={onPress}>
+const FieldBlock = ({ label, value, onPress, icon, full, disabled, colors, styles }: any) => (
+    <TouchableOpacity style={[full ? styles.fieldBlockFull : styles.fieldBlock, disabled && { opacity: 0.45 }]} onPress={disabled ? undefined : onPress} disabled={disabled}>
         <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>{label}</Text>
         <View style={[styles.selectBox, { borderColor: colors.border }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {icon && <Ionicons name={icon} size={15} color={colors.textSecondary} />}
                 <Text style={[styles.selectValue, { color: colors.text }]}>{value}</Text>
             </View>
-            <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+            {!disabled && <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />}
         </View>
     </TouchableOpacity>
 );
@@ -288,13 +466,6 @@ export default function DailySalesReportScreen() {
     // rendering. The underlying id/name used for filtering is untouched.
     const execLabel = (id: string) => (executives.find(e => e.id === id)?.name || 'All Executives').toUpperCase();
 
-    const goToBrand = (row: DailySummaryRow) => {
-        router.push({
-            pathname: '/daily-sales-report/[brand]',
-            params: { brand: row.brand, fiscalYear, month, date, salesExecutive, display },
-        });
-    };
-
     const rows = useMemo(() => {
         if (!summary) return [];
         let list = sortSummaryRows(summary.rows);
@@ -327,7 +498,7 @@ export default function DailySalesReportScreen() {
                 <View style={styles.dateRow}>
                     <View>
                         <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Date</Text>
-                        <Text style={[styles.dateValue, { color: colors.text }]}>{ddmmyy(date)}</Text>
+                        <Text style={[styles.dateValue, { color: colors.text }]}>{month === 'All' ? 'FY To Date' : ddmmyy(date)}</Text>
                     </View>
                     <TouchableOpacity style={[styles.filtersBtn, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={openFiltersSheet}>
                         <Ionicons name="options-outline" size={15} color={colors.text} />
@@ -371,34 +542,6 @@ export default function DailySalesReportScreen() {
                     </View>
                 ) : (
                     <>
-                        <View style={styles.summaryGrid}>
-                            <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                                <View style={[styles.badgeSquare, { backgroundColor: colors.surfaceSecondary }]}>
-                                    <Ionicons name="trending-up-outline" size={17} color={colors.text} />
-                                </View>
-                                <Text style={[styles.summaryValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatAmount(totals?.sales_fytd, display)}</Text>
-                                <Text style={[styles.summaryCaption, { color: colors.textSecondary }]}>Sales</Text>
-                            </View>
-                            <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                                <View style={[styles.badgeSquare, { backgroundColor: colors.surfaceSecondary }]}>
-                                    <Ionicons name="wallet-outline" size={17} color={colors.text} />
-                                </View>
-                                <Text style={[styles.summaryValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatAmount(totals?.collection_fytd, display)}</Text>
-                                <Text style={[styles.summaryCaption, { color: colors.textSecondary }]}>Collection</Text>
-                            </View>
-                        </View>
-
-                        <View style={[styles.pendingCard, { backgroundColor: 'rgba(220,53,69,0.10)', borderLeftColor: DANGER }]}>
-                            <Ionicons name="triangle" size={110} color="rgba(220,53,69,0.10)" style={styles.pendingWatermark} />
-                            <View style={styles.pendingTop}>
-                                <Text style={styles.pendingLabel}>Payment Pending</Text>
-                                <View style={[styles.pendingIconCircle, { backgroundColor: 'rgba(220,53,69,0.16)' }]}>
-                                    <Ionicons name="warning-outline" size={15} color={DANGER} />
-                                </View>
-                            </View>
-                            <Text style={[styles.pendingValue, { color: DANGER }]} numberOfLines={1} adjustsFontSizeToFit>{formatAmount(totals?.payment_pending, display)}</Text>
-                        </View>
-
                         <View style={styles.searchRow}>
                             <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                                 <Ionicons name="search" size={16} color={colors.textSecondary} />
@@ -424,42 +567,7 @@ export default function DailySalesReportScreen() {
                                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No brands match &ldquo;{searchQuery}&rdquo;</Text>
                             </View>
                         ) : (
-                            rows.map(row => (
-                                <TouchableOpacity
-                                    key={row.brand}
-                                    style={[styles.brandCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                                    onPress={() => goToBrand(row)}
-                                    activeOpacity={0.7}
-                                >
-                                    <View style={styles.brandTop}>
-                                        <View style={styles.brandId}>
-                                            <View style={[styles.brandAvatar, { backgroundColor: colors.surfaceSecondary }]}>
-                                                <Text style={[styles.brandAvatarText, { color: colors.text }]}>{brandLabel(row.brand)[0]?.toUpperCase()}</Text>
-                                            </View>
-                                            <Text style={[styles.brandName, { color: colors.text }]}>{brandLabel(row.brand).toUpperCase()}</Text>
-                                        </View>
-                                        <View style={styles.viewLink}>
-                                            <Text style={[styles.viewLinkText, { color: colors.text }]}>View Details</Text>
-                                            <Ionicons name="chevron-forward" size={13} color={colors.text} />
-                                        </View>
-                                    </View>
-                                    <View style={[styles.brandDivider, { backgroundColor: colors.border }]} />
-                                    <View style={styles.brandMetrics}>
-                                        <View>
-                                            <Text style={[styles.bmLabel, { color: colors.textSecondary }]}>Sales</Text>
-                                            <Text style={[styles.bmValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatAmount(row.sales_mtd, display)}</Text>
-                                        </View>
-                                        <View>
-                                            <Text style={[styles.bmLabel, { color: colors.textSecondary }]}>Collection</Text>
-                                            <Text style={[styles.bmValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatAmount(row.collection_mtd, display)}</Text>
-                                        </View>
-                                        <View>
-                                            <Text style={[styles.bmLabel, { color: DANGER }]}>Pending</Text>
-                                            <Text style={[styles.bmValue, { color: DANGER }]} numberOfLines={1} adjustsFontSizeToFit>{formatAmount(row.payment_pending, display)}</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            ))
+                            <DailySalesTable rows={rows} totals={totals} display={display} colors={colors} s={s} vs={vs} ms={ms} />
                         )}
                     </>
                 )}
@@ -485,8 +593,15 @@ export default function DailySalesReportScreen() {
                             <FieldBlock label="Fiscal Year" value={draftFiscalYear || '—'} onPress={openFyPicker} colors={colors} styles={styles} />
                             <FieldBlock label="Month" value={draftMonth} onPress={openMonthPicker} colors={colors} styles={styles} />
                         </View>
-                        <FieldBlock full label="Specific Date" value={ddmmyy(draftDate)} onPress={() => setShowDatePicker(v => !v)} icon="calendar-outline" colors={colors} styles={styles} />
-                        {showDatePicker && (
+                        <FieldBlock
+                            full label="Specific Date"
+                            value={draftMonth === 'All' ? 'Not applicable for All' : ddmmyy(draftDate)}
+                            onPress={() => setShowDatePicker(v => !v)}
+                            icon="calendar-outline"
+                            disabled={draftMonth === 'All'}
+                            colors={colors} styles={styles}
+                        />
+                        {showDatePicker && draftMonth !== 'All' && (
                             <DateTimePicker
                                 value={new Date(`${draftDate}T00:00:00`)}
                                 mode="date"
@@ -590,39 +705,13 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
 
         sectionLabel: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginHorizontal: s(18), marginTop: vs(22), marginBottom: vs(10) },
 
-        summaryGrid: { flexDirection: 'row', gap: s(12), paddingHorizontal: s(18) },
-        summaryCard: { flex: 1, borderWidth: 1, borderRadius: ms(20), padding: ms(16) },
-        badgeSquare: { width: ms(34), height: ms(34), borderRadius: ms(10), justifyContent: 'center', alignItems: 'center' },
-        summaryValue: { fontSize: ms(21), fontWeight: '800', marginTop: vs(14), marginBottom: 2 },
-        summaryCaption: { fontSize: ms(12.5), fontWeight: '600' },
-
-        pendingCard: { position: 'relative', overflow: 'hidden', borderLeftWidth: 5, borderRadius: ms(18), padding: ms(18), marginHorizontal: s(18), marginTop: vs(12) },
-        pendingWatermark: { position: 'absolute', right: -14, bottom: -18 },
-        pendingTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-        pendingLabel: { fontSize: ms(12), fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', color: '#7A2020' },
-        pendingIconCircle: { width: ms(30), height: ms(30), borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
-        pendingValue: { fontSize: ms(25), fontWeight: '800', marginTop: vs(12) },
-
-        searchRow: { flexDirection: 'row', gap: s(10), paddingHorizontal: s(18), marginTop: vs(22) },
+        searchRow: { flexDirection: 'row', gap: s(10), paddingHorizontal: s(18), marginTop: vs(22), marginBottom: vs(14) },
         searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: s(16), paddingVertical: vs(4) },
         searchInput: { flex: 1, fontSize: ms(14), fontWeight: '500', paddingVertical: vs(8) },
         sortBtn: { width: ms(44), height: ms(44), borderWidth: 1, borderRadius: ms(14), justifyContent: 'center', alignItems: 'center' },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(50), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
-
-        brandCard: { borderWidth: 1, borderRadius: ms(18), padding: ms(16), marginHorizontal: s(18), marginTop: vs(14) },
-        brandTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        brandId: { flexDirection: 'row', alignItems: 'center', gap: s(12) },
-        brandAvatar: { width: ms(38), height: ms(38), borderRadius: ms(10), justifyContent: 'center', alignItems: 'center' },
-        brandAvatarText: { fontSize: ms(14), fontWeight: '800' },
-        brandName: { fontSize: ms(16), fontWeight: '800' },
-        viewLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-        viewLinkText: { fontSize: ms(12.5), fontWeight: '700' },
-        brandDivider: { height: 1, marginVertical: vs(13) },
-        brandMetrics: { flexDirection: 'row', justifyContent: 'space-between' },
-        bmLabel: { fontSize: ms(11.5), fontWeight: '600', marginBottom: 4 },
-        bmValue: { fontSize: ms(14.5), fontWeight: '800' },
 
         sheet: { borderTopLeftRadius: ms(24), borderTopRightRadius: ms(24), paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) },
         handle: { width: 40, height: 4, borderRadius: 999, alignSelf: 'center', marginBottom: vs(18) },

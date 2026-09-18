@@ -269,8 +269,6 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
  */
 const PAGE_SIZE = 30;
 
-const MASK = '••••';
-
 const InvoiceCard = React.memo(function InvoiceCard({ item, revealed, colors, styles }: { item: InvoiceHistoryRow; revealed: boolean; colors: any; styles: any }) {
     const paid = item.payment_status === 'Payment Paid';
     return (
@@ -286,19 +284,21 @@ const InvoiceCard = React.memo(function InvoiceCard({ item, revealed, colors, st
             </Text>
             {!!item.description && <Text style={[styles.invoiceDesc, { color: colors.text }]} numberOfLines={2}>{item.description}</Text>}
             <View style={[styles.metricGrid, { borderTopColor: colors.border }]}>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Qty</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.qty)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Unit Price</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.unit_price)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Basic Value</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.total_value)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Qty</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.qty)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Unit Price</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.unit_price)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Basic Value</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.total_value)}</Text></View>
             </View>
             <View style={styles.metricGridNoBorder}>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.invoice_total_value)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>LP26</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.list_price)}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>DIS%</Text><Text style={[styles.mValue, { color: colors.text }]}>{formatPlain(item.discount_percentage)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.invoice_total_value)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>LP26</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.list_price)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>DIS%</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.discount_percentage)}</Text></View>
             </View>
-            <View style={styles.metricGridNoBorder}>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Profit</Text><Text style={[styles.mValue, { color: colors.text }]}>{revealed ? formatPlain(item.profit) : MASK}</Text></View>
-                <View><Text style={[styles.mLabel, { color: colors.textSecondary }]}>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]}>{revealed ? formatPlain(item.margin) : MASK}</Text></View>
-            </View>
+            {revealed && (
+                <View style={styles.metricGridNoBorder}>
+                    <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Profit</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.profit)}</Text></View>
+                    <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.margin)}</Text></View>
+                </View>
+            )}
             <View style={styles.invoiceFoot}>
                 <Ionicons name="person-circle-outline" size={13} color={colors.textSecondary} />
                 <Text style={[styles.invoiceFootText, { color: colors.textSecondary }]}>{item.sales_executive ? item.sales_executive.toUpperCase() : '—'}</Text>
@@ -818,8 +818,9 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
         invoiceSub: { fontSize: ms(11.5), fontWeight: '600', marginTop: vs(5), lineHeight: ms(16) },
         invoiceDesc: { fontSize: ms(12.5), marginTop: vs(7), lineHeight: 18 },
-        metricGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: vs(12), paddingTop: vs(12), borderTopWidth: 1 },
-        metricGridNoBorder: { flexDirection: 'row', justifyContent: 'space-between', marginTop: vs(10) },
+        metricGrid: { flexDirection: 'row', marginTop: vs(12), paddingTop: vs(12), borderTopWidth: 1 },
+        metricGridNoBorder: { flexDirection: 'row', marginTop: vs(10) },
+        mCell: { flex: 1, paddingRight: s(6) },
         mLabel: { fontSize: ms(9), fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
         mValue: { fontSize: ms(12.5), fontWeight: '800', marginTop: 3 },
         invoiceFoot: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: vs(12) },
