@@ -94,8 +94,8 @@ const styles = StyleSheet.create({
     title: { fontWeight: '900', color: '#FFF', opacity: 0.9, letterSpacing: 0.5 },
     iconWrap: { backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     body: { flex: 1, justifyContent: 'center' },
-    row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    rowLabel: { flexDirection: 'row', alignItems: 'center', flex: 0.8 },
-    rowLabelText: { color: 'rgba(255,255,255,0.8)', fontWeight: '700' },
-    rowValue: { fontWeight: '900', color: '#FFF', flex: 1.5, textAlign: 'right' },
+    row: { flexDirection: 'row', alignItems: 'center' },
+    rowLabel: { flexDirection: 'row', alignItems: 'center', flex: 0.8, flexShrink: 1, minWidth: 0 },
+    rowLabelText: { color: 'rgba(255,255,255,0.8)', fontWeight: '700', flexShrink: 1 },
+    rowValue: { fontWeight: '900', color: '#FFF', flex: 1.5, flexShrink: 1, minWidth: 0, textAlign: 'right' },
 });

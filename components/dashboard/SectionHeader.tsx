@@ -17,11 +17,13 @@ import { useResponsive } from '@/hooks/useResponsive';
 export function SectionHeader({
     title,
     subtitle,
+    icon,
     actionLabel,
     onAction,
 }: {
     title: string;
     subtitle?: string;
+    icon?: keyof typeof Ionicons.glyphMap;
     actionLabel?: string;
     onAction?: () => void;
 }) {
@@ -32,6 +34,11 @@ export function SectionHeader({
 
     return (
         <View style={[styles.row, { paddingHorizontal: s(16), marginBottom: vs(10) }]}>
+            {icon ? (
+                <View style={[styles.iconWrap, { width: ms(34), height: ms(34), borderRadius: ms(12), backgroundColor: colors.primary + '18' }]}>
+                    <Ionicons name={icon} size={ms(17)} color={colors.primary} />
+                </View>
+            ) : null}
             <View style={{ flex: 1 }}>
                 <Text style={[styles.title, { fontSize: ms(15), color: colors.text }]}>{title}</Text>
                 {subtitle ? (
@@ -57,6 +64,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 10,
+    },
+    iconWrap: {
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     title: {
         fontWeight: '900',

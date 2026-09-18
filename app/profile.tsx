@@ -6,7 +6,6 @@ import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '@/constants/theme';
-import { FloatingNav } from '@/components/FloatingNav';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 
 export default function ProfileScreen() {
@@ -85,6 +84,14 @@ export default function ProfileScreen() {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
+
+            <View style={styles.topbar}>
+                <TouchableOpacity onPress={() => router.replace('/home')} style={styles.backBtn}>
+                    <Ionicons name="chevron-back" size={22} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={[styles.topbarTitle, { color: colors.text }]}>Profile</Text>
+                <View style={{ width: 30 }} />
+            </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header/Avatar Section */}
@@ -178,8 +185,6 @@ export default function ProfileScreen() {
                     <Text style={[styles.versionText, { color: colors.textSecondary }]}>Version 1.0.0 (Build 24)</Text>
                 </Animated.View>
             </ScrollView>
-
-            <FloatingNav />
         </SafeAreaView>
     );
 }
@@ -188,10 +193,26 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
+    topbar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    backBtn: {
+        width: 30,
+        height: 30,
+        justifyContent: 'center',
+    },
+    topbarTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+    },
     scrollContent: {
         paddingHorizontal: 20,
         paddingTop: 10,
-        paddingBottom: 130,
+        paddingBottom: 30,
     },
     profileHeader: {
         alignItems: 'center',

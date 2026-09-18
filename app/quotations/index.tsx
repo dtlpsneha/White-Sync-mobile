@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView, Modal, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import QuotationList from '@/components/QuotationList';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
-import { FloatingNav } from '@/components/FloatingNav';
+import { QuotationDashboardPanel } from '@/components/dashboard/QuotationDashboardPanel';
 import { useResponsive } from '../../hooks/useResponsive';
 
 export default function QuotationListScreen() {
@@ -23,6 +25,28 @@ export default function QuotationListScreen() {
     const [filter, setFilter] = useState((params.filter as string) || 'All');
     const [searchQuery, setSearchQuery] = useState('');
     const [workflowStates, setWorkflowStates] = useState<string[]>(['All']);
+
+    const [dashboardVisible, setDashboardVisible] = useState(false);
+    const drawerTranslateX = useSharedValue(400);
+
+    const openDashboard = () => {
+        setDashboardVisible(true);
+        drawerTranslateX.value = withTiming(0, { duration: 280 });
+    };
+    const closeDashboard = () => {
+        drawerTranslateX.value = withTiming(400, { duration: 220 }, (finished) => {
+            if (finished) runOnJS(setDashboardVisible)(false);
+        });
+    };
+
+    const drawerAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: drawerTranslateX.value }],
+    }));
+
+    const onSelectDashboardFilter = (statusKey: string) => {
+        setFilter(statusKey);
+        closeDashboard();
+    };
 
     // The filter pills are derived from whatever states QuotationList already
     // downloaded, instead of this screen fetching the entire quote list a
@@ -81,7 +105,7 @@ export default function QuotationListScreen() {
                         <Ionicons name="chevron-back" size={24} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Quotations</Text>
-                    <TouchableOpacity style={styles.circularButton}>
+                    <TouchableOpacity style={styles.circularButton} onPress={openDashboard}>
                         <Ionicons name="options-outline" size={22} color={colors.text} />
                     </TouchableOpacity>
                 </View>
@@ -152,7 +176,24 @@ export default function QuotationListScreen() {
                 />
             </View>
 
-            <FloatingNav />
+            <Modal visible={dashboardVisible} transparent animationType="fade" onRequestClose={closeDashboard}>
+                <View style={{ flex: 1, flexDirection: 'row' }}>
+                    <Pressable style={{ flex: 1 }} onPress={closeDashboard}>
+                        <View style={{ flex: 1, backgroundColor: 'rgba(10,15,25,0.55)' }} />
+                    </Pressable>
+                    <Animated.View style={[styles.drawer, { backgroundColor: colors.background }, drawerAnimatedStyle]}>
+                        <SafeAreaView style={{ flex: 1 }}>
+                            <View style={styles.drawerHead}>
+                                <Text style={[styles.drawerTitle, { color: colors.text }]}>Quotation Dashboard</Text>
+                                <TouchableOpacity onPress={closeDashboard}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+                            </View>
+                            <RNScrollView contentContainerStyle={{ paddingBottom: vs(40) }}>
+                                <QuotationDashboardPanel onSelectFilter={onSelectDashboardFilter} />
+                            </RNScrollView>
+                        </SafeAreaView>
+                    </Animated.View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -263,6 +304,24 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
         listContainer: {
             flex: 1,
+        },
+        drawer: {
+            width: '85%',
+            maxWidth: 420,
+            height: '100%',
+        },
+        drawerHead: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 20,
+            paddingVertical: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        drawerTitle: {
+            fontSize: ms(18),
+            fontWeight: '900',
         },
         fab: {
             position: 'absolute',
