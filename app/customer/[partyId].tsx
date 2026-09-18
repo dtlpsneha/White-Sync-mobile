@@ -11,6 +11,12 @@
  * health or recommendation fields exist in the API response at all, so there is nothing
  * of that kind to accidentally render here.
  *
+ * The "Analyze" button below calls a SEPARATE endpoint, `GET .../customer/predictions`
+ * (only on demand, not part of the lookup above) — it stays inside the same boundary on
+ * purpose: quote conversion %, next-purchase timing, and activity trend are plain counts/
+ * ratios/date math, never an AI-generated score or a "next best action" recommendation.
+ * See `getCustomerPredictions` in `services/smartopsApi.ts` for the exact shape.
+ *
  * Ported from the old app's Customer 360 screen, restyled onto this app's tokens.
  */
 
@@ -23,7 +29,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { initials } from '@/components/CustomerSearch';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { chatErrorMessage, lookupCustomer, type CustomerLookupOut } from '@/services/smartopsApi';
+import {
+    chatErrorMessage,
+    getCustomerPredictions,
+    lookupCustomer,
+    type CustomerLookupOut,
+    type CustomerPredictions,
+} from '@/services/smartopsApi';
 
 /** Quotes/invoices carry ALREADY-DIVIDED rupee floats — a backend quirk, so no rescale. */
 function money(rupeeValue: number | null | undefined): string {
@@ -56,6 +68,10 @@ export default function CustomerProfileScreen() {
     const [data, setData] = useState<CustomerLookupOut | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const [predictions, setPredictions] = useState<CustomerPredictions | null>(null);
+    const [predictionsLoading, setPredictionsLoading] = useState(false);
+    const [predictionsError, setPredictionsError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -91,6 +107,22 @@ export default function CustomerProfileScreen() {
                 customerSource: profile ? (data?.profile.source ?? 'erpnext') : (source ?? 'erpnext'),
             },
         });
+    }
+
+    // Computed on demand, not fetched alongside the profile lookup -- these do their own
+    // quote/invoice date math server-side and are only worth the extra request when the
+    // user actually wants them.
+    function analyze() {
+        setPredictionsLoading(true);
+        setPredictionsError(null);
+        getCustomerPredictions(partyId)
+            .then((out) => {
+                setPredictions(out.predictions);
+                if (!out.predictions.available) setPredictionsError(out.predictions.message ?? 'Unavailable.');
+                else if (out.erp_error) setPredictionsError(out.erp_error);
+            })
+            .catch((err) => setPredictionsError(chatErrorMessage(err)))
+            .finally(() => setPredictionsLoading(false));
     }
 
     const invoices = data?.invoices.available ? data.invoices.invoices : [];
@@ -265,6 +297,112 @@ export default function CustomerProfileScreen() {
                     </View>
 
                     <Pressable
+                        onPress={analyze}
+                        disabled={predictionsLoading}
+                        style={({ pressed }) => [
+                            styles.analyzeButton,
+                            {
+                                backgroundColor: colors.surface,
+                                borderColor: colors.primary,
+                                opacity: pressed || predictionsLoading ? 0.7 : 1,
+                            },
+                        ]}
+                    >
+                        {predictionsLoading ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                            <Ionicons name="analytics-outline" size={17} color={colors.primary} />
+                        )}
+                        <Text style={[styles.analyzeButtonText, { color: colors.primary }]}>
+                            {predictionsLoading ? 'Analyzing…' : 'Analyze Customer'}
+                        </Text>
+                    </Pressable>
+
+                    {(predictions || predictionsError) && (
+                        <View style={{ gap: 10 }}>
+                            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+                                Predictive insights
+                            </Text>
+                            {predictionsError && !predictions?.available && (
+                                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                    <Text style={[styles.mutedText, { color: colors.textSecondary }]}>
+                                        {predictionsError}
+                                    </Text>
+                                </View>
+                            )}
+                            {predictions?.available && (
+                                <>
+                                    <PredictionCard
+                                        icon="pricetags-outline"
+                                        title="Quote conversion"
+                                        value={
+                                            predictions.quote_conversion
+                                                ? `${predictions.quote_conversion.percent}% approved`
+                                                : null
+                                        }
+                                        meta={
+                                            predictions.quote_conversion
+                                                ? `${predictions.quote_conversion.approved} of ${predictions.quote_conversion.total} quotes reached Approved`
+                                                : 'Not enough quote history yet.'
+                                        }
+                                        colors={colors}
+                                    />
+                                    <PredictionCard
+                                        icon="calendar-outline"
+                                        title="Next purchase"
+                                        value={
+                                            predictions.next_purchase
+                                                ? predictions.next_purchase.expected_low_weeks ===
+                                                  predictions.next_purchase.expected_high_weeks
+                                                    ? `In ~${predictions.next_purchase.expected_low_weeks} weeks`
+                                                    : `In ~${predictions.next_purchase.expected_low_weeks}-${predictions.next_purchase.expected_high_weeks} weeks`
+                                                : null
+                                        }
+                                        meta={
+                                            predictions.next_purchase
+                                                ? `Last order ${predictions.next_purchase.last_order_date} · avg. every ${Math.round(predictions.next_purchase.avg_interval_days)} days`
+                                                : 'Not enough order history yet.'
+                                        }
+                                        colors={colors}
+                                    />
+                                    <PredictionCard
+                                        icon={
+                                            predictions.activity_trend?.direction === 'increasing'
+                                                ? 'trending-up-outline'
+                                                : predictions.activity_trend?.direction === 'decreasing'
+                                                  ? 'trending-down-outline'
+                                                  : 'remove-outline'
+                                        }
+                                        title="Activity trend"
+                                        value={
+                                            predictions.activity_trend
+                                                ? predictions.activity_trend.direction === 'increasing'
+                                                    ? 'Increasing'
+                                                    : predictions.activity_trend.direction === 'decreasing'
+                                                      ? 'Decreasing'
+                                                      : 'Stable'
+                                                : null
+                                        }
+                                        tint={
+                                            predictions.activity_trend?.direction === 'increasing'
+                                                ? colors.success
+                                                : predictions.activity_trend?.direction === 'decreasing'
+                                                  ? colors.warning
+                                                  : undefined
+                                        }
+                                        meta={
+                                            predictions.activity_trend
+                                                ? `${predictions.activity_trend.recent_count} recent vs. ${predictions.activity_trend.prior_count} prior (last 90 days)`
+                                                : 'No recent activity to compare.'
+                                        }
+                                        colors={colors}
+                                    />
+                                </>
+                            )}
+                        </View>
+                    )}
+
+                    <Pressable
                         onPress={askAi}
                         style={({ pressed }) => [
                             styles.askButton,
@@ -365,6 +503,43 @@ function ActivityCard({
                 )}
             </View>
             {amount && <Text style={[styles.activityAmount, { color: alert ? colors.danger : colors.text }]}>{amount}</Text>}
+        </View>
+    );
+}
+
+function PredictionCard({
+    icon,
+    title,
+    value,
+    meta,
+    tint,
+    colors,
+}: {
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    /** `null` renders the muted "not enough history" state via `meta` instead of a value line. */
+    value: string | null;
+    meta: string;
+    tint?: string;
+    colors: ThemeColors;
+}) {
+    const accent = tint ?? colors.primary;
+    return (
+        <View style={[styles.card, styles.activityRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.activityIcon, { backgroundColor: `${accent}18` }]}>
+                <Ionicons name={icon} size={16} color={accent} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[styles.activityLabel, { color: colors.textSecondary }]}>{title}</Text>
+                {value ? (
+                    <>
+                        <Text style={[styles.activityRef, { color: colors.text }]}>{value}</Text>
+                        <Text style={[styles.activityMeta, { color: colors.placeholder }]}>{meta}</Text>
+                    </>
+                ) : (
+                    <Text style={[styles.mutedText, { color: colors.textSecondary }]}>{meta}</Text>
+                )}
+            </View>
         </View>
     );
 }
@@ -564,6 +739,19 @@ const styles = StyleSheet.create({
     },
     askButtonText: {
         color: '#FFF',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    analyzeButton: {
+        borderRadius: 14,
+        borderWidth: 1.5,
+        paddingVertical: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    analyzeButtonText: {
         fontSize: 15,
         fontWeight: '700',
     },

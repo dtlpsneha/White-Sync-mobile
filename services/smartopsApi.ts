@@ -295,6 +295,43 @@ export interface SetCustomerOut {
     session_id: string;
 }
 
+/** Three purely computed, factual signals -- never a score, tier, or recommendation (see
+ * apps/api/app/agents/reception/tools.py's CustomerLedger docstring for why that boundary
+ * is a hard product requirement here, not a style choice). Each metric is `null` when
+ * there isn't enough quote/invoice history to say anything honest about it. */
+export interface QuoteConversion {
+    approved: number;
+    total: number;
+    percent: number;
+}
+
+export interface NextPurchase {
+    avg_interval_days: number;
+    last_order_date: string;
+    expected_low_weeks: number;
+    expected_high_weeks: number;
+}
+
+export interface ActivityTrend {
+    recent_count: number;
+    prior_count: number;
+    direction: 'increasing' | 'decreasing' | 'stable';
+}
+
+export interface CustomerPredictions {
+    available: boolean;
+    quote_conversion: QuoteConversion | null;
+    next_purchase: NextPurchase | null;
+    activity_trend: ActivityTrend | null;
+    message: string | null;
+}
+
+export interface CustomerPredictionsOut {
+    live: boolean;
+    erp_error: string | null;
+    predictions: CustomerPredictions;
+}
+
 /** Multi-way search — name, phone, email, contact records. Two characters minimum;
  * below that the server short-circuits and this shouldn't be called. */
 export const searchCustomers = (q: string) =>
@@ -317,3 +354,10 @@ export const lookupCustomer = (customer: string) =>
  */
 export const setChatCustomer = (id: string, name: string, source: string | null, session: string) =>
     smartopsPost<SetCustomerOut>('/bff/v1/chat/customer', { id, name, source, session });
+
+/** Backs the Customer 360 "Analyze" button. Computed on demand (not part of
+ * `lookupCustomer`'s payload) since it does its own quote/invoice date math server-side --
+ * call it only when the user asks, not on every profile load. */
+export const getCustomerPredictions = (customer: string) =>
+    smartopsGet<CustomerPredictionsOut>(
+        `/bff/v1/reception/customer/predictions?customer=${encodeURIComponent(customer)}`);
