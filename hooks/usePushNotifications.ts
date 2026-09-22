@@ -94,12 +94,22 @@ export const usePushNotifications = () => {
             setNotification(notification);
         });
 
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            const data = response.notification.request.content.data;
+        const openQuotationFromResponse = (response: Notifications.NotificationResponse | null) => {
+            const data = response?.notification.request.content.data;
             if (data && data.id) {
                 router.push({ pathname: '/quotations/[id]', params: { id: data.id as string } });
             }
-        });
+        };
+
+        // Catches the tap that COLD-STARTS the app (from killed/background)
+        // — the app wasn't running yet when that tap happened, so the live
+        // listener below never sees it. Without this, a cold-start tap just
+        // opens the app to whatever its default launch route is.
+        Notifications.getLastNotificationResponseAsync().then(openQuotationFromResponse);
+
+        // Catches taps while the app is already running (foreground or
+        // backgrounded-but-alive).
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(openQuotationFromResponse);
 
         return () => {
             appStateSub.remove();
