@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
@@ -28,6 +28,21 @@ export default function SalesOrderScreen() {
     useEffect(() => {
         fetchWorkflowStates();
     }, []);
+
+    // Reached via router.replace (see SideNav), so nothing sits beneath it
+    // on the navigation stack — without this, Android's hardware/gesture
+    // back button exits the app instead of going to Home like the
+    // on-screen back arrow does.
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                router.replace('/home');
+                return true;
+            };
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [router])
+    );
 
     const fetchWorkflowStates = async () => {
         try {
