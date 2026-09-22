@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, Platform } from 'react-native';
+import React, { useCallback, useState, useEffect } from 'react';
+import { BackHandler, StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
@@ -23,6 +23,21 @@ export default function ProfileScreen() {
     useEffect(() => {
         loadUserData();
     }, []);
+
+    // Reached via router.replace (see SideNav), so nothing sits beneath it
+    // on the navigation stack — without this, Android's hardware/gesture
+    // back button exits the app instead of going to Home like the
+    // on-screen back arrow does.
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                router.replace('/home');
+                return true;
+            };
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [router])
+    );
 
     const loadUserData = async () => {
         try {

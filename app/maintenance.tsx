@@ -4,10 +4,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, BackHandler, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiGet } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
@@ -114,6 +114,21 @@ export default function MaintenanceScreen() {
     useEffect(() => {
         fetchMaintenanceRecords();
     }, []);
+
+    // Reached via router.replace (see SideNav), so nothing sits beneath it
+    // on the navigation stack — without this, Android's hardware/gesture
+    // back button exits the app instead of going to Home like the
+    // on-screen back arrow does.
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                router.replace('/home');
+                return true;
+            };
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [router])
+    );
 
     const onRefresh = () => {
         setRefreshing(true);

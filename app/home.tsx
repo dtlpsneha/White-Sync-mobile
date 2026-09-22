@@ -2,12 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { notificationService } from '../services/NotificationService';
-import { apiPost } from '../utils/api';
 
 import { DailySalesReportBody } from '@/components/dashboard/DailySalesReportBody';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
@@ -17,7 +15,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 import { useResponsive } from '../hooks/useResponsive';
-import { apiUrl } from '@/constants/config';
 
 export default function HomeScreen() {
     const router = useRouter();
@@ -34,52 +31,10 @@ export default function HomeScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [permissionDenied, setPermissionDenied] = useState(false);
 
-    const [lastSeenPendingIds, setLastSeenPendingIds] = useState<string[]>([]);
-    const lastSeenPendingIdsRef = useRef<string[]>([]);
     const [isManager, setIsManager] = useState(false);
     const [hasSession, setHasSession] = useState(false);
 
     useEffect(() => { loadData(); }, []);
-
-    useEffect(() => {
-        lastSeenPendingIdsRef.current = lastSeenPendingIds;
-    }, [lastSeenPendingIds]);
-
-    // Poll only while the app is actually in the foreground. Previously this
-    // kept firing two requests every 30s even when backgrounded.
-    useEffect(() => {
-        if (loading || !hasSession || permissionDenied) return;
-
-        let interval: ReturnType<typeof setInterval> | null = null;
-
-        const start = () => {
-            if (interval) return;
-            // Was 30s — on a live server with frequent real quotation activity,
-            // that meant a fresh network request plus a burst of separate
-            // notifications every half-minute. 3 minutes keeps the dashboard
-            // reasonably current without hammering battery/network.
-            interval = setInterval(() => {
-                checkForNewPending(false);
-            }, 180000);
-        };
-
-        const stop = () => {
-            if (interval) clearInterval(interval);
-            interval = null;
-        };
-
-        if (AppState.currentState === 'active') start();
-
-        const subscription = AppState.addEventListener('change', state => {
-            if (state === 'active') start();
-            else stop();
-        });
-
-        return () => {
-            stop();
-            subscription.remove();
-        };
-    }, [loading, hasSession, permissionDenied]);
 
     const loadData = async () => {
         setLoading(true);
@@ -87,15 +42,6 @@ export default function HomeScreen() {
         setHasSession(sessionActive);
         if (sessionActive) {
             await loadUserData();
-            const stored = await SecureStore.getItemAsync('last_seen_pending_ids');
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored);
-                    setLastSeenPendingIds(parsed);
-                    lastSeenPendingIdsRef.current = parsed;
-                } catch (e) { }
-            }
-            await checkForNewPending(true);
         }
         setLoading(false);
     };
@@ -111,7 +57,7 @@ export default function HomeScreen() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await checkForNewPending(false);
+        await loadUserData();
         setRefreshing(false);
     };
 
@@ -123,66 +69,6 @@ export default function HomeScreen() {
             setIsManager(isManagerStr === 'true');
         } catch (error) { }
     };
-
-    const checkForNewPending = async (isInitialLoad = false) => {
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            if (!sessionCookies) return;
-
-            const res = await apiPost(apiUrl('/api/method/get_quote_resource'), {}, sessionCookies);
-            const data: any = res.data;
-
-            let quotes: any[] = [];
-            if (data && data.message && data.message.success && Array.isArray(data.message.data)) {
-                quotes = data.message.data;
-            }
-
-            if (quotes && quotes.length > 0) {
-                const currentPendingIds = quotes.map((q: any) => q.name);
-
-                // Always read from SecureStore to avoid race conditions with state/ref
-                const stored = await SecureStore.getItemAsync('last_seen_pending_ids');
-                const previousIds: string[] = stored ? JSON.parse(stored) : [];
-
-                // Skip notifications on initial load to avoid "Dashboard Notification" annoyance
-                if (previousIds.length > 0 && !isInitialLoad) {
-                    const newQuotes = quotes.filter((q: any) => !previousIds.includes(q.name));
-                    // A live server can surface several genuinely new quotations in one
-                    // poll (real sales activity, not a dedup bug) — one notification per
-                    // quote turned into a burst of popups. Batch them into a single
-                    // notification instead; only fall back to the detailed single-quote
-                    // message when there's exactly one.
-                    if (newQuotes.length === 1) {
-                        const quote = newQuotes[0];
-                        const formattedAmount = quote.grand_total
-                            ? `${quote.currency || ''} ${Number(quote.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                            : '';
-                        await notificationService.postLocalNotification(
-                            `📄 New Quotation`,
-                            `${quote.customer_name} quotation of ${formattedAmount} for approval.`,
-                            { id: quote.name },
-                            "QUOTATION_WORKFLOW"
-                        );
-                    } else if (newQuotes.length > 1) {
-                        const names = newQuotes.slice(0, 2).map((q: any) => q.customer_name).join(', ');
-                        const rest = newQuotes.length - 2;
-                        await notificationService.postLocalNotification(
-                            `📄 ${newQuotes.length} New Quotations`,
-                            `${names}${rest > 0 ? ` and ${rest} more` : ''} for approval.`,
-                            { ids: newQuotes.map((q: any) => q.name) },
-                            "QUOTATION_WORKFLOW"
-                        );
-                    }
-                }
-
-                const truncatedIds = currentPendingIds.slice(0, 50);
-                setLastSeenPendingIds(truncatedIds);
-                lastSeenPendingIdsRef.current = truncatedIds;
-                await SecureStore.setItemAsync('last_seen_pending_ids', JSON.stringify(truncatedIds));
-            }
-        } catch (error) { }
-    };
-
 
     const handleLogout = async () => {
         Alert.alert('Logout', 'Are you sure?', [

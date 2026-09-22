@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
     Easing,
     FadeInUp,
@@ -16,7 +16,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, G } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
-import { useRouter } from 'expo-router';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
@@ -133,7 +132,6 @@ const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: numb
 };
 
 export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (statusKey: string) => void }) {
-    const router = useRouter();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
@@ -148,23 +146,30 @@ export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (s
         conversionRate: '0%',
         avgQuoteValue: '₹0',
     });
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     useEffect(() => { fetchStats(); }, []);
 
+    // A single failed request here must never sign the user out — only an
+    // explicit Logout tap should end the session. A 401/403 on this one
+    // endpoint (transient, misconfigured, or a genuinely expired session)
+    // surfaces as an in-panel error with Retry instead, matching how every
+    // other screen in this app already handles fetch failures.
     const fetchStats = async () => {
+        setLoading(true);
+        setFetchError(null);
         try {
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            if (!sessionCookies) { router.replace('/'); return; }
+            if (!sessionCookies) { setFetchError('Not signed in.'); setLoading(false); return; }
 
             const res = await apiPost(apiUrl('/api/method/get_dashboard_stats'), {}, sessionCookies);
 
-            if (res.status === 401 || res.status === 403) {
-                await SecureStore.deleteItemAsync('session_cookies');
-                router.replace('/');
+            if (!res.ok) {
+                setFetchError('Could not load the dashboard. Please try again.');
+                setLoading(false);
                 return;
             }
-
-            if (!res.ok) return;
 
             const data: any = res.data;
             if (data && data.success && data.data) {
@@ -214,8 +219,41 @@ export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (s
             }
         } catch (error) {
             console.error('[QuotationDashboardPanel] Fetch stats error:', error);
+            setFetchError('Could not load the dashboard. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
+
+    if (loading && !fetchError) {
+        return (
+            <View>
+                <SectionHeader
+                    title="Quotations"
+                    subtitle="Live status overview — tap a card to filter"
+                />
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: vs(30), marginBottom: vs(10) }} />
+            </View>
+        );
+    }
+
+    if (fetchError) {
+        return (
+            <View>
+                <SectionHeader
+                    title="Quotations"
+                    subtitle="Live status overview — tap a card to filter"
+                />
+                <View style={styles.errorState}>
+                    <Ionicons name="cloud-offline-outline" size={40} color={colors.textSecondary} />
+                    <Text style={[styles.errorText, { color: colors.textSecondary }]}>{fetchError}</Text>
+                    <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.surfaceSecondary }]} onPress={fetchStats}>
+                        <Text style={[styles.retryText, { color: colors.textSecondary }]}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View>
@@ -317,5 +355,9 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         metricIcon: { width: ms(40), height: ms(40), borderRadius: ms(16), justifyContent: 'center', alignItems: 'center' },
         metricLabel: { fontSize: ms(12), color: colors.textSecondary, fontWeight: '700' },
         metricValue: { fontSize: ms(18), fontWeight: '900' },
+        errorState: { alignItems: 'center', paddingVertical: vs(50), gap: 12, paddingHorizontal: s(24) },
+        errorText: { fontSize: ms(13), fontWeight: '600', textAlign: 'center' },
+        retryBtn: { paddingHorizontal: s(16), paddingVertical: vs(8), borderRadius: ms(999), marginTop: vs(4) },
+        retryText: { fontSize: ms(12), fontWeight: '700' },
     });
 }

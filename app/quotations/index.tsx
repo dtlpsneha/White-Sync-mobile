@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView, Modal, Pressable } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView, Modal, Pressable } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
@@ -47,6 +47,21 @@ export default function QuotationListScreen() {
         setFilter(statusKey);
         closeDashboard();
     };
+
+    // This screen is reached via router.replace (see SideNav), so there is
+    // nothing beneath it on the navigation stack — without this, Android's
+    // hardware/gesture back button falls through and exits the app instead
+    // of going to Home, unlike the on-screen back arrow above.
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                router.replace('/home');
+                return true;
+            };
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [router])
+    );
 
     // The filter pills are derived from whatever states QuotationList already
     // downloaded, instead of this screen fetching the entire quote list a
