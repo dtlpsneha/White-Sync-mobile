@@ -43,14 +43,20 @@ export const FloatingNav = () => {
         };
     }, []);
 
-    // Navigation Items with specific colors
+    // Navigation Items with specific colors. "calculator" is pushed instead
+    // of replaced — its own screen (price-calculator.tsx) only implements a
+    // real router.back() on its header button, with no router.replace
+    // fallback the way Home/Quotes/Orders/Visits/Profile each have. Using
+    // replace here left nothing on the stack underneath it, so both the
+    // on-screen back button and the hardware/gesture back button had
+    // nowhere to go.
     const navItems = useMemo(() => [
-        { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home', route: '/home', color: '#3B82F6' },
-        { id: 'quotes', label: 'Quotes', icon: 'document-text-outline', activeIcon: 'document-text', route: '/quotations', color: '#F59E0B' },
-        { id: 'orders', label: 'Orders', icon: 'cart-outline', activeIcon: 'cart', route: '/sales-orders', color: '#00BFA5' },
-        { id: 'visits', label: 'Visits', icon: 'calendar-outline', activeIcon: 'calendar', route: '/maintenance', color: '#8B5CF6' },
-        { id: 'calculator', label: 'Calculator', icon: 'calculator-outline', activeIcon: 'calculator', route: '/price-calculator', color: '#10B981' },
-        { id: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', route: '/profile', color: '#6366F1' },
+        { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home', route: '/home', color: '#3B82F6', mode: 'replace' as const },
+        { id: 'quotes', label: 'Quotes', icon: 'document-text-outline', activeIcon: 'document-text', route: '/quotations', color: '#F59E0B', mode: 'replace' as const },
+        { id: 'orders', label: 'Orders', icon: 'cart-outline', activeIcon: 'cart', route: '/sales-orders', color: '#00BFA5', mode: 'replace' as const },
+        { id: 'visits', label: 'Visits', icon: 'calendar-outline', activeIcon: 'calendar', route: '/maintenance', color: '#8B5CF6', mode: 'replace' as const },
+        { id: 'calculator', label: 'Calculator', icon: 'calculator-outline', activeIcon: 'calculator', route: '/price-calculator', color: '#10B981', mode: 'push' as const },
+        { id: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', route: '/profile', color: '#6366F1', mode: 'replace' as const },
     ], []);
 
     // Active Index Calculation
@@ -155,7 +161,7 @@ export const FloatingNav = () => {
                             key={item.id}
                             onLayout={(e) => onLayout(e, index)}
                             style={styles.navItem}
-                            onPress={() => router.replace(item.route as any)}
+                            onPress={() => (item.mode === 'push' ? router.push(item.route as any) : router.replace(item.route as any))}
                             activeOpacity={0.7}
                         >
                             <Animated.View style={styles.iconContainer}>

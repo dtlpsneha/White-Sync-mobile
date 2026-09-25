@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-    StyleSheet, 
-    Text, 
-    View, 
-    TextInput, 
-    TouchableOpacity, 
-    ScrollView, 
+import {
+    StyleSheet,
+    Text,
+    View,
+    TextInput,
+    TouchableOpacity,
+    ScrollView,
     ActivityIndicator,
+    BackHandler,
     KeyboardAvoidingView,
     Platform,
     Modal,
@@ -17,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeIn, FadeInDown, SlideInDown, Layout } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 // Removed expo-blur to avoid native view config warnings in some environments
 
 import { useTheme } from '@/context/ThemeContext';
@@ -58,6 +59,26 @@ export default function PriceCalculatorScreen() {
 
     const { s, vs, ms } = useResponsive();
     const insets = useSafeAreaInsets();
+
+    // Safety net for Android's hardware/gesture back button. This screen is
+    // meant to always be pushed (there's a real screen underneath), but if
+    // it's ever somehow reached with nothing on the stack, router.back()
+    // would silently no-op — falling back to Home keeps the button working
+    // either way instead of leaving the user stuck.
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                if (router.canGoBack()) {
+                    router.back();
+                } else {
+                    router.replace('/home');
+                }
+                return true;
+            };
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [router])
+    );
 
     // State
     const [grades, setGrades] = useState<Grade[]>([]);
@@ -160,7 +181,7 @@ export default function PriceCalculatorScreen() {
             
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={24} color={UI_COLORS.headerText} />
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>

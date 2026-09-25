@@ -23,6 +23,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.deeptech.whitesync",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 3,
       "permissions": [
         "android.permission.CAMERA",
