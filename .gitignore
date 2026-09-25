@@ -21,6 +21,13 @@ build-output/
 *.key
 *.mobileprovision
 
+# Google Cloud / Firebase service account keys — real server-side
+# credentials, never commit. Matches any downloaded key file named like
+# <project-id>-<key-id>.json or *firebase-adminsdk*.json.
+# google-services.json (client config, not a private key) is fine to keep.
+*firebase-adminsdk*.json
+white-sync-3a977-*.json
+
 # Metro
 .metro-health-check*
 

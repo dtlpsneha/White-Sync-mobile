@@ -48,16 +48,18 @@ async function registerForPushNotificationsAsync(): Promise<string | undefined> 
     }
 }
 
-async function registerTokenWithServer(token: string) {
+async function registerTokenWithServer(token: string): Promise<boolean> {
     try {
         const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-        // Not logged in yet — nothing to attach the token to. The next
-        // foreground/login will retry this.
-        if (!sessionCookies) return;
+        // Not logged in yet — nothing to attach the token to. The retry
+        // loop / next foreground will try again.
+        if (!sessionCookies) return false;
 
-        await apiPost(apiUrl('/api/method/register_push_token'), { token }, sessionCookies);
+        const res = await apiPost(apiUrl('/api/method/register_push_token'), { token }, sessionCookies);
+        return res.ok;
     } catch (error) {
         console.error('[usePushNotifications] Failed to register push token with server:', error);
+        return false;
     }
 }
 
@@ -72,20 +74,45 @@ export const usePushNotifications = () => {
     useEffect(() => {
         notificationService.setupChannels();
 
+        let cancelled = false;
+        let registeredWithServer = false;
+
         const registerAndSend = () => {
             registerForPushNotificationsAsync().then(token => {
-                if (token) {
-                    setExpoPushToken(token);
-                    registerTokenWithServer(token);
-                }
+                if (cancelled || !token) return;
+                setExpoPushToken(token);
+                registerTokenWithServer(token).then(sent => {
+                    if (sent) registeredWithServer = true;
+                });
             });
         };
 
         registerAndSend();
 
-        // A session can start (login) or a token can rotate after the app
-        // was already running, so re-registering on every foreground catches
-        // both without needing a dedicated "just logged in" hook elsewhere.
+        // The app is already "active" on cold start — AppState only fires on
+        // a TRANSITION into active, so logging in during that same first
+        // launch (the common case: open app -> log in -> Home) never
+        // triggers a foreground event to retry the registration that
+        // no-opped earlier for having no session yet. Poll briefly after
+        // mount until the token is actually saved server-side, covering
+        // exactly that gap without needing the login screen to know about
+        // this hook. Capped at 2 minutes so it doesn't poll forever if the
+        // user just sits on the login screen — the AppState listener below
+        // still catches login whenever the app is next foregrounded.
+        let retryCount = 0;
+        const MAX_RETRIES = 24;
+        const retryInterval = setInterval(() => {
+            retryCount += 1;
+            if (registeredWithServer || retryCount >= MAX_RETRIES) {
+                clearInterval(retryInterval);
+                return;
+            }
+            registerAndSend();
+        }, 5000);
+
+        // A session can also start (login) or a token can rotate after the
+        // app was already running and gets backgrounded/foregrounded, so
+        // re-registering on every foreground catches that case too.
         const appStateSub = AppState.addEventListener('change', state => {
             if (state === 'active') registerAndSend();
         });
@@ -112,6 +139,8 @@ export const usePushNotifications = () => {
         responseListener.current = Notifications.addNotificationResponseReceivedListener(openQuotationFromResponse);
 
         return () => {
+            cancelled = true;
+            clearInterval(retryInterval);
             appStateSub.remove();
             notificationListener.current?.remove();
             responseListener.current?.remove();
