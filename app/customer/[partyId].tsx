@@ -105,7 +105,7 @@ export default function CustomerProfileScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             <View style={[styles.topBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
-                <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
+                <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} hitSlop={10} accessibilityLabel="Back">
                     <Ionicons name="arrow-back" size={22} color={colors.text} />
                 </Pressable>
                 <Text style={[styles.topBarTitle, { color: colors.text }]} numberOfLines={1}>

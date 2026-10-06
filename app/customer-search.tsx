@@ -27,7 +27,7 @@ export default function CustomerSearchScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             <View style={[styles.topbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-                <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
+                <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} hitSlop={10} accessibilityLabel="Back">
                     <Ionicons name="arrow-back" size={22} color={colors.text} />
                 </Pressable>
                 <Ionicons name="search" size={16} color={colors.text} style={{ marginLeft: 12 }} />

@@ -6,20 +6,27 @@ import 'react-native-reanimated';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { Colors } from '@/constants/theme';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { FloatingNav } from '@/components/FloatingNav';
+import { NotificationPopup } from '@/components/NotificationPopup';
+import { View } from 'react-native';
 
 function RootLayoutContent() {
   const { theme } = useTheme();
-  usePushNotifications();
+  const { notification, clearNotification } = usePushNotifications();
 
   return (
     <NavigationProvider value={theme === 'dark' ? DarkTheme : DefaultTheme}>
-      {/* Without an explicit contentStyle, the native stack's own screen
-        * container defaults to white while a screen transitions/mounts —
-        * briefly visible as a white flash on back navigation, especially
-        * in dark mode. Matching it to the current theme's background stops
-        * that flash from ever being a different color than the screen
-        * underneath. */}
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors[theme].background } }} />
+      <View style={{ flex: 1 }}>
+        {/* Without an explicit contentStyle, the native stack's own screen
+          * container defaults to white while a screen transitions/mounts —
+          * briefly visible as a white flash on back navigation, especially
+          * in dark mode. Matching it to the current theme's background stops
+          * that flash from ever being a different color than the screen
+          * underneath. */}
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors[theme].background } }} />
+        <FloatingNav />
+        <NotificationPopup notification={notification} onDismiss={clearNotification} />
+      </View>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </NavigationProvider>
   );

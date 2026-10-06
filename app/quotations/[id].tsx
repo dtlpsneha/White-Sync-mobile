@@ -207,7 +207,7 @@ export default function QuotationDetailScreen() {
             </Animated.View>
 
             {/* Back & Print Buttons */}
-            <TouchableOpacity onPress={() => router.back()} style={localStyles.backButtonCircle}>
+            <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/quotations')} style={localStyles.backButtonCircle}>
                 <Ionicons name="arrow-back" size={24} color="#FFF" />
             </TouchableOpacity>
 

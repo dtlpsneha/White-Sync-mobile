@@ -125,7 +125,7 @@ export default function PrintPreviewScreen() {
 
             {/* Premium Header */}
             <View style={[styles.premiumHeader, { backgroundColor: isDark ? '#121212' : '#1E293B' }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/quotations')} style={styles.closeButton}>
                     <Ionicons name="close" size={24} color="#FFF" />
                 </TouchableOpacity>
                 <View style={styles.premiumHeaderTitle}>

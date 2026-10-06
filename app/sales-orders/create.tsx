@@ -332,7 +332,7 @@ export default function CreateSalesOrderScreen() {
         >
             <StatusBar style="dark" />
             <View style={[styles.header, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/sales-orders')} style={styles.backButton}>
                     <Ionicons name="close" size={28} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>{edit_id ? 'Edit Sales Order' : 'New Sales Order'}</Text>

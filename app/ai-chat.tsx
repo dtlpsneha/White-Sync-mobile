@@ -258,7 +258,7 @@ export default function AiChatScreen() {
             >
                 <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
                     <View style={styles.headerTop}>
-                        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
+                        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} hitSlop={10} accessibilityLabel="Back">
                             <Ionicons name="arrow-back" size={22} color={colors.text} />
                         </Pressable>
                         <View style={[styles.headerIcon, { backgroundColor: colors.primary }]}>

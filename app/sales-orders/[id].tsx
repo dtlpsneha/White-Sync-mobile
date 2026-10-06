@@ -159,7 +159,7 @@ export default function SalesOrderDetailScreen() {
             </Animated.View>
 
             {/* Back Button */}
-            <TouchableOpacity onPress={() => router.back()} style={localStyles.backButton}>
+            <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/sales-orders')} style={localStyles.backButton}>
                 <Ionicons name="arrow-back" size={24} color="#FFF" />
             </TouchableOpacity>
             

@@ -558,7 +558,7 @@ export default function InvoiceHistoryScreen() {
 
             <SafeAreaView style={{ backgroundColor: colors.surface }} edges={['top']}>
                 <View style={[styles.topbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}>
                         <Ionicons name="chevron-back" size={22} color={colors.text} />
                     </TouchableOpacity>
                     <Text style={[styles.topbarTitle, { color: colors.text }]}>Sales Invoice History</Text>

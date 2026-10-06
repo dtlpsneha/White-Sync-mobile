@@ -69,6 +69,8 @@ export const usePushNotifications = () => {
     const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
     const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
 
+    const clearNotification = () => setNotification(undefined);
+
     const router = useRouter();
 
     useEffect(() => {
@@ -138,5 +140,5 @@ export const usePushNotifications = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    return { expoPushToken, notification };
+    return { expoPushToken, notification, clearNotification };
 };

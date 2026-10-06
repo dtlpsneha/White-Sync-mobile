@@ -13,14 +13,11 @@ import Animated, {
     withTiming
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
 
 import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { QuickActionCard } from '@/components/dashboard/QuickActionCard';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
-import { FloatingNav } from '@/components/FloatingNav';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -38,14 +35,6 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
  */
 const CANCELLED_COLOR = '#C62828';
 
-/** Quick Action accent colors — used only as icon/chip tints now (see QuickActionCard),
- * not full-tile backgrounds, so unlike the KpiCard colors these don't need theme tokens. */
-const QUICK_ACTION_COLORS = {
-    salesOrders: '#6366F1',
-    calculator: '#10B981',
-    dailySalesReport: '#F59E0B',
-    invoiceHistory: '#0891B2',
-};
 
 const DonutSegment = ({ center, radius, strokeWidth, color, percentage, rotation, progress }: any) => {
     const circumference = 2 * Math.PI * radius;
@@ -356,35 +345,11 @@ export default function HomeScreen() {
                 const previousIds: string[] = stored ? JSON.parse(stored) : [];
 
                 // Skip notifications on initial load to avoid "Dashboard Notification" annoyance
-                if (previousIds.length > 0 && !isInitialLoad) {
-                    const newQuotes = quotes.filter((q: any) => !previousIds.includes(q.name));
-                    // A live server can surface several genuinely new quotations in one
-                    // poll (real sales activity, not a dedup bug) — one notification per
-                    // quote turned into a burst of popups. Batch them into a single
-                    // notification instead; only fall back to the detailed single-quote
-                    // message when there's exactly one.
-                    if (newQuotes.length === 1) {
-                        const quote = newQuotes[0];
-                        const formattedAmount = quote.grand_total
-                            ? `${quote.currency || ''} ${Number(quote.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                            : '';
-                        await notificationService.postLocalNotification(
-                            `📄 New Quotation`,
-                            `${quote.customer_name} quotation of ${formattedAmount} for approval.`,
-                            { id: quote.name },
-                            "QUOTATION_WORKFLOW"
-                        );
-                    } else if (newQuotes.length > 1) {
-                        const names = newQuotes.slice(0, 2).map((q: any) => q.customer_name).join(', ');
-                        const rest = newQuotes.length - 2;
-                        await notificationService.postLocalNotification(
-                            `📄 ${newQuotes.length} New Quotations`,
-                            `${names}${rest > 0 ? ` and ${rest} more` : ''} for approval.`,
-                            { ids: newQuotes.map((q: any) => q.name) },
-                            "QUOTATION_WORKFLOW"
-                        );
-                    }
-                }
+                // Local notification removed — FCM push (sent server-side only to the
+                // assigned quotation_approver's device) handles alerting the right person.
+                // Posting a local notification here fired for every user whose poll
+                // happened to surface a pending quote, regardless of whether they were
+                // the approver.
 
                 // Store every ID seen this poll, not a truncated slice — a cap
                 // here (there used to be one, capped to the first 50) meant
@@ -536,49 +501,10 @@ export default function HomeScreen() {
                             <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
                         </Animated.View>
 
-                        <SectionHeader
-                            title="Quick Actions"
-                            subtitle="Reports & tools"
-                        />
-                        <View style={styles.quickActionsList}>
-                            <QuickActionCard
-                                title="Sales Orders"
-                                subtitle="Manage orders"
-                                icon="cart-outline"
-                                color={QUICK_ACTION_COLORS.salesOrders}
-                                delay={100}
-                                onPress={() => router.push('/sales-orders')}
-                            />
-                            <QuickActionCard
-                                title="Price Calculator"
-                                subtitle="Habasit belt price calculator"
-                                icon="calculator-outline"
-                                color={QUICK_ACTION_COLORS.calculator}
-                                delay={150}
-                                onPress={() => router.push('/price-calculator')}
-                            />
-                            <QuickActionCard
-                                title="Daily Sales Report"
-                                subtitle="Sales & collection summary"
-                                icon="bar-chart-outline"
-                                color={QUICK_ACTION_COLORS.dailySalesReport}
-                                delay={200}
-                                onPress={() => router.push('/daily-sales-report')}
-                            />
-                            <QuickActionCard
-                                title="Invoice History"
-                                subtitle="Sales invoice records"
-                                icon="receipt-outline"
-                                color={QUICK_ACTION_COLORS.invoiceHistory}
-                                delay={250}
-                                onPress={() => router.push('/daily-sales-report/invoice-history')}
-                            />
-                        </View>
                     </>
                 )}
             </ScrollView>
             {!permissionDenied && <AiBubble />}
-            <FloatingNav />
         </SafeAreaView>
     );
 }
@@ -612,7 +538,6 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         marginBottom: 18,
     },
     kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(16), gap: s(16) },
-    quickActionsList: { paddingHorizontal: s(16), paddingBottom: s(16), gap: vs(10) },
         donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(24), elevation: 5 },
         donutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: vs(24) },
         donutTitle: { fontSize: ms(20), fontWeight: '900', color: colors.text },

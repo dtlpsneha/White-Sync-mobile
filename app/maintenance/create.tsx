@@ -729,7 +729,7 @@ export default function CreateMaintenanceScreen() {
                         <View style={styles.headerContent}>
                             <TouchableOpacity
                                 style={styles.backButton}
-                                onPress={() => router.back()}
+                                onPress={() => router.canGoBack() ? router.back() : router.replace('/maintenance')}
                             >
                                 <Ionicons name="chevron-back" size={24} color="#FFF" />
                             </TouchableOpacity>

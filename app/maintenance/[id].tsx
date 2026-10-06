@@ -806,7 +806,7 @@ export default function MaintenanceDetailScreen() {
             >
                 <SafeAreaView>
                     <View style={styles.header}>
-                        <TouchableOpacity testID="backBtn" onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
+                        <TouchableOpacity testID="backBtn" onPress={() => router.canGoBack() ? router.back() : router.replace('/maintenance')} style={styles.backButton} activeOpacity={0.7}>
                             <Ionicons name="chevron-back" size={24} color={colors.primary} />
                         </TouchableOpacity>
                         <Text testID="visitHeaderTitle" style={[styles.headerTitle, { color: colors.text }]}>Visit Details</Text>

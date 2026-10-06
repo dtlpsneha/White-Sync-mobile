@@ -15,6 +15,18 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Routes where the bottom nav should be visible
+const NAV_ROUTES = [
+    '/home',
+    '/quotations',
+    '/sales-orders',
+    '/maintenance',
+    '/daily-sales-report',
+    '/daily-sales-report/invoice-history',
+    '/price-calculator',
+    '/profile',
+];
+
 export const FloatingNav = () => {
     const router = useRouter();
     const pathname = usePathname();
@@ -24,6 +36,8 @@ export const FloatingNav = () => {
     const colors = Colors[theme];
     const insets = useSafeAreaInsets();
     const { ms } = useResponsive();
+
+    const isNavVisible = NAV_ROUTES.includes(pathname);
 
     // The bar is position:absolute pinned to the screen bottom, so it doesn't move out of
     // the way when the keyboard opens — it ends up floating in the middle of the screen,
@@ -55,16 +69,21 @@ export const FloatingNav = () => {
         { id: 'quotes', label: 'Quotes', icon: 'document-text-outline', activeIcon: 'document-text', route: '/quotations', color: '#F59E0B', mode: 'replace' as const },
         { id: 'orders', label: 'Orders', icon: 'cart-outline', activeIcon: 'cart', route: '/sales-orders', color: '#00BFA5', mode: 'replace' as const },
         { id: 'visits', label: 'Visits', icon: 'calendar-outline', activeIcon: 'calendar', route: '/maintenance', color: '#8B5CF6', mode: 'replace' as const },
-        { id: 'calculator', label: 'Calculator', icon: 'calculator-outline', activeIcon: 'calculator', route: '/price-calculator', color: '#10B981', mode: 'push' as const },
+        { id: 'daily-sales', label: 'Sales', icon: 'bar-chart-outline', activeIcon: 'bar-chart', route: '/daily-sales-report', color: '#F59E0B', mode: 'push' as const },
+        { id: 'invoices', label: 'Invoices', icon: 'receipt-outline', activeIcon: 'receipt', route: '/daily-sales-report/invoice-history', color: '#0891B2', mode: 'push' as const },
+        { id: 'calculator', label: 'Calc', icon: 'calculator-outline', activeIcon: 'calculator', route: '/price-calculator', color: '#10B981', mode: 'push' as const },
         { id: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', route: '/profile', color: '#6366F1', mode: 'replace' as const },
     ], []);
 
-    // Active Index Calculation
+    // Active Index Calculation — exact match wins over prefix so that
+    // /daily-sales-report/invoice-history highlights Invoices, not Sales.
     const activeIndex = useMemo(() => {
-        const index = navItems.findIndex(item => 
-            pathname === item.route || pathname.startsWith(item.route + '/')
+        const exact = navItems.findIndex(item => pathname === item.route);
+        if (exact !== -1) return exact;
+        const prefix = navItems.findIndex(item =>
+            item.route !== '/home' && pathname.startsWith(item.route + '/')
         );
-        return index !== -1 ? index : 0;
+        return prefix !== -1 ? prefix : 0;
     }, [pathname, navItems]);
 
     // Animation values
@@ -100,7 +119,7 @@ export const FloatingNav = () => {
         });
     };
 
-    const indicatorOffset = ms(28); // Slightly bigger indicator for labels
+    const indicatorOffset = ms(24); // Tightened for 8 items
 
     const animatedIndicatorStyle = useAnimatedStyle(() => {
         // Build color palette for interpolation
@@ -118,7 +137,7 @@ export const FloatingNav = () => {
         };
     });
 
-    if (keyboardVisible) return null;
+    if (keyboardVisible || !isNavVisible) return null;
 
     return (
         <View style={[styles.container, { bottom: Math.max(insets.bottom, 20) + 10 }]}>
@@ -167,7 +186,7 @@ export const FloatingNav = () => {
                             <Animated.View style={styles.iconContainer}>
                                 <Ionicons
                                     name={isActive ? (item.activeIcon as any) : (item.icon as any)}
-                                    size={ms(22)}
+                                    size={ms(19)}
                                     color={isActive ? activeColor : '#94A3B8'}
                                 />
                             </Animated.View>
@@ -201,9 +220,9 @@ const styles = StyleSheet.create({
     },
     navBar: {
         flexDirection: 'row',
-        height: 78,
-        borderRadius: 39,
-        paddingHorizontal: 12,
+        height: 68,
+        borderRadius: 34,
+        paddingHorizontal: 4,
         alignItems: 'center',
         justifyContent: 'space-between',
         width: '100%',
@@ -227,21 +246,21 @@ const styles = StyleSheet.create({
         height: '100%',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
+        gap: 2,
     },
     iconContainer: {
         alignItems: 'center',
         justifyContent: 'center',
     },
     itemLabel: {
-        fontSize: 10,
-        letterSpacing: 0.2,
+        fontSize: 8.5,
+        letterSpacing: 0,
     },
     indicator: {
         position: 'absolute',
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         zIndex: -1,
     }
 });
