@@ -15,18 +15,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 
-interface Props {
-    notification: Notifications.Notification | undefined;
-    onDismiss: () => void;
-}
-
 interface PopupData {
     title: string | null | undefined;
     body: string | null | undefined;
     quotationId: string | undefined;
 }
 
-export const NotificationPopup = ({ notification, onDismiss }: Props) => {
+// No props needed — the popup owns its own notification listener.
+export const NotificationPopup = () => {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const colorScheme = useColorScheme();
@@ -36,44 +32,33 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
 
     const translateY = useSharedValue(-160);
     const opacity = useSharedValue(0);
-
-    // Self-contained: visibility is driven by popupData, NOT by the notification prop.
-    // This means clearing the parent's notification state never collapses the popup —
-    // only an explicit dismiss tap does.
     const [popupData, setPopupData] = useState<PopupData | null>(null);
+
+    // Prevent re-processing the same notification identifier on fast-refresh
     const lastShownId = useRef<string | null>(null);
 
-    const hidePopup = () => {
-        setPopupData(null);
-    };
+    const hidePopup = () => setPopupData(null);
 
     const dismiss = () => {
         translateY.value = withTiming(-160, { duration: 280 });
         opacity.value = withTiming(0, { duration: 280 }, (done) => {
-            if (done) {
-                runOnJS(hidePopup)();
-                runOnJS(onDismiss)();
-            }
+            if (done) runOnJS(hidePopup)();
         });
     };
 
     useEffect(() => {
-        if (!notification) return; // clearing the prop must NOT hide the popup
+        const sub = Notifications.addNotificationReceivedListener(async (notification) => {
+            const notifId = notification.request.identifier;
+            if (lastShownId.current === notifId) return;
 
-        const notifId = notification.request.identifier;
-        if (lastShownId.current === notifId) return; // already processing this one
+            const data = notification.request.content.data as any;
+            const approver: string | undefined = data?.approver;
 
-        const data = notification.request.content.data as any;
-        const approver: string | undefined = data?.approver;
-
-        const check = async () => {
             if (approver) {
                 const userId = await SecureStore.getItemAsync('user_id');
-                if (!userId || userId.toLowerCase() !== approver.toLowerCase()) {
-                    onDismiss();
-                    return;
-                }
+                if (!userId || userId.toLowerCase() !== approver.toLowerCase()) return;
             }
+
             lastShownId.current = notifId;
             setPopupData({
                 title: notification.request.content.title,
@@ -82,10 +67,10 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
             });
             translateY.value = withSpring(0, { damping: 18, stiffness: 160 });
             opacity.value = withTiming(1, { duration: 200 });
-        };
+        });
 
-        check();
-    }, [notification]);
+        return () => sub.remove();
+    }, []);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: translateY.value }],
@@ -117,15 +102,12 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
                     },
                 ]}
             >
-                {/* Left accent bar */}
                 <View style={styles.accent} />
 
-                {/* Icon */}
                 <View style={[styles.iconWrap, { backgroundColor: '#3B82F620' }]}>
                     <Ionicons name="document-text" size={20} color="#3B82F6" />
                 </View>
 
-                {/* Text */}
                 <Pressable style={styles.textBlock} onPress={quotationId ? handleView : undefined}>
                     <Text style={[styles.titleText, { color: colors.text }]} numberOfLines={1}>
                         {title ?? 'Quotation Update'}
@@ -135,7 +117,6 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
                     </Text>
                 </Pressable>
 
-                {/* Actions */}
                 <View style={styles.actions}>
                     {quotationId && (
                         <TouchableOpacity style={styles.viewBtn} onPress={handleView} activeOpacity={0.8}>

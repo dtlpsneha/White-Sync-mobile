@@ -12,7 +12,7 @@ import { View } from 'react-native';
 
 function RootLayoutContent() {
   const { theme } = useTheme();
-  const { notification, clearNotification } = usePushNotifications();
+  usePushNotifications();
 
   return (
     <NavigationProvider value={theme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -25,7 +25,7 @@ function RootLayoutContent() {
           * underneath. */}
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors[theme].background } }} />
         <FloatingNav />
-        <NotificationPopup notification={notification} onDismiss={clearNotification} />
+        <NotificationPopup />
       </View>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </NavigationProvider>
