@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
     runOnJS,
@@ -21,7 +21,20 @@ interface PopupData {
     quotationId: string | undefined;
 }
 
-// No props needed — the popup owns its own notification listener.
+// ─── Module-level store ───────────────────────────────────────────────────────
+// Lives outside React so it survives re-renders, component remounts, and Expo
+// Go Fast Refresh. Only a full JS bundle reload clears it (which also closes
+// the app visually, so the user never sees a disappearing popup).
+let _pending: PopupData | null = null;
+const _listeners = new Set<() => void>();
+const _processedIds = new Set<string>();
+
+function _setPending(data: PopupData | null) {
+    _pending = data;
+    _listeners.forEach(fn => fn());
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const NotificationPopup = () => {
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -30,14 +43,11 @@ export const NotificationPopup = () => {
     const isDark = theme === 'dark';
     const colors = Colors[theme];
 
-    const translateY = useSharedValue(-160);
-    const opacity = useSharedValue(0);
-    const [popupData, setPopupData] = useState<PopupData | null>(null);
+    const translateY = useSharedValue(_pending ? 0 : -160);
+    const opacity = useSharedValue(_pending ? 1 : 0);
+    const [, forceRender] = useState(0);
 
-    // Prevent re-processing the same notification identifier on fast-refresh
-    const lastShownId = useRef<string | null>(null);
-
-    const hidePopup = () => setPopupData(null);
+    const hidePopup = () => _setPending(null);
 
     const dismiss = () => {
         translateY.value = withTiming(-160, { duration: 280 });
@@ -47,9 +57,20 @@ export const NotificationPopup = () => {
     };
 
     useEffect(() => {
+        // If there's already a pending notification (e.g. after a component
+        // remount from Fast Refresh), animate it in immediately.
+        if (_pending) {
+            translateY.value = withSpring(0, { damping: 18, stiffness: 160 });
+            opacity.value = withTiming(1, { duration: 200 });
+        }
+
+        // Subscribe to module-level store updates so forceRender drives re-renders.
+        const trigger = () => forceRender(n => n + 1);
+        _listeners.add(trigger);
+
         const sub = Notifications.addNotificationReceivedListener(async (notification) => {
             const notifId = notification.request.identifier;
-            if (lastShownId.current === notifId) return;
+            if (_processedIds.has(notifId)) return;
 
             const data = notification.request.content.data as any;
             const approver: string | undefined = data?.approver;
@@ -59,8 +80,8 @@ export const NotificationPopup = () => {
                 if (!userId || userId.toLowerCase() !== approver.toLowerCase()) return;
             }
 
-            lastShownId.current = notifId;
-            setPopupData({
+            _processedIds.add(notifId);
+            _setPending({
                 title: notification.request.content.title,
                 body: notification.request.content.body,
                 quotationId: data?.id as string | undefined,
@@ -69,7 +90,10 @@ export const NotificationPopup = () => {
             opacity.value = withTiming(1, { duration: 200 });
         });
 
-        return () => sub.remove();
+        return () => {
+            _listeners.delete(trigger);
+            sub.remove();
+        };
     }, []);
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -77,9 +101,9 @@ export const NotificationPopup = () => {
         opacity: opacity.value,
     }));
 
-    if (!popupData) return null;
+    if (!_pending) return null;
 
-    const { title, body, quotationId } = popupData;
+    const { title, body, quotationId } = _pending;
 
     const handleView = () => {
         dismiss();
