@@ -20,7 +20,11 @@ interface Props {
     onDismiss: () => void;
 }
 
-const AUTO_DISMISS_MS = 6000;
+interface PopupData {
+    title: string | null | undefined;
+    body: string | null | undefined;
+    quotationId: string | undefined;
+}
 
 export const NotificationPopup = ({ notification, onDismiss }: Props) => {
     const router = useRouter();
@@ -32,24 +36,33 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
 
     const translateY = useSharedValue(-160);
     const opacity = useSharedValue(0);
-    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [visible, setVisible] = useState(false);
+
+    // Self-contained: visibility is driven by popupData, NOT by the notification prop.
+    // This means clearing the parent's notification state never collapses the popup —
+    // only an explicit dismiss tap does.
+    const [popupData, setPopupData] = useState<PopupData | null>(null);
+    const lastShownId = useRef<string | null>(null);
+
+    const hidePopup = () => {
+        setPopupData(null);
+    };
 
     const dismiss = () => {
-        if (timerRef.current) clearTimeout(timerRef.current);
         translateY.value = withTiming(-160, { duration: 280 });
         opacity.value = withTiming(0, { duration: 280 }, (done) => {
-            if (done) runOnJS(onDismiss)();
+            if (done) {
+                runOnJS(hidePopup)();
+                runOnJS(onDismiss)();
+            }
         });
     };
 
     useEffect(() => {
-        if (!notification) { setVisible(false); return; }
+        if (!notification) return; // clearing the prop must NOT hide the popup
 
-        // If the notification payload includes an `approver` field, only show
-        // the popup to that specific user. Older payloads without `approver`
-        // are shown to everyone (safe fallback — the FCM token already scopes
-        // delivery to one device).
+        const notifId = notification.request.identifier;
+        if (lastShownId.current === notifId) return; // already processing this one
+
         const data = notification.request.content.data as any;
         const approver: string | undefined = data?.approver;
 
@@ -61,17 +74,17 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
                     return;
                 }
             }
-            setVisible(true);
+            lastShownId.current = notifId;
+            setPopupData({
+                title: notification.request.content.title,
+                body: notification.request.content.body,
+                quotationId: data?.id as string | undefined,
+            });
             translateY.value = withSpring(0, { damping: 18, stiffness: 160 });
             opacity.value = withTiming(1, { duration: 200 });
-            timerRef.current = setTimeout(dismiss, AUTO_DISMISS_MS);
         };
 
         check();
-
-        return () => {
-            if (timerRef.current) clearTimeout(timerRef.current);
-        };
     }, [notification]);
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -79,10 +92,9 @@ export const NotificationPopup = ({ notification, onDismiss }: Props) => {
         opacity: opacity.value,
     }));
 
-    if (!notification || !visible) return null;
+    if (!popupData) return null;
 
-    const { title, body, data } = notification.request.content;
-    const quotationId = (data as any)?.id as string | undefined;
+    const { title, body, quotationId } = popupData;
 
     const handleView = () => {
         dismiss();
