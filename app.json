@@ -31,12 +31,10 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {
@@ -46,6 +44,17 @@
     "plugins": [
       "expo-router",
       "expo-web-browser",
+      "expo-task-manager",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logo.png",
+          "color": "#7367F0",
+          "androidMode": "default",
+          "androidCollapsedTitle": "#{unread_notifications} new interactions",
+          "iosDisplayInForeground": false
+        }
+      ],
       [
         "expo-splash-screen",
         {

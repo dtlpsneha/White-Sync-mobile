@@ -1,36 +1,23 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Configure how notifications behave when the app is in foreground.
-// shouldShowAlert/shouldShowBanner: false means we show our custom in-app Alert.
-// shouldShowList: true keeps the notification in the system tray even when app is open.
+// Handle notifications with sound and badge
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldPlaySound: true,
         shouldSetBadge: true,
-        shouldShowAlert: false,
-        shouldShowBanner: false,
+        shouldShowAlert: true,
+        shouldShowBanner: true,
         shouldShowList: true,
     }),
 });
 
 export const notificationService = {
-    /**
-     * Schedules a local notification to be displayed immediately
-     */
-    async postLocalNotification(title: string, body: string, data: any = {}, categoryId: string = "default") {
+    async postLocalNotification(title: string, body: string, data: any = {}, categoryId: string = 'default') {
         try {
-            const finalTitle = String(title || "Quotation Update").trim();
-            const finalBody = String(body || "A quotation requires your attention.").trim();
-
-            console.log(`[NotificationService] 🔔 Posting Notification:
-            Title: "${finalTitle}"
-            Body: "${finalBody}"
-            Data: ${JSON.stringify(data)}`);
-
-            // Safety: Ensure channels are set up before posting
+            const finalTitle = String(title || 'Quotation Update').trim();
+            const finalBody = String(body || 'A quotation requires your attention.').trim();
             await this.setupChannels();
-
             await Notifications.scheduleNotificationAsync({
                 content: {
                     title: finalTitle,
@@ -42,28 +29,62 @@ export const notificationService = {
                 },
                 trigger: Platform.OS === 'android' ? { channelId: 'quotation-alerts' } : null,
             });
-            console.log('[NotificationService] ✅ Notification scheduled successfully');
-        } catch (error) {
-            console.error('[NotificationService] ❌ Failed to post local notification:', error);
+        } catch (e) {
+            console.error('[NotificationService] Failed to post local notification:', e);
         }
     },
 
-    /**
-     * Sets up notification channels (required for Android)
-     */
-    async setupChannels() {
-        if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('quotation-alerts', {
-                name: 'Quotation Alerts',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#7367F0',
-                showBadge: true,
-                bypassDnd: true,
-                enableVibration: true,
-                enableLights: true,
-                showCustomLights: true,
+    async postStickyNotification(title: string, body: string, data: any = {}) {
+        try {
+            await this.setupChannels();
+            // Post immediately with trigger: null (don't schedule for future)
+            // sticky: true + autoDismiss: false keeps it in tray on Android
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title,
+                    body,
+                    data,
+                    sound: true,
+                    priority: Notifications.AndroidNotificationPriority.MAX,
+                    color: '#7367F0',
+                    autoDismiss: false,     // Don't auto-dismiss from tray
+                    sticky: true,           // Keep in notification center
+                    categoryIdentifier: 'quotation_actions',
+                },
+                trigger: null,  // Show immediately, don't schedule for later
             });
+        } catch (e) {
+            console.error('[NotificationService] Failed to post sticky notification:', e);
         }
-    }
+    },
+
+    async setupChannels() {
+        if (Platform.OS !== 'android') return;
+
+        await Notifications.setNotificationChannelAsync('quotation-alerts', {
+            name: 'Quotation Alerts',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#7367F0',
+            showBadge: true,
+            bypassDnd: true,
+            enableVibrate: true,
+            enableLights: true,
+        });
+
+        // Set up action buttons here too so they're available even when the
+        // background task posts a sticky notification before the UI mounts.
+        await Notifications.setNotificationCategoryAsync('quotation_actions', [
+            {
+                identifier: 'view',
+                buttonTitle: 'View',
+                options: { opensAppToForeground: true },
+            },
+            {
+                identifier: 'dismiss',
+                buttonTitle: 'Dismiss',
+                options: { opensAppToForeground: false },
+            },
+        ]).catch(e => console.log('[NotificationService] Category setup:', e));
+    },
 };

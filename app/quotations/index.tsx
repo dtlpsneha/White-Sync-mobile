@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
+import { BackHandler, Modal, ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import QuotationList from '@/components/QuotationList';
+import { QuotationDashboardPanel } from '@/components/dashboard/QuotationDashboardPanel';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -22,6 +23,7 @@ export default function QuotationListScreen() {
     const [filter, setFilter] = useState((params.filter as string) || 'All');
     const [searchQuery, setSearchQuery] = useState('');
     const [workflowStates, setWorkflowStates] = useState<string[]>(['All']);
+    const [dashboardVisible, setDashboardVisible] = useState(false);
 
     // This screen is reached via router.replace (see SideNav), so there is
     // nothing beneath it on the navigation stack — without this, Android's
@@ -94,8 +96,8 @@ export default function QuotationListScreen() {
                     <TouchableOpacity onPress={() => router.replace('/home')} style={styles.circularButton}>
                         <Ionicons name="chevron-back" size={24} color={colors.text} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Quotations</Text>
-                    <TouchableOpacity style={styles.circularButton}>
+                    <Text style={styles.headerTitle}>Quotation</Text>
+                    <TouchableOpacity style={styles.circularButton} onPress={() => setDashboardVisible(true)}>
                         <Ionicons name="options-outline" size={22} color={colors.text} />
                     </TouchableOpacity>
                 </View>
@@ -165,6 +167,27 @@ export default function QuotationListScreen() {
                     onStatesLoaded={handleStatesLoaded}
                 />
             </View>
+
+            <Modal
+                visible={dashboardVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setDashboardVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.background }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>Quotation Overview</Text>
+                            <TouchableOpacity onPress={() => setDashboardVisible(false)} style={styles.modalClose}>
+                                <Ionicons name="close" size={22} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+                            <QuotationDashboardPanel onSelectFilter={(key) => { setFilter(key); setDashboardVisible(false); }} />
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -276,6 +299,11 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         listContainer: {
             flex: 1,
         },
+        modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+        modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '88%', paddingTop: 8 },
+        modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9' },
+        modalTitle: { fontSize: ms(18), fontWeight: '900' },
+        modalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
         fab: {
             position: 'absolute',
             bottom: vs(160),

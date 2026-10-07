@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiPost } from '../utils/api';
+import { apiUrl } from '@/constants/config';
 
 import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -21,10 +22,10 @@ import { SectionHeader } from '@/components/dashboard/SectionHeader';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useNotifications, type PersistentNotification } from '@/context/NotificationsContext';
 import Svg, { Circle, G } from 'react-native-svg';
 
 import { useResponsive } from '../hooks/useResponsive';
-import { apiUrl } from '@/constants/config';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -417,88 +418,50 @@ export default function HomeScreen() {
                                 <Text style={styles.userNameText}>{userName || 'User'}</Text>
                                 <View style={styles.liveIndicatorContainer}><View style={styles.liveDot} /><Text style={styles.liveText}>Last updated: {lastUpdated}</Text></View>
                             </View>
-                            <TouchableOpacity onPress={handleLogout} style={styles.profileButton}><View style={styles.avatar}><Text style={styles.avatarText}>{userName ? userName[0].toUpperCase() : 'U'}</Text></View></TouchableOpacity>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(8) }}>
+                                <TouchableOpacity onPress={() => router.push('/profile' as any)} style={styles.profileButton}><View style={styles.avatar}><Text style={styles.avatarText}>{userName ? userName[0].toUpperCase() : 'U'}</Text></View></TouchableOpacity>
+                            </View>
                         </View>
 
                         <View style={styles.aiSearchWrap}>
                             <AiSearchBar />
                         </View>
 
-                        <SectionHeader
-                            title="Quotations"
-                            subtitle="Live status overview — tap a card to filter"
-                        />
-                        <View style={styles.kpiGrid}>
-                            {Object.keys(statsMap).map((statusKey, index) => {
-                                const status = statsMap[statusKey];
-                                const isPending = statusKey.toUpperCase() === 'PENDING';
-                                const isApproved = statusKey.toUpperCase() === 'APPROVED';
-                                const isReview = statusKey.toUpperCase() === 'REVIEW' || statusKey.toUpperCase() === 'DECLINED';
-                                const isCancelled = statusKey.toUpperCase() === 'CANCELLED' || statusKey.toUpperCase() === 'REJECTED';
-
-                                const cardColor = isPending ? colors.info :
-                                    isApproved ? colors.success :
-                                        isReview ? colors.danger :
-                                            isCancelled ? CANCELLED_COLOR :
-                                                colors.secondary; // Default for any other status
-
-                                const iconName = isPending ? 'time-outline' :
-                                    isApproved ? 'trending-up-outline' :
-                                        isReview ? 'trending-down-outline' :
-                                            isCancelled ? 'close-circle-outline' :
-                                                'document-text-outline';
-
-                                return (
-                                    <KpiCard
-                                        key={statusKey}
-                                        title={statusKey}
-                                        icon={iconName as any}
-                                        color={cardColor}
-                                        delay={100 * (index + 1)}
-                                        onPress={() => router.push({ pathname: '/quotations', params: { filter: statusKey } })}
-                                        rows={[
-                                            { icon: 'document-text-outline', label: 'Quotes', value: String(status.quotes) },
-                                            { icon: 'cash-outline', label: 'Values', value: status.value.toLocaleString('en-IN') },
-                                            { icon: 'people-outline', label: 'Customers', value: String(status.customers) },
-                                        ]}
-                                    />
-                                );
-                            })}
-                        </View>
-
-                        <SectionHeader
-                            title="Quotation Performance"
-                            subtitle="Approval trends across all quotations"
-                        />
-                        <Animated.View entering={FadeInUp.delay(500).duration(800)} style={styles.donutCard}>
-                            <View style={styles.donutHeader}>
-                                <View><Text style={styles.donutTitle}>Donut Chart</Text><Text style={styles.donutSubtitle}>Quote distribution overview</Text></View>
-                                <TouchableOpacity style={styles.detailsButton} onPress={() => router.push('/quotations')}><Text style={styles.detailsButtonText}>View Details</Text><Ionicons name="arrow-forward-outline" size={ms(14)} color="#FFF" style={{ transform: [{ rotate: '-45deg' }] }} /></TouchableOpacity>
-                            </View>
-                            <View style={styles.chartWrapper}>
-                                <DonutChart
-                                    data={Object.keys(statsMap).map(k => statsMap[k].quotes)}
-                                    colors={Object.keys(statsMap).map(k => {
-                                        const uk = k.toUpperCase();
-                                        if (uk === 'PENDING') return colors.info;
-                                        if (uk === 'APPROVED') return colors.success;
-                                        if (uk === 'REVIEW' || uk === 'DECLINED') return colors.danger;
-                                        if (uk === 'CANCELLED' || uk === 'REJECTED') return CANCELLED_COLOR;
-                                        return colors.secondary;
-                                    })}
-                                    centerText={summaryStats.totalQuotes.toString()}
-                                />
-                            </View>
-                            <View style={styles.donutStatsRow}>
-                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{summaryStats.totalQuotes}</Text><Text style={styles.donutStatLabel}>Total Quotes</Text></View>
-                                <View style={[styles.donutStat, styles.donutStatBorder, { flex: 1.5 }]}><Text style={styles.donutStatValue}>{summaryStats.totalValue.replace('INR', '₹')}</Text><Text style={styles.donutStatLabel}>Total Value</Text></View>
-                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{summaryStats.totalCustomers}</Text><Text style={styles.donutStatLabel}>Customers</Text></View>
-                            </View>
-                        </Animated.View>
-
-                        <Animated.View entering={FadeInUp.delay(600)} style={styles.metricsContainer}>
-                            <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{summaryStats.conversionRate}</Text></View></View>
-                            <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
+                        <SectionHeader title="Quick Navigation" subtitle="Tap a section to open it" />
+                        <Animated.View entering={FadeInUp.delay(500)} style={styles.navSection}>
+                            {([
+                                [
+                                    { label: 'Quotation', icon: 'document-text-outline', color: '#F59E0B', route: '/quotations', mode: 'replace' as const },
+                                    { label: 'Customer Purchase Order', icon: 'cart-outline', color: '#00BFA5', route: '/sales-orders', mode: 'replace' as const },
+                                ],
+                                [
+                                    { label: 'Customer Visit', icon: 'calendar-outline', color: '#8B5CF6', route: '/maintenance', mode: 'replace' as const },
+                                    { label: 'Daily Sales Report (Cumulative)', icon: 'bar-chart-outline', color: '#F97316', route: '/daily-sales-report', mode: 'push' as const },
+                                ],
+                                [
+                                    { label: 'Sales Invoice History (Detailed)', icon: 'receipt-outline', color: '#0891B2', route: '/daily-sales-report/invoice-history', mode: 'push' as const },
+                                    { label: 'Habasit Calculator', icon: 'calculator-outline', color: '#10B981', route: '/price-calculator', mode: 'push' as const },
+                                ],
+                            ]).map((row, rowIdx) => (
+                                <View key={rowIdx} style={styles.navRow}>
+                                    {row.map((item, colIdx) => (
+                                        <TouchableOpacity
+                                            key={colIdx}
+                                            style={[styles.navBox, { backgroundColor: `${item.color}15`, borderColor: `${item.color}45` }]}
+                                            onPress={() => item.mode === 'push' ? router.push(item.route as any) : router.replace(item.route as any)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <View style={[styles.navIconWrap, { backgroundColor: item.color }]}>
+                                                <Ionicons name={item.icon as any} size={ms(22)} color="#FFF" />
+                                            </View>
+                                            <Text style={[styles.navLabel, { color: colors.text }]}>
+                                                {item.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                    {row.length === 1 && <View style={styles.navBoxSpacer} />}
+                                </View>
+                            ))}
                         </Animated.View>
 
                     </>
@@ -532,7 +495,9 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         avatar: { width: ms(48), height: ms(48), borderRadius: ms(16), backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
         avatarText: { fontSize: ms(20), fontWeight: '900', color: '#FFF' },
         topActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: s(24), gap: s(8) },
-        iconButton: { width: ms(40), height: ms(40), borderRadius: ms(20), backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+        iconButton: { width: ms(40), height: ms(40), borderRadius: ms(20), backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border, position: 'relative' as const },
+        notificationBadge: { position: 'absolute', top: -6, right: -6, width: ms(20), height: ms(20), borderRadius: ms(10), justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.background },
+        notificationBadgeText: { fontSize: ms(10), fontWeight: '900', color: '#FFF' },
         aiSearchWrap: {
         paddingHorizontal: 20,
         marginBottom: 18,
@@ -554,7 +519,35 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         metricCard: { flexDirection: 'row', alignItems: 'center', padding: ms(16), borderRadius: ms(24), gap: s(16) },
         metricIcon: { width: ms(40), height: ms(40), borderRadius: ms(16), justifyContent: 'center', alignItems: 'center' },
         metricLabel: { fontSize: ms(12), color: colors.textSecondary, fontWeight: '700' },
-        metricValue: { fontSize: ms(18), fontWeight: '900' }
+        metricValue: { fontSize: ms(18), fontWeight: '900' },
+        navSection: { paddingHorizontal: s(16), paddingBottom: s(24), gap: s(10) },
+        navRow: { flexDirection: 'row', gap: s(10) },
+        navBox: {
+            flex: 1,
+            borderRadius: ms(18),
+            borderWidth: 1.5,
+            paddingVertical: ms(16),
+            paddingHorizontal: ms(12),
+            alignItems: 'center',
+            gap: vs(10),
+            minHeight: ms(100),
+            justifyContent: 'center',
+        },
+        navBoxSpacer: { flex: 1 },
+        navIconWrap: {
+            width: ms(48),
+            height: ms(48),
+            borderRadius: ms(16),
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        navLabel: {
+            fontSize: ms(11),
+            fontWeight: '700',
+            textAlign: 'center',
+            lineHeight: ms(16),
+            color: '#334155',
+        },
     });
 }
 

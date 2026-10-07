@@ -24,6 +24,7 @@ interface QuotationDetail {
     transaction_type?: string;
     price_list?: string;
     sales_executive?: string;
+    executive_person?: string;
     brand?: string;
     against_purchase_invoice?: string;
     purchase_rate?: number;
@@ -238,31 +239,29 @@ export default function QuotationDetailScreen() {
 
                 {/* Overlapping Body Container */}
                 <View style={[localStyles.contentContainer, { marginTop: -50 }]}>
-                    {/* Order Number Card */}
-                    <Animated.View entering={FadeInUp.delay(50).springify()} style={localStyles.orderNumberCard}>
-                        <View style={localStyles.cardAccent} />
-                        <View style={{ padding: 16 }}>
-                            <Text style={localStyles.orderNumberLabel}>ORDER NUMBER</Text>
-                            <Text style={localStyles.orderNumberValue}>{quote.name}</Text>
+                    {/* Order info card: number + date + valid till in one card */}
+                    <Animated.View entering={FadeInUp.delay(50).springify()} style={localStyles.orderInfoCard}>
+                        <View style={localStyles.orderInfoTop}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={localStyles.orderNumberLabel}>ORDER NUMBER</Text>
+                                <Text style={localStyles.orderNumberValue} numberOfLines={1}>{quote.name}</Text>
+                            </View>
+                        </View>
+                        <View style={localStyles.orderInfoBottom}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={localStyles.orderInfoLabel}>DATE</Text>
+                                <Text style={localStyles.orderInfoValue}>{quote.transaction_date}</Text>
+                            </View>
+                            <View style={localStyles.orderInfoDivider} />
+                            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                <Text style={localStyles.orderInfoLabel}>VALID TILL</Text>
+                                <Text style={localStyles.orderInfoValue}>{quote.valid_till || '---'}</Text>
+                            </View>
                         </View>
                     </Animated.View>
 
-                    {/* Information cards */}
-                    <View style={localStyles.infoRow}>
-                        <Animated.View entering={FadeInDown.delay(100).springify()} style={localStyles.infoCard}>
-                            <Ionicons name="calendar-outline" size={16} color={statusColor} />
-                            <Text style={localStyles.infoLabel}>DATE</Text>
-                            <Text style={localStyles.infoValue}>{quote.transaction_date}</Text>
-                        </Animated.View>
-                        <Animated.View entering={FadeInDown.delay(200).springify()} style={localStyles.infoCard}>
-                            <Ionicons name="time-outline" size={16} color={statusColor} />
-                            <Text style={localStyles.infoLabel}>VALID TILL</Text>
-                            <Text style={localStyles.infoValue}>{quote.valid_till || '---'}</Text>
-                        </Animated.View>
-                    </View>
-
-                    {/* Basic Information Section */}
-                    <Animated.View entering={FadeInUp.delay(300).springify()} style={localStyles.sectionCard}>
+                    {/* Basic Information */}
+                    <Animated.View entering={FadeInUp.delay(200).springify()} style={localStyles.sectionCard}>
                         <View style={localStyles.sectionHeader}>
                             <View style={[localStyles.iconContainer, { backgroundColor: statusColor + '15' }]}>
                                 <Ionicons name="information-circle" size={18} color={statusColor} />
@@ -272,47 +271,28 @@ export default function QuotationDetailScreen() {
                                 <Text style={localStyles.sectionSubtitleText}>Primary quotation details</Text>
                             </View>
                         </View>
-
-                        <View style={localStyles.gridContainer}>
-                            <View style={localStyles.gridColumn}>
-                                <View style={localStyles.gridItem}>
-                                    <View>
-                                        <Text style={localStyles.gridLabel}>TYPE</Text>
-                                        <Text style={localStyles.gridValue}>{quote.transaction_type || 'Sales'}</Text>
-                                    </View>
+                        <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+                            {([
+                                { label: 'Type', value: quote.transaction_type || 'Sales' },
+                                { label: 'Price List', value: quote.price_list || 'Standard' },
+                                { label: 'Brand', value: quote.brand || '---' },
+                                { label: 'Company', value: quote.company || 'White & Co.' },
+                            ] as { label: string; value: string }[]).map((row, i) => (
+                                <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary }}>{row.label}</Text>
+                                    <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, maxWidth: '55%', textAlign: 'right' }} numberOfLines={1}>{row.value}</Text>
                                 </View>
-                                <View style={localStyles.gridItem}>
-                                    <View>
-                                        <Text style={localStyles.gridLabel}>PRICE LIST</Text>
-                                        <Text style={localStyles.gridValue} numberOfLines={1}>{quote.price_list || 'Standard'}</Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            <View style={localStyles.gridColumn}>
-                                <View style={localStyles.gridItem}>
-                                    <View>
-                                        <Text style={localStyles.gridLabel}>EXECUTIVE</Text>
-                                        <Text style={localStyles.gridValue}>{quote.sales_executive || '---'}</Text>
-                                    </View>
-                                </View>
-                                <View style={localStyles.gridItem}>
-                                    <View>
-                                        <Text style={localStyles.gridLabel}>BRAND</Text>
-                                        <Text style={localStyles.gridValue}>{quote.brand || '---'}</Text>
-                                    </View>
-                                </View>
-                            </View>
+                            ))}
                         </View>
                     </Animated.View>
 
                     {/* Items Section */}
-                    <Animated.View entering={FadeInUp.delay(400).springify()} style={localStyles.sectionCard}>
+                    <Animated.View entering={FadeInUp.delay(300).springify()} style={localStyles.sectionCard}>
                         <View style={localStyles.sectionHeader}>
                             <View style={[localStyles.iconContainer, { backgroundColor: '#00BFA515' }]}>
                                 <Ionicons name="cube" size={18} color="#00BFA5" />
                             </View>
-                            <View>
+                            <View style={{ flex: 1 }}>
                                 <Text style={localStyles.sectionTitleText}>Order Items</Text>
                                 <Text style={localStyles.sectionSubtitleText}>Detailed breakdown of products</Text>
                             </View>
@@ -321,53 +301,55 @@ export default function QuotationDetailScreen() {
                             </View>
                         </View>
                         {quote.items.map((item, index) => (
-                            <View key={index} style={localStyles.itemBoxNew}>
-                                <View style={localStyles.itemHeaderNew}>
-                                    <View style={localStyles.itemBadgeNew}>
-                                        <Text style={localStyles.itemBadgeTextNew}>{String(index + 1).padStart(2, '0')}</Text>
+                            <View key={index} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 16, marginBottom: 12, overflow: 'hidden' }}>
+                                {/* Name + number */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
+                                    <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: colors.surfaceSecondary, justifyContent: 'center', alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 11, fontWeight: '900', color: colors.textSecondary }}>{String(index + 1).padStart(2, '0')}</Text>
                                     </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={localStyles.itemNameNew}>{item.item_name || item.item_code}</Text>
-                                        <Text style={localStyles.itemCodeNew}>{item.item_code}  •  <Text style={{ color: '#6366F1' }}>{quote.brand || 'PRECITEX'}</Text></Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '900', color: colors.text, marginBottom: 2 }}>{item.item_name || item.item_code}</Text>
+                                        <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 }}>{item.item_code}</Text>
                                     </View>
                                 </View>
-                                <View style={localStyles.itemFooterNew}>
-                                    <View style={localStyles.footerColumn}>
-                                        <Text style={localStyles.footerLabel}>QUANTITY</Text>
-                                        <Text style={localStyles.footerValue}>{item.qty} Nos</Text>
+                                {/* Divider */}
+                                <View style={{ height: 1, backgroundColor: colors.border }} />
+                                {/* QTY / RATE / TOTAL */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+                                    <View style={{ flex: 1, alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textSecondary, letterSpacing: 0.5, marginBottom: 4 }}>QUANTITY</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '900', color: colors.text }}>{item.qty} Nos</Text>
                                     </View>
-                                    <View style={localStyles.dividerLine} />
-                                    <View style={localStyles.footerColumn}>
-                                        <Text style={localStyles.footerLabel}>RATE</Text>
-                                        <Text style={localStyles.footerValue}>₹{item.rate.toLocaleString()}</Text>
+                                    <View style={{ width: 1, height: 32, backgroundColor: colors.border }} />
+                                    <View style={{ flex: 1, alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textSecondary, letterSpacing: 0.5, marginBottom: 4 }}>RATE</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '900', color: colors.text }}>₹{item.rate.toLocaleString()}</Text>
                                     </View>
-                                    <View style={localStyles.dividerLine} />
-                                    <View style={localStyles.footerColumn}>
-                                        <Text style={localStyles.footerLabel}>TOTAL</Text>
-                                        <Text style={[localStyles.footerValue, { color: '#0288D1' }]}>₹{item.amount.toLocaleString()}</Text>
+                                    <View style={{ width: 1, height: 32, backgroundColor: colors.border }} />
+                                    <View style={{ flex: 1, alignItems: 'center' }}>
+                                        <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textSecondary, letterSpacing: 0.5, marginBottom: 4 }}>TOTAL</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '900', color: '#0288D1' }}>₹{item.amount.toLocaleString()}</Text>
                                     </View>
                                 </View>
-                                {/* Margin Details dynamically moved to Child Table */}
-                                <View style={localStyles.marginInfoChildRow}>
-                                    <View style={localStyles.marginSpec}>
-                                        <Text style={localStyles.marginSpecLabel}>PI NO</Text>
-                                        <Text style={localStyles.marginSpecValue}>{item.against_purchase_invoice || quote.against_purchase_invoice || '---'}</Text>
-                                    </View>
-                                    <View style={localStyles.marginSpec}>
-                                        <Text style={localStyles.marginSpecLabel}>PURCH RATE</Text>
-                                        <Text style={localStyles.marginSpecValue}>₹{((item.purchase_rate) || quote.purchase_rate || 0).toLocaleString()}</Text>
-                                    </View>
-                                    <View style={[localStyles.marginSpec, { alignItems: 'flex-end', borderRightWidth: 0 }]}>
-                                        <Text style={localStyles.marginSpecLabel}>MARGIN</Text>
-                                        <Text style={[localStyles.marginSpecValue, { color: '#059669' }]}>%{((item.item_margin) || quote.item_margin || 0).toLocaleString()}</Text>
-                                    </View>
+                                {/* Divider */}
+                                <View style={{ height: 1, backgroundColor: colors.border }} />
+                                {/* PI / Purch Rate / Margin */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 6 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textSecondary }}>PI</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{item.against_purchase_invoice || quote.against_purchase_invoice || '---'}</Text>
+                                    <View style={{ width: 1, height: 12, backgroundColor: colors.border }} />
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textSecondary }}>PURCH</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>₹{(item.purchase_rate || quote.purchase_rate || 0).toLocaleString()}</Text>
+                                    <View style={{ width: 1, height: 12, backgroundColor: colors.border }} />
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.textSecondary }}>MARGIN</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#059669' }}>{(item.item_margin || quote.item_margin || 0)}%</Text>
                                 </View>
                             </View>
                         ))}
                     </Animated.View>
 
-                    {/* Summary Section */}
-                    <Animated.View entering={FadeInUp.delay(500).springify()} style={localStyles.sectionCard}>
+                    {/* Financial Summary */}
+                    <Animated.View entering={FadeInUp.delay(400).springify()} style={localStyles.sectionCard}>
                         <View style={localStyles.sectionHeader}>
                             <View style={[localStyles.iconContainer, { backgroundColor: '#6366F115' }]}>
                                 <Ionicons name="wallet-outline" size={18} color="#6366F1" />
@@ -377,7 +359,6 @@ export default function QuotationDetailScreen() {
                                 <Text style={localStyles.sectionSubtitleText}>Costs and adjustments</Text>
                             </View>
                         </View>
-
                         <View style={localStyles.summaryRow}>
                             <Text style={localStyles.summaryLabel}>Total Quantity</Text>
                             <Text style={localStyles.summaryValue}>{quote.items.reduce((sum, i) => sum + i.qty, 0)} Nos</Text>
@@ -392,8 +373,8 @@ export default function QuotationDetailScreen() {
                         </View>
                     </Animated.View>
 
-                    {/* Payment Schedule Section */}
-                    <Animated.View entering={FadeInUp.delay(600).springify()} style={localStyles.sectionCard}>
+                    {/* Payment Schedule */}
+                    <Animated.View entering={FadeInUp.delay(500).springify()} style={localStyles.sectionCard}>
                         <View style={localStyles.sectionHeader}>
                             <View style={[localStyles.iconContainer, { backgroundColor: '#00BFA515' }]}>
                                 <Ionicons name="calendar" size={18} color="#00BFA5" />
@@ -403,31 +384,22 @@ export default function QuotationDetailScreen() {
                                 <Text style={localStyles.sectionSubtitleText}>Terms and milestones</Text>
                             </View>
                         </View>
-
-                        {(quote.payment_schedule || [{ payment_term: 'Milestone 1', due_date: quote.transaction_date, payment_amount: quote.grand_total, invoice_portion: 100 }]).map((p, i) => (
-                            <View key={i} style={localStyles.milestoneItem}>
-                                <View style={localStyles.milestoneHeader}>
-                                    <Text style={localStyles.milestoneTitle}>{p.payment_term}</Text>
-                                    <View style={localStyles.portionBadge}>
-                                        <Text style={localStyles.portionText}>{p.invoice_portion}%</Text>
-                                    </View>
-                                </View>
-                                <View style={localStyles.milestoneDetails}>
-                                    <View>
-                                        <Text style={localStyles.milestoneLabel}>DUE DATE</Text>
-                                        <Text style={localStyles.milestoneValue}>{p.due_date}</Text>
+                        <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+                            {(quote.payment_schedule || [{ payment_term: 'Milestone 1', due_date: quote.transaction_date, payment_amount: quote.grand_total, invoice_portion: 100 }]).map((p, i) => (
+                                <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, marginBottom: 3 }}>{p.payment_term}</Text>
+                                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>Due: {p.due_date}</Text>
                                     </View>
                                     <View style={{ alignItems: 'flex-end' }}>
-                                        <Text style={localStyles.milestoneLabel}>AMOUNT</Text>
-                                        <Text style={localStyles.milestoneValueBlue}>₹{p.payment_amount.toLocaleString()}</Text>
+                                        <Text style={{ fontSize: 14, fontWeight: '900', color: isDark ? '#60A5FA' : '#3B82F6', marginBottom: 4 }}>₹{p.payment_amount.toLocaleString()}</Text>
+                                        <View style={{ backgroundColor: isDark ? 'rgba(59,130,246,0.2)' : '#DBEAFE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                                            <Text style={{ fontSize: 10, fontWeight: '800', color: isDark ? '#60A5FA' : '#3B82F6' }}>{p.invoice_portion}%</Text>
+                                        </View>
                                     </View>
                                 </View>
-                                <View style={localStyles.milestoneFooter}>
-                                    <Text style={localStyles.milestoneStatus}>Outstanding</Text>
-                                    <Text style={localStyles.milestoneStatusAmount}>₹{p.payment_amount.toLocaleString()}</Text>
-                                </View>
-                            </View>
-                        ))}
+                            ))}
+                        </View>
                     </Animated.View>
 
                     {/* Summary Card */}
@@ -603,86 +575,46 @@ const getLocalStyles = (theme: 'light' | 'dark') => {
         fontWeight: '800',
         textAlign: 'left',
     },
-    // Original styles
-    orderNumberCard: { backgroundColor: c.surface, borderRadius: 24, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.4 : 0.08, shadowRadius: 20, elevation: 5, borderWidth: isDark ? 1 : 0, borderColor: c.border },
-    cardAccent: { height: 4, backgroundColor: c.surfaceVariant, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-    orderNumberLabel: { fontSize: 11, fontWeight: '800', color: c.textSecondary, marginBottom: 4, letterSpacing: 0.5 },
-    orderNumberValue: { fontSize: 18, fontWeight: '900', color: c.text, flexShrink: 1 },
+    // Order info card
+    orderInfoCard: { backgroundColor: c.surface, borderRadius: 24, marginBottom: 20, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: isDark ? 0.3 : 0.06, shadowRadius: 14, elevation: 5, borderWidth: isDark ? 1 : 0, borderColor: c.border },
+    orderInfoTop: { marginBottom: 14 },
+    orderNumberLabel: { fontSize: 10, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' as const },
+    orderNumberValue: { fontSize: 17, fontWeight: '900', color: c.text },
+    orderInfoBottom: { flexDirection: 'row', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: c.border },
+    orderInfoLabel: { fontSize: 10, fontWeight: '700', color: c.textSecondary, textTransform: 'uppercase' as const, letterSpacing: 0.4, marginBottom: 3 },
+    orderInfoValue: { fontSize: 13, fontWeight: '800', color: c.text },
+    orderInfoDivider: { width: 1, height: 32, backgroundColor: c.border, marginHorizontal: 16 },
     contentContainer: { paddingHorizontal: 20, zIndex: 10 },
-    infoRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-    infoCard: { flex: 1, backgroundColor: c.surface, borderRadius: 20, padding: 16, borderLeftWidth: 4, borderLeftColor: c.success, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.3 : 0.05, shadowRadius: 10, elevation: 3, borderTopWidth: isDark ? 1 : 0, borderRightWidth: isDark ? 1 : 0, borderBottomWidth: isDark ? 1 : 0, borderColor: c.border },
-    infoLabel: { fontSize: 10, fontWeight: '800', color: c.textSecondary, marginTop: 8 },
-    infoValue: { fontSize: 16, fontWeight: '900', color: c.text, marginTop: 2 },
-    sectionCard: { backgroundColor: c.surface, borderRadius: 32, padding: 24, marginBottom: 24, borderWidth: isDark ? 1 : 0, borderColor: c.border },
+    sectionCard: { backgroundColor: c.surface, borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: isDark ? 1 : 0, borderColor: c.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.2 : 0.04, shadowRadius: 10, elevation: 3 },
     grandTotalCard: { height: 120, borderRadius: 32, overflow: 'hidden', marginBottom: 20 },
     grandTotalContent: { flex: 1, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     grandTotalLabel: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: 4 },
     grandTotalValue: { fontSize: 36, fontWeight: '900', color: '#FFF' },
-
-    // New Styles
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
     iconContainer: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    sectionTitleText: { fontSize: 18, fontWeight: '900', color: c.text },
+    sectionTitleText: { fontSize: 16, fontWeight: '900', color: c.text },
     sectionSubtitleText: { fontSize: 12, color: c.textSecondary, fontWeight: '600' },
-    gridContainer: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
-    gridColumn: { flex: 1, gap: 12 },
-    gridItem: { backgroundColor: c.surfaceSecondary, borderRadius: 16, padding: 12, borderLeftWidth: 3, borderLeftColor: c.success, flex: 1, minWidth: '45%' },
-    gridLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.5, marginBottom: 4 },
-    gridValue: { fontSize: 14, fontWeight: '900', color: c.text },
     itemCountBadge: { backgroundColor: c.surfaceSecondary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginLeft: 'auto' },
     itemCountText: { fontSize: 12, fontWeight: '800', color: c.textSecondary },
-    itemBoxNew: { backgroundColor: c.surface, borderRadius: 24, overflow: 'hidden', marginBottom: 20, borderWidth: 1, borderColor: c.border },
-    itemHeaderNew: { flexDirection: 'row', gap: 12, alignItems: 'center', padding: 16 },
-    itemBadgeNew: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center' },
-    itemBadgeTextNew: { fontSize: 12, fontWeight: '900', color: c.textSecondary },
-    itemNameNew: { fontSize: 16, fontWeight: '900', color: c.text, marginBottom: 2 },
-    itemCodeNew: { fontSize: 12, color: c.textSecondary, fontWeight: '800', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
-    itemFooterNew: { flexDirection: 'row', backgroundColor: c.surfaceSecondary, padding: 12 },
-    marginInfoChildRow: {
-        flexDirection: 'row',
-        backgroundColor: tint('#ECFDF5', 'rgba(16, 185, 129, 0.12)'),
-        padding: 12,
-        borderBottomLeftRadius: 16,
-        borderBottomRightRadius: 16,
-        borderTopWidth: 1,
-        borderTopColor: tint('#D1FAE5', 'rgba(16, 185, 129, 0.25)'),
-    },
-    marginSpec: {
-        flex: 1,
-        borderRightWidth: 1,
-        borderRightColor: tint('#D1FAE5', 'rgba(16, 185, 129, 0.25)'),
-        paddingHorizontal: 6,
-    },
-    marginSpecLabel: {
-        fontSize: 9,
-        fontWeight: '800',
-        color: isDark ? '#34D399' : '#059669',
-        marginBottom: 2,
-    },
-    marginSpecValue: {
-        fontSize: 13,
-        fontWeight: '900',
-        color: isDark ? '#6EE7B7' : '#047857',
-    },
-    footerColumn: { flex: 1, alignItems: 'center' },
-    footerLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, marginBottom: 4 },
-    footerValue: { fontSize: 14, fontWeight: '900', color: c.text },
-    dividerLine: { width: 1, height: 20, backgroundColor: c.border, alignSelf: 'center' },
+    // Clean item card — one level, dividers only
+    itemCard: { borderWidth: 1, borderColor: c.border, borderRadius: 16, marginBottom: 12, overflow: 'hidden' },
+    itemCardTop: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+    itemNum: { width: 28, height: 28, borderRadius: 8, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center' },
+    itemNumText: { fontSize: 11, fontWeight: '900', color: c.textSecondary },
+    itemName: { fontSize: 14, fontWeight: '900', color: c.text, marginBottom: 2 },
+    itemCode: { fontSize: 11, color: c.textSecondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+    itemDivider: { height: 1, backgroundColor: c.border },
+    itemStats: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+    statLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' },
+    statValue: { fontSize: 14, fontWeight: '900', color: c.text },
+    statSep: { width: 1, height: 32, backgroundColor: c.border },
+    itemMarginRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 8, flexWrap: 'wrap' },
+    marginChipLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, letterSpacing: 0.4 },
+    marginChipVal: { fontSize: 11, fontWeight: '800', color: c.text },
+    marginSep: { width: 1, height: 12, backgroundColor: c.border },
     summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
     summaryLabel: { fontSize: 14, fontWeight: '800', color: c.textSecondary },
     summaryValue: { fontSize: 16, fontWeight: '900', color: c.text },
-    milestoneItem: { backgroundColor: c.surfaceSecondary, borderRadius: 24, padding: 16, marginBottom: 16 },
-    milestoneHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    milestoneTitle: { fontSize: 14, fontWeight: '800', color: c.text },
-    portionBadge: { backgroundColor: tint('#DBEAFE', 'rgba(59, 130, 246, 0.18)'), paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-    portionText: { fontSize: 11, fontWeight: '800', color: isDark ? '#60A5FA' : '#3B82F6' },
-    milestoneDetails: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-    milestoneLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, marginBottom: 2 },
-    milestoneValue: { fontSize: 14, fontWeight: '900', color: c.text },
-    milestoneValueBlue: { fontSize: 16, fontWeight: '900', color: isDark ? '#60A5FA' : '#3B82F6' },
-    milestoneFooter: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12, flexDirection: 'row', justifyContent: 'space-between' },
-    milestoneStatus: { fontSize: 11, fontWeight: '800', color: '#EF4444' },
-    milestoneStatusAmount: { fontSize: 11, fontWeight: '800', color: '#EF4444' },
 
     // Animation & Toolbar Styles
     toolbarContainer: {

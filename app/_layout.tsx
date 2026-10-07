@@ -4,11 +4,21 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
+import { NotificationsProvider } from '@/context/NotificationsContext';
 import { Colors } from '@/constants/theme';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { FloatingNav } from '@/components/FloatingNav';
 import { NotificationPopup } from '@/components/NotificationPopup';
+import { NotificationModal } from '@/components/NotificationModal';
 import { View } from 'react-native';
+// Must be imported at module scope so the background task is defined before
+// the runtime tries to execute it (even when the app is not fully mounted).
+import '../services/BackgroundNotificationHandler';
+import { registerBackgroundNotificationTask } from '../services/BackgroundNotificationHandler';
+import { notificationService } from '../services/NotificationService';
+
+// Set up channels and register background task as early as possible.
+notificationService.setupChannels();
+registerBackgroundNotificationTask();
 
 function RootLayoutContent() {
   const { theme } = useTheme();
@@ -24,8 +34,8 @@ function RootLayoutContent() {
           * that flash from ever being a different color than the screen
           * underneath. */}
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors[theme].background } }} />
-        <FloatingNav />
         <NotificationPopup />
+        <NotificationModal />
       </View>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </NavigationProvider>
@@ -35,7 +45,9 @@ function RootLayoutContent() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <RootLayoutContent />
+      <NotificationsProvider>
+        <RootLayoutContent />
+      </NotificationsProvider>
     </ThemeProvider>
   );
 }

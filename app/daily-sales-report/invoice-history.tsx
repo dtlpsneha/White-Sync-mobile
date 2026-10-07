@@ -561,7 +561,7 @@ export default function InvoiceHistoryScreen() {
                     <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}>
                         <Ionicons name="chevron-back" size={22} color={colors.text} />
                     </TouchableOpacity>
-                    <Text style={[styles.topbarTitle, { color: colors.text }]}>Sales Invoice History</Text>
+                    <Text style={[styles.topbarTitle, { color: colors.text }]}>Sales Invoice History (Detailed)</Text>
                     <TouchableOpacity
                         style={{ width: 30, alignItems: 'flex-end' }}
                         onPress={() => setProfitRevealed(v => !v)}

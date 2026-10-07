@@ -281,19 +281,24 @@ export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (s
                                 isCancelled ? 'close-circle-outline' :
                                     'document-text-outline';
 
+                    const formattedValue = status.value
+                        ? status.value.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+                        : '0';
+
                     return (
                         <KpiCard
                             key={statusKey}
                             title={statusKey}
                             icon={iconName as any}
                             color={cardColor}
-                            delay={100 * (index + 1)}
-                            onPress={() => onSelectFilter(statusKey)}
+                            value={String(status.quotes)}
                             rows={[
                                 { icon: 'document-text-outline', label: 'Quotes', value: String(status.quotes) },
-                                { icon: 'cash-outline', label: 'Values', value: status.value.toLocaleString('en-IN') },
-                                { icon: 'people-outline', label: 'Customers', value: String(status.customers) },
+                                { icon: 'card-outline', label: 'Values', value: formattedValue },
+                                { icon: 'people-outline', label: 'Customers', value: String(status.customers ?? 0) },
                             ]}
+                            delay={100 * (index + 1)}
+                            onPress={() => onSelectFilter(statusKey)}
                         />
                     );
                 })}

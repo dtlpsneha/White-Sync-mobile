@@ -78,7 +78,7 @@ export default function SalesOrderScreen() {
                     <TouchableOpacity onPress={() => router.replace('/home')} style={styles.circularButton}>
                         <Ionicons name="chevron-back" size={24} color={colors.text} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Sales Orders</Text>
+                    <Text style={styles.headerTitle}>Customer Purchase Order</Text>
                     <TouchableOpacity style={styles.circularButton}>
                         <Ionicons name="options-outline" size={22} color={colors.text} />
                     </TouchableOpacity>

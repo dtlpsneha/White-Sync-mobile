@@ -26,7 +26,7 @@ export default function DailySalesReportScreen() {
                     <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}>
                         <Ionicons name="chevron-back" size={22} color={colors.text} />
                     </TouchableOpacity>
-                    <Text style={[styles.topbarTitle, { color: colors.text }]}>Daily Sales Report</Text>
+                    <Text style={[styles.topbarTitle, { color: colors.text }]}>Daily Sales Report (Cumulative)</Text>
                     <View style={{ width: 30 }} />
                 </View>
             </SafeAreaView>

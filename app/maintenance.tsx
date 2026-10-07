@@ -167,7 +167,7 @@ export default function MaintenanceScreen() {
                             <Ionicons name="chevron-back" size={ms(20)} color="#FFFFFF" />
                         </TouchableOpacity>
                         <View>
-                            <Text style={styles.headerTitle}>Visits</Text>
+                            <Text style={styles.headerTitle}>Customer Visit</Text>
                             <Text style={styles.headerSubtitle}>Relationship Management</Text>
                         </View>
                     </View>

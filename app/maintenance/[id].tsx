@@ -2046,32 +2046,40 @@ const Section = ({ title, icon, children, style }: any) => {
     return (
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
             <View style={styles.sectionHeader}>
-                <LinearGradient
-                    colors={isDark ? ['#6366F1', '#4F46E5'] : ['#6366F1', '#4F46E5']}
-                    style={styles.sectionIconBox}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                >
-                    <Ionicons name={icon} size={16} color="#FFF" />
-                </LinearGradient>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+                <View style={[styles.sectionIconBox, { backgroundColor: isDark ? 'rgba(99,102,241,0.2)' : '#EEF2FF' }]}>
+                    <Ionicons name={icon} size={16} color="#6366F1" />
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+                </View>
             </View>
             <View style={styles.sectionContent}>{children}</View>
         </View>
     );
 };
 
-const DetailItem = ({ label, value, icon, flex }: any) => {
+const DetailItem = ({ label, value, icon, flex, testID }: any) => {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
     const isDark = colorScheme === 'dark';
 
     return (
-        <View style={[styles.detailItem, flex && { flex }, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 12, padding: 12 }]}>
-            <View style={styles.detailHeader}>
-                {icon && <Ionicons name={icon} size={14} color={colors.primary} style={{ marginRight: 6 }} />}
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
-            </View>
+        <View
+            testID={testID}
+            style={[
+                styles.detailItem,
+                flex && { flex },
+                {
+                    borderLeftWidth: 3,
+                    borderLeftColor: isDark ? 'rgba(99,102,241,0.5)' : '#C7D2FE',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFF',
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                }
+            ]}
+        >
+            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
             <Text style={[styles.detailValue, { color: colors.text }]}>{value || '-'}</Text>
         </View>
     );
@@ -2340,23 +2348,22 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     sectionIconBox: {
-        width: 32,
-        height: 32,
-        borderRadius: 10,
+        width: 34,
+        height: 34,
+        borderRadius: 11,
         justifyContent: 'center',
         alignItems: 'center',
     },
     sectionTitle: {
-        fontSize: 13,
+        fontSize: 16,
         fontWeight: '900',
-        textTransform: 'uppercase',
-        letterSpacing: 1.2,
+        letterSpacing: -0.3,
     },
     sectionContent: {
         gap: 16,
     },
     detailItem: {
-        marginBottom: 16,
+        marginBottom: 12,
     },
     detailHeader: {
         flexDirection: 'row',
@@ -2365,15 +2372,15 @@ const styles = StyleSheet.create({
     },
     detailLabel: {
         fontSize: 10,
-        fontWeight: '800',
+        fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: 1,
+        letterSpacing: 0.6,
+        marginBottom: 3,
     },
     detailValue: {
-        fontSize: 16,
-        fontWeight: '700',
-        lineHeight: 24,
-        marginTop: 2,
+        fontSize: 15,
+        fontWeight: '800',
+        lineHeight: 22,
     },
     inputWrapper: {
         gap: 6,
