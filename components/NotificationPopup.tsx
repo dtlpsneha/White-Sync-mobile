@@ -12,13 +12,19 @@ function handleNotification(
     navigate: (id: string) => void,
 ) {
     const id = notification.request.identifier;
-    if (_seen.has(id)) return;
+    console.log('[NotificationPopup] handleNotification called for id:', id);
+    if (_seen.has(id)) {
+        console.log('[NotificationPopup] Already seen this notification, skipping');
+        return;
+    }
     _seen.add(id);
 
     const data = notification.request.content.data as any;
     const quotationId: string | undefined = data?.id;
     const title = notification.request.content.title ?? 'Quotation Awaiting Approval';
     const body = notification.request.content.body ?? '';
+
+    console.log('[NotificationPopup] Showing alert:', { title, body, quotationId });
 
     const buttons: Alert['prototype']['props']['buttons'] = [];
     if (quotationId) {
@@ -38,8 +44,15 @@ export const NotificationPopup = () => {
     };
 
     useEffect(() => {
+        console.log('[NotificationPopup] Setting up listeners');
+
         // Foreground: notification arrives while app is open
         const fgSub = Notifications.addNotificationReceivedListener(n => {
+            console.log('[NotificationPopup] addNotificationReceivedListener FIRED', {
+                id: n.request.identifier,
+                title: n.request.content.title,
+                data: n.request.content.data,
+            });
             handleNotification(n, navigate);
         });
 
@@ -47,16 +60,24 @@ export const NotificationPopup = () => {
         // notification. Check the notification tray for any pending quotation
         // notifications and surface them as an alert.
         const appSub = AppState.addEventListener('change', async nextState => {
+            console.log('[NotificationPopup] AppState changed to:', nextState);
             if (nextState !== 'active') return;
             try {
                 const presented = await Notifications.getPresentedNotificationsAsync();
+                console.log('[NotificationPopup] Presented notifications:', presented.length);
                 const notif = presented.find(
                     n => (n.request.content.data as any)?.id
                 );
-                if (!notif) return;
+                if (!notif) {
+                    console.log('[NotificationPopup] No quotation notification found in tray');
+                    return;
+                }
+                console.log('[NotificationPopup] Found notification in tray:', notif.request.identifier);
                 handleNotification(notif, navigate);
                 Notifications.dismissNotificationAsync(notif.request.identifier);
-            } catch (_) {}
+            } catch (e) {
+                console.log('[NotificationPopup] Error checking tray:', e);
+            }
         });
 
         return () => {
