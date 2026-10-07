@@ -46,7 +46,6 @@
       "expo-router",
       "expo-web-browser",
       "expo-task-manager",
-      "@notifee/react-native",
       [
         "expo-notifications",
         {
