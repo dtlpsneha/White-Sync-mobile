@@ -15,9 +15,11 @@ import { View } from 'react-native';
 import '../services/BackgroundNotificationHandler';
 import { registerBackgroundNotificationTask } from '../services/BackgroundNotificationHandler';
 import { notificationService } from '../services/NotificationService';
+import { notifeeService } from '../services/NotifeeService';
 
 // Set up channels and register background task as early as possible.
 notificationService.setupChannels();
+notifeeService.setupChannels();
 registerBackgroundNotificationTask();
 
 function RootLayoutContent() {
