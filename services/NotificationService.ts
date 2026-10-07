@@ -1,12 +1,14 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Configure how notifications are handled when the app is in the foreground.
-// Banner is suppressed — we show our own in-app NotificationPopup instead.
+// Configure how notifications behave when the app is in foreground.
+// shouldShowAlert/shouldShowBanner: false means we show our custom in-app Alert.
+// shouldShowList: true keeps the notification in the system tray even when app is open.
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldPlaySound: true,
         shouldSetBadge: true,
+        shouldShowAlert: false,
         shouldShowBanner: false,
         shouldShowList: true,
     }),
@@ -57,6 +59,10 @@ export const notificationService = {
                 vibrationPattern: [0, 250, 250, 250],
                 lightColor: '#7367F0',
                 showBadge: true,
+                bypassDnd: true,
+                enableVibration: true,
+                enableLights: true,
+                showCustomLights: true,
             });
         }
     }
