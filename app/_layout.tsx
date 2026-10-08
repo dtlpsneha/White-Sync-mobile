@@ -18,9 +18,9 @@ import { notificationService } from '../services/NotificationService';
 import { notifeeService } from '../services/NotifeeService';
 
 // Set up channels and register background task as early as possible.
-notificationService.setupChannels();
-notifeeService.setupChannels();
-registerBackgroundNotificationTask();
+try { notificationService.setupChannels(); } catch (e) { console.warn('[Layout] notificationService.setupChannels failed:', e); }
+try { notifeeService.setupChannels(); } catch (e) { console.warn('[Layout] notifeeService.setupChannels failed:', e); }
+try { registerBackgroundNotificationTask(); } catch (e) { console.warn('[Layout] registerBackgroundNotificationTask failed:', e); }
 
 function RootLayoutContent() {
   const { theme } = useTheme();
