@@ -78,7 +78,7 @@
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "enableBundleCompression": true,
-            "extraProguardRules": "-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.webview.** { *; }\n-keep class com.swmansion.** { *; }\n-keep class expo.modules.** { *; }\n-dontwarn expo.modules.**"
+            "extraProguardRules": "-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.webview.** { *; }\n-keep class com.swmansion.** { *; }\n-keep class expo.modules.** { *; }\n-dontwarn expo.modules.**\n-keep class io.invertase.notifee.** { *; }\n-dontwarn io.invertase.notifee.**\n-keep class com.google.firebase.** { *; }\n-keep class io.invertase.** { *; }"
           }
         }
       ],
