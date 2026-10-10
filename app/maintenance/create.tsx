@@ -1,4 +1,5 @@
-import { Colors } from '@/constants/theme';
+import { Colors, Gradients, Radius, Shadow } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiGet, apiPost, uploadFile } from '@/utils/api';
 import { parseFrappeError } from '@/utils/frappeError';
@@ -25,7 +26,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import {
     Contact,
@@ -721,26 +722,11 @@ export default function CreateMaintenanceScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View
-                style={[styles.headerGradient, { backgroundColor: isDark ? '#000000' : '#4F46E5' }]}
-            >
-                <SafeAreaView>
-                    <View style={styles.header}>
-                        <View style={styles.headerContent}>
-                            <TouchableOpacity
-                                style={styles.backButton}
-                                onPress={() => router.back()}
-                            >
-                                <Ionicons name="chevron-back" size={24} color="#FFF" />
-                            </TouchableOpacity>
-                            <View style={[styles.headerText, { flex: 1 }]}>
-                                <Text style={styles.headerTitle}>Add Visit</Text>
-                                <Text style={styles.headerSubtitle}>Create new Visit record</Text>
-                            </View>
-                        </View>
-                    </View>
-                </SafeAreaView>
-            </View>
+            <ScreenHeader
+                title="Add Visit"
+                subtitle="Create new Visit record"
+                onBack={() => router.canGoBack() ? router.back() : router.replace('/maintenance')}
+            />
 
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}>
                 <ScrollView
@@ -1013,7 +999,7 @@ export default function CreateMaintenanceScreen() {
                                 ].map(opt => (
                                     <TouchableOpacity
                                         key={opt.label}
-                                        style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border, flex: 1, alignItems: 'center' }, form.follow_up_required === opt.value && { backgroundColor: isDark ? '#334155' : '#EEF2FF', borderColor: colors.primary }]}
+                                        style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border, flex: 1, alignItems: 'center' }, form.follow_up_required === opt.value && { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}
                                         onPress={() => updateForm('follow_up_required', opt.value)}
                                     >
                                         <Text style={[styles.chipText, { color: colors.textSecondary }, form.follow_up_required === opt.value && { color: colors.primary }]}>{opt.label}</Text>
@@ -1220,7 +1206,7 @@ export default function CreateMaintenanceScreen() {
                             </View>
                         ))}
 
-                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary, backgroundColor: isDark ? colors.surface : '#F5F7FF' }]} onPress={addPurposeRow}>
+                        <TouchableOpacity style={[styles.addBtn, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={addPurposeRow}>
                             <Ionicons name="add-circle" size={20} color={colors.primary} />
                             <Text style={[styles.addBtnText, { color: colors.primary }]}>Add Another Item</Text>
                         </TouchableOpacity>
@@ -1839,7 +1825,7 @@ export default function CreateMaintenanceScreen() {
                             <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.saveButtonWrapper, { backgroundColor: isDark ? colors.surface : '#4F46E5', borderRadius: 16 }]}
+                            style={[styles.saveButtonWrapper, { backgroundColor: colors.primary }]}
                             onPress={handleSave}
                             disabled={isSaving}
                         >
@@ -1917,7 +1903,7 @@ export default function CreateMaintenanceScreen() {
                                     style={{
                                         padding: 16,
                                         borderRadius: 12,
-                                        backgroundColor: selectionModal.selectedValue === option ? (isDark ? '#334155' : '#EEF2FF') : 'transparent',
+                                        backgroundColor: selectionModal.selectedValue === option ? colors.primarySoft : 'transparent',
                                         flexDirection: 'row',
                                         justifyContent: 'space-between',
                                         alignItems: 'center'
@@ -2001,13 +1987,12 @@ export default function CreateMaintenanceScreen() {
 const Section = ({ title, icon, children, style }: any) => {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
-    const isDark = colorScheme === 'dark';
 
     return (
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(colorScheme ?? 'light'), style]}>
             <View style={styles.sectionHeader}>
                 <LinearGradient
-                    colors={['#4F46E5', '#3730A3']}
+                    colors={Gradients.brandSoft}
                     style={styles.sectionIcon}
                 >
                     <Ionicons name={icon} size={14} color="#FFF" />
@@ -2021,8 +2006,6 @@ const Section = ({ title, icon, children, style }: any) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    headerGradient: { borderBottomLeftRadius: 32, borderBottomRightRadius: 32, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
-    header: { paddingHorizontal: 24, paddingVertical: 20 },
     cameraButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -2067,22 +2050,17 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.8)',
         borderRadius: 12,
     },
-    headerContent: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-    backButton: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-    headerText: { flex: 1 },
-    headerTitle: { fontSize: 24, fontWeight: '900', color: '#FFF', letterSpacing: -0.5 },
-    headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
     scrollContent: { flex: 1 },
-    scrollInner: { padding: 20, paddingBottom: 100 },
-    section: { borderRadius: 28, padding: 24, marginBottom: 20, borderWidth: 1 },
+    scrollInner: { padding: 16, paddingTop: 20, paddingBottom: 100 },
+    section: { borderRadius: Radius.lg, padding: 20, marginBottom: 16, borderWidth: 1 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
     sectionIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     sectionTitle: { fontSize: 13, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
     sectionContent: { gap: 16 },
     inputWrapper: { gap: 8 },
     inputLabel: { fontSize: 13, fontWeight: '700', marginLeft: 4, opacity: 0.8 },
-    input: { borderRadius: 16, padding: 16, fontSize: 15, minHeight: 56, borderWidth: 1 },
-    searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, borderWidth: 1, minHeight: 56 },
+    input: { borderRadius: Radius.md, padding: 16, fontSize: 15, minHeight: 56, borderWidth: 1 },
+    searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.md, paddingHorizontal: 16, borderWidth: 1, minHeight: 56 },
     searchBoxActive: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
     searchInput: { flex: 1, paddingVertical: 14, fontSize: 15, marginLeft: 10 },
     resultsContainer: {
@@ -2117,16 +2095,16 @@ const styles = StyleSheet.create({
     chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
     chipText: { fontSize: 13, fontWeight: '700' },
     textArea: { height: 100, textAlignVertical: 'top' },
-    itemCard: { padding: 16, borderRadius: 20, borderWidth: 1, marginBottom: 12, gap: 12 },
+    itemCard: { padding: 16, borderRadius: Radius.lg, borderWidth: 1, marginBottom: 12, gap: 12 },
     itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     itemLabel: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
     trashBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(239, 68, 68, 0.1)', justifyContent: 'center', alignItems: 'center' },
-    addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, marginTop: 8 },
+    addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: Radius.md, borderStyle: 'dashed', borderWidth: 2, marginTop: 8 },
     addBtnText: { fontSize: 14, fontWeight: '800' },
     buttonRow: { flexDirection: 'row', gap: 12, marginTop: 20 },
-    cancelButton: { flex: 1, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+    cancelButton: { flex: 1, height: 56, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
     cancelButtonText: { fontSize: 15, fontWeight: '800' },
-    saveButtonWrapper: { flex: 2, height: 56, borderRadius: 16, overflow: 'hidden', elevation: 4, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+    saveButtonWrapper: { flex: 2, height: 56, borderRadius: Radius.md, overflow: 'hidden', elevation: 4, shadowColor: '#4338CA', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
     saveButton: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     saveButtonText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
     // Total Card

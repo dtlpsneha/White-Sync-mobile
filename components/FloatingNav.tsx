@@ -1,19 +1,39 @@
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Platform, StyleSheet, TouchableOpacity, View, LayoutChangeEvent, Text } from 'react-native';
-import Animated, { 
-    useAnimatedStyle, 
-    useSharedValue, 
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
     withSpring,
-    withTiming,
-    interpolateColor
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Colors, Radius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useResponsive } from '@/hooks/useResponsive';
+
+// Home screen has nav embedded in scroll content — drawer only needed on other screens
+const NAV_ROUTES = [
+    '/quotations',
+    '/sales-orders',
+    '/maintenance',
+    '/daily-sales-report',
+    '/daily-sales-report/invoice-history',
+    '/price-calculator',
+    '/profile',
+];
+
+const NAV_ITEMS = [
+    { id: 'home',       label: 'Home',                         icon: 'home-outline' as const,          activeIcon: 'home' as const,          route: '/home',                           color: '#3B82F6', mode: 'replace' as const },
+    { id: 'quotes',     label: 'Quotation',                    icon: 'document-text-outline' as const, activeIcon: 'document-text' as const, route: '/quotations',                     color: '#F59E0B', mode: 'replace' as const },
+    { id: 'orders',     label: 'Customer Purchase Order',      icon: 'cart-outline' as const,          activeIcon: 'cart' as const,          route: '/sales-orders',                   color: '#14B8A6', mode: 'replace' as const },
+    { id: 'visits',     label: 'Customer Visit',               icon: 'calendar-outline' as const,      activeIcon: 'calendar' as const,      route: '/maintenance',                    color: '#8B5CF6', mode: 'replace' as const },
+    { id: 'daily-sales',label: 'Daily Sales Report',           icon: 'bar-chart-outline' as const,     activeIcon: 'bar-chart' as const,     route: '/daily-sales-report',             color: '#F97316', mode: 'push' as const },
+    { id: 'invoices',   label: 'Sales Invoice History',        icon: 'receipt-outline' as const,       activeIcon: 'receipt' as const,       route: '/daily-sales-report/invoice-history', color: '#0891B2', mode: 'push' as const },
+    { id: 'calculator', label: 'Habasit Calculator',           icon: 'calculator-outline' as const,    activeIcon: 'calculator' as const,    route: '/price-calculator',               color: '#10B981', mode: 'push' as const },
+    { id: 'profile',    label: 'Profile',                      icon: 'person-outline' as const,        activeIcon: 'person' as const,        route: '/profile',                        color: '#6366F1', mode: 'replace' as const },
+];
 
 export const FloatingNav = () => {
     const router = useRouter();
@@ -25,223 +45,222 @@ export const FloatingNav = () => {
     const insets = useSafeAreaInsets();
     const { ms } = useResponsive();
 
-    // The bar is position:absolute pinned to the screen bottom, so it doesn't move out of
-    // the way when the keyboard opens — it ends up floating in the middle of the screen,
-    // on top of whatever's above the keyboard (e.g. search results). Hiding it while the
-    // keyboard is open is simpler and more predictable than trying to reposition it above
-    // a keyboard whose height varies by device/IME. `Will` events give an earlier, smoother
-    // hide on iOS; Android only reliably fires the `Did` variants.
+    const isNavVisible = NAV_ROUTES.includes(pathname);
+    const [isOpen, setIsOpen] = useState(false);
     const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+    const translateY = useSharedValue(340);
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: (evt, { dy, vy }) => {
+                return Math.abs(vy) > 0.3;
+            },
+            onMoveShouldSetPanResponder: (evt, { dy, vy }) => {
+                return Math.abs(vy) > 0.3;
+            },
+            onPanResponderMove: (evt, { dy }) => {
+                const newY = Math.max(0, Math.min(340, 340 - dy));
+                translateY.value = newY;
+            },
+            onPanResponderRelease: (evt, { dy, vy }) => {
+                if (vy > 0.3 || dy > 50) {
+                    setIsOpen(true);
+                    translateY.value = withSpring(0);
+                } else if (vy < -0.3 || dy < -50) {
+                    setIsOpen(false);
+                    translateY.value = withSpring(340);
+                } else {
+                    const targetY = isOpen ? 0 : 340;
+                    translateY.value = withSpring(targetY);
+                }
+            },
+        })
+    ).current;
+
     useEffect(() => {
         const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
         const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
         const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
         const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
-        return () => {
-            showSub.remove();
-            hideSub.remove();
-        };
+        return () => { showSub.remove(); hideSub.remove(); };
     }, []);
 
-    // Navigation Items with specific colors. "calculator" is pushed instead
-    // of replaced — its own screen (price-calculator.tsx) only implements a
-    // real router.back() on its header button, with no router.replace
-    // fallback the way Home/Quotes/Orders/Visits/Profile each have. Using
-    // replace here left nothing on the stack underneath it, so both the
-    // on-screen back button and the hardware/gesture back button had
-    // nowhere to go.
-    const navItems = useMemo(() => [
-        { id: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home', route: '/home', color: '#3B82F6', mode: 'replace' as const },
-        { id: 'quotes', label: 'Quotes', icon: 'document-text-outline', activeIcon: 'document-text', route: '/quotations', color: '#F59E0B', mode: 'replace' as const },
-        { id: 'orders', label: 'Orders', icon: 'cart-outline', activeIcon: 'cart', route: '/sales-orders', color: '#00BFA5', mode: 'replace' as const },
-        { id: 'visits', label: 'Visits', icon: 'calendar-outline', activeIcon: 'calendar', route: '/maintenance', color: '#8B5CF6', mode: 'replace' as const },
-        { id: 'calculator', label: 'Calculator', icon: 'calculator-outline', activeIcon: 'calculator', route: '/price-calculator', color: '#10B981', mode: 'push' as const },
-        { id: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person', route: '/profile', color: '#6366F1', mode: 'replace' as const },
-    ], []);
-
-    // Active Index Calculation
     const activeIndex = useMemo(() => {
-        const index = navItems.findIndex(item => 
-            pathname === item.route || pathname.startsWith(item.route + '/')
+        const exact = NAV_ITEMS.findIndex(item => pathname === item.route);
+        if (exact !== -1) return exact;
+        const prefix = NAV_ITEMS.findIndex(item =>
+            item.route !== '/home' && pathname.startsWith(item.route + '/')
         );
-        return index !== -1 ? index : 0;
-    }, [pathname, navItems]);
+        return prefix !== -1 ? prefix : 0;
+    }, [pathname]);
 
-    // Animation values
-    const translateX = useSharedValue(0);
-    const activeIndexShared = useSharedValue(0);
-    const indicatorOpacity = useSharedValue(0);
-    const [layouts, setLayouts] = useState<number[]>([]);
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: translateY.value }],
+    }));
 
-    useEffect(() => {
-        if (layouts[activeIndex] !== undefined) {
-            translateX.value = withSpring(layouts[activeIndex], {
-                damping: 20,
-                stiffness: 150,
-            });
-            activeIndexShared.value = withTiming(activeIndex, { duration: 300 });
-            indicatorOpacity.value = withTiming(1, { duration: 300 });
-        }
-    }, [activeIndex, layouts]);
+    if (keyboardVisible || !isNavVisible) return null;
 
-    const onLayout = (event: LayoutChangeEvent, index: number) => {
-        const { x, width } = event.nativeEvent.layout;
-        const center = x + width / 2;
+    const row1 = NAV_ITEMS.slice(0, 4);
+    const row2 = NAV_ITEMS.slice(4, 8);
 
-        // Functional update: all tabs fire onLayout in the same commit, so
-        // copying `layouts` from the render closure meant every write but the
-        // last was discarded — often leaving layouts[activeIndex] undefined
-        // and the indicator stuck at opacity 0.
-        setLayouts(prev => {
-            if (prev[index] === center) return prev;
-            const next = [...prev];
-            next[index] = center;
-            return next;
-        });
+    const renderBox = (item: typeof NAV_ITEMS[0], index: number) => {
+        const isActive = activeIndex === index;
+        return (
+            <TouchableOpacity
+                key={item.id}
+                style={[
+                    styles.box,
+                    {
+                        backgroundColor: isActive ? item.color : isDark ? `${item.color}20` : `${item.color}15`,
+                        borderColor: isActive ? item.color : `${item.color}40`,
+                        borderWidth: 1,
+                    },
+                ]}
+                onPress={() => {
+                    item.mode === 'push'
+                        ? router.push(item.route as any)
+                        : router.replace(item.route as any);
+                    setIsOpen(false);
+                    translateY.value = withSpring(340);
+                }}
+                activeOpacity={0.7}
+            >
+                <Ionicons
+                    name={isActive ? item.activeIcon : item.icon}
+                    size={ms(18)}
+                    color={isActive ? '#FFF' : item.color}
+                />
+                <Text
+                    style={[
+                        styles.label,
+                        { color: isActive ? '#FFF' : item.color, fontWeight: isActive ? '800' : '700' },
+                    ]}
+                    numberOfLines={2}
+                >
+                    {item.label}
+                </Text>
+            </TouchableOpacity>
+        );
     };
 
-    const indicatorOffset = ms(28); // Slightly bigger indicator for labels
-
-    const animatedIndicatorStyle = useAnimatedStyle(() => {
-        // Build color palette for interpolation
-        const inputMap = navItems.map((_, i) => i);
-        const colorMap = navItems.map(item => `${item.color}18`); // Very subtle background
-
-        return {
-            transform: [{ translateX: translateX.value - indicatorOffset }],
-            opacity: indicatorOpacity.value,
-            backgroundColor: interpolateColor(
-                activeIndexShared.value,
-                inputMap,
-                colorMap
-            )
-        };
-    });
-
-    if (keyboardVisible) return null;
-
     return (
-        <View style={[styles.container, { bottom: Math.max(insets.bottom, 20) + 10 }]}>
-            <View 
-                style={[
-                    styles.navBar,
-                    {
-                        // Tracks Colors.dark.surface so the bar sits on the same
-                        // elevation step as the cards behind it.
-                        backgroundColor: isDark ? 'rgba(21, 24, 29, 0.94)' : 'rgba(255, 255, 255, 0.92)',
-                        borderColor: isDark ? 'rgba(255, 255, 255, 0.09)' : 'rgba(0, 0, 0, 0.05)',
-                    }
-                ]}
+        <>
+            {isOpen && (
+                <TouchableOpacity
+                    style={styles.overlay}
+                    activeOpacity={0.3}
+                    onPress={() => {
+                        setIsOpen(false);
+                        translateY.value = withSpring(340);
+                    }}
+                />
+            )}
+
+            <View
+                style={styles.outerContainer}
+                {...panResponder.panHandlers}
             >
-                {/* Visual Depth Gradient */}
-                <LinearGradient
-                    colors={isDark 
-                        ? ['rgba(255,255,255,0.04)', 'transparent', 'rgba(0,0,0,0.12)'] 
-                        : ['rgba(255,255,255,0.4)', 'transparent', 'rgba(0,0,0,0.03)']}
-                    style={StyleSheet.absoluteFill}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                />
+                <View style={[
+                    styles.dragHandle,
+                    { backgroundColor: colors.surface, borderColor: colors.border }
+                ]}>
+                    <View style={[
+                        styles.dragBar,
+                        { backgroundColor: colors.textSecondary }
+                    ]} />
+                </View>
 
-                {/* Sliding Indicator */}
-                <Animated.View 
+                <Animated.View
                     style={[
-                        styles.indicator, 
-                        animatedIndicatorStyle,
-                    ]} 
-                />
-
-                {/* Navigation Items */}
-                {navItems.map((item, index) => {
-                    const isActive = activeIndex === index;
-                    const activeColor = item.color;
-                    
-                    return (
-                        <TouchableOpacity
-                            key={item.id}
-                            onLayout={(e) => onLayout(e, index)}
-                            style={styles.navItem}
-                            onPress={() => (item.mode === 'push' ? router.push(item.route as any) : router.replace(item.route as any))}
-                            activeOpacity={0.7}
-                        >
-                            <Animated.View style={styles.iconContainer}>
-                                <Ionicons
-                                    name={isActive ? (item.activeIcon as any) : (item.icon as any)}
-                                    size={ms(22)}
-                                    color={isActive ? activeColor : '#94A3B8'}
-                                />
-                            </Animated.View>
-                            <Text 
-                                style={[
-                                    styles.itemLabel, 
-                                    { 
-                                        color: isActive ? activeColor : '#94A3B8',
-                                        fontWeight: isActive ? '800' : '600'
-                                    }
-                                ]}
-                                numberOfLines={1}
-                            >
-                                {item.label}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
+                        styles.navContainer,
+                        {
+                            backgroundColor: colors.surface,
+                            borderTopColor: colors.border,
+                        },
+                        animatedStyle,
+                    ]}
+                >
+                    <View style={styles.gridContent}>
+                        <View style={styles.row}>
+                            {row1.map((item, i) => renderBox(item, i))}
+                        </View>
+                        <View style={styles.row}>
+                            {row2.map((item, i) => renderBox(item, i + 4))}
+                        </View>
+                    </View>
+                </Animated.View>
             </View>
-        </View>
+        </>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        position: 'absolute',
-        left: 20,
-        right: 20,
-        zIndex: 1000,
-        alignItems: 'center',
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        zIndex: 999,
     },
-    navBar: {
-        flexDirection: 'row',
-        height: 78,
-        borderRadius: 39,
-        paddingHorizontal: 12,
+    outerContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        height: 340,
+    },
+    dragHandle: {
+        height: 28,
         alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        maxWidth: 500,
+        justifyContent: 'center',
+        borderTopLeftRadius: Radius.lg,
+        borderTopRightRadius: Radius.lg,
         borderWidth: 1,
-        overflow: 'hidden',
+        borderBottomWidth: 0,
+    },
+    dragBar: {
+        width: 40,
+        height: 5,
+        borderRadius: 3,
+        opacity: 0.5,
+    },
+    navContainer: {
+        flex: 1,
+        borderTopWidth: 1,
+        paddingHorizontal: 10,
+        paddingVertical: 12,
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 12 },
-                shadowOpacity: 0.15,
-                shadowRadius: 20,
+                shadowOffset: { width: 0, height: -6 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
             },
-            android: {
-                elevation: 10,
-            }
-        })
+            android: { elevation: 12 },
+        }),
     },
-    navItem: {
+    gridContent: {
         flex: 1,
-        height: '100%',
+        gap: 10,
+        justifyContent: 'center',
+    },
+    row: {
+        flexDirection: 'row',
+        gap: 8,
+        flex: 1,
+    },
+    box: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+        borderRadius: Radius.md,
         gap: 4,
     },
-    iconContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    itemLabel: {
-        fontSize: 10,
+    label: {
+        fontSize: 9,
         letterSpacing: 0.2,
+        textAlign: 'center',
+        fontWeight: '700',
     },
-    indicator: {
-        position: 'absolute',
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        zIndex: -1,
-    }
 });

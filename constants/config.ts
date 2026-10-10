@@ -6,7 +6,7 @@
  * API_BASE_URL instead of writing the host inline.
  */
 
-export const API_BASE_URL = 'http://194.238.18.59:8080';
+export const API_BASE_URL = 'https://erpnext.whitenco.net';
 
 /** Host used to resolve relative /files/... paths returned by Frappe. */
 export const IMAGE_HOST = API_BASE_URL;

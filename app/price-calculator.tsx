@@ -14,16 +14,16 @@ import {
     FlatList,
     Dimensions
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeIn, FadeInDown, SlideInDown, Layout } from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
 // Removed expo-blur to avoid native view config warnings in some environments
 
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import {
     fetchGrades, 
@@ -39,7 +39,6 @@ export default function PriceCalculatorScreen() {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
-    const isDark = theme === 'dark';
     const colors = Colors[theme];
 
     // Derived from the shared palette rather than a second hardcoded copy —
@@ -50,8 +49,8 @@ export default function PriceCalculatorScreen() {
         card: colors.surface,
         input: colors.surfaceSecondary,
         border: colors.border,
-        accent: '#58A6FF',
-        success: '#3FB950',
+        accent: colors.primary,
+        success: colors.success,
         text: colors.text,
         textMuted: colors.textSecondary,
         headerText: colors.text,
@@ -176,22 +175,14 @@ export default function PriceCalculatorScreen() {
     const showWidth = selectedGrade?.uom === 'Sq. Mtr.';
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: UI_COLORS.bg }]}>
-            <StatusBar style={isDark ? 'light' : 'dark'} />
-            
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={24} color={UI_COLORS.headerText} />
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                    <Text style={[styles.headerTitle, { color: UI_COLORS.headerText }]}>Habasit Calculator</Text>
-                    <Text style={styles.headerSubtitle}>ERPNext Professional Sync</Text>
-                </View>
-                <TouchableOpacity onPress={handleClearAll} style={styles.clearBtn}>
-                    <Ionicons name="refresh" size={20} color={UI_COLORS.accent} />
-                </TouchableOpacity>
-            </View>
+        <View style={[styles.container, { backgroundColor: UI_COLORS.bg }]}>
+            <ScreenHeader
+                title="Habasit Calculator"
+                subtitle="ERPNext Professional Sync"
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+                rightIcon="refresh"
+                onRightPress={handleClearAll}
+            />
 
             <KeyboardAvoidingView 
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -199,11 +190,11 @@ export default function PriceCalculatorScreen() {
             >
                 <ScrollView 
                     style={styles.scrollView} 
-                    contentContainerStyle={{ paddingBottom: vs(120), paddingHorizontal: s(16) }}
+                    contentContainerStyle={{ paddingBottom: vs(120), paddingHorizontal: s(16), paddingTop: 8 }}
                     keyboardShouldPersistTaps="handled"
                 >
                     {/* Input Section */}
-                    <Animated.View layout={Layout.springify()} entering={FadeInDown.delay(100)} style={[styles.card, { backgroundColor: UI_COLORS.card, borderColor: UI_COLORS.border }]}>
+                    <Animated.View layout={Layout.springify()} entering={FadeInDown.delay(100)} style={[styles.card, { backgroundColor: UI_COLORS.card, borderColor: UI_COLORS.border }, Shadow.card(theme)]}>
                         <View style={styles.cardHeader}>
                             <Ionicons name="settings-outline" size={18} color={UI_COLORS.accent} />
                             <Text style={[styles.cardTitle, { color: UI_COLORS.headerText }]}>Configuration</Text>
@@ -220,7 +211,7 @@ export default function PriceCalculatorScreen() {
                                     <Text style={[styles.dropdownText, { color: selectedGrade ? UI_COLORS.text : UI_COLORS.textMuted }]}>
                                         {selectedGrade ? selectedGrade.grade : 'Select Grade...'}
                                     </Text>
-                                    {selectedGrade && <Text style={styles.dropdownSubtext}>{selectedGrade.name}</Text>}
+                                    {selectedGrade && <Text style={[styles.dropdownSubtext, { color: UI_COLORS.textMuted }]}>{selectedGrade.name}</Text>}
                                 </View>
                                 <Ionicons name="chevron-down" size={20} color={UI_COLORS.textMuted} />
                             </TouchableOpacity>
@@ -295,7 +286,7 @@ export default function PriceCalculatorScreen() {
                             <Text style={[styles.calculatingText, { color: UI_COLORS.textMuted }]}>Calculating...</Text>
                         </View>
                     ) : result ? (
-                        <Animated.View layout={Layout.springify()} entering={FadeInDown.delay(200)} style={[styles.card, { backgroundColor: UI_COLORS.card, borderColor: UI_COLORS.border }]}>
+                        <Animated.View layout={Layout.springify()} entering={FadeInDown.delay(200)} style={[styles.card, { backgroundColor: UI_COLORS.card, borderColor: UI_COLORS.border }, Shadow.card(theme)]}>
                             <View style={styles.cardHeader}>
                                 <Ionicons name="stats-chart-outline" size={18} color={UI_COLORS.success} />
                                 <Text style={[styles.cardTitle, { color: UI_COLORS.headerText }]}>Calculation Results</Text>
@@ -304,39 +295,39 @@ export default function PriceCalculatorScreen() {
                             {/* Category & Item Details */}
                             <View style={styles.detailsBox}>
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Product Category</Text>
+                                    <Text style={[styles.detailLabel, { color: UI_COLORS.textMuted }]}>Product Category</Text>
                                     <Text style={[styles.detailValue, { color: UI_COLORS.accent }]}>{result.product_category}</Text>
                                 </View>
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Searched Item</Text>
-                                    <Text style={[styles.detailValue, { fontSize: 11 }]} numberOfLines={2}>{result.custom_item_name}</Text>
+                                    <Text style={[styles.detailLabel, { color: UI_COLORS.textMuted }]}>Searched Item</Text>
+                                    <Text style={[styles.detailValue, { fontSize: 11, color: UI_COLORS.text }]} numberOfLines={2}>{result.custom_item_name}</Text>
                                 </View>
                             </View>
 
                             <View style={styles.priceGrid}>
                                 <View style={styles.priceItem}>
-                                    <Text style={styles.priceLabel}>Area (sq.m)</Text>
+                                    <Text style={[styles.priceLabel, { color: UI_COLORS.textMuted }]}>Area (sq.m)</Text>
                                     <Text style={[styles.priceValue, { color: UI_COLORS.text }]}>{result.area_sqm}</Text>
                                 </View>
                                 <View style={styles.priceItem}>
-                                    <Text style={styles.priceLabel}>Base Price (INR)</Text>
+                                    <Text style={[styles.priceLabel, { color: UI_COLORS.textMuted }]}>Base Price (INR)</Text>
                                     <Text style={[styles.priceValue, { color: UI_COLORS.text }]}>₹{result.base_price_inr.toFixed(2)}</Text>
                                 </View>
                             </View>
 
                             <View style={styles.priceGrid}>
                                 <View style={styles.priceItem}>
-                                    <Text style={styles.priceLabel}>Slitting Charges</Text>
+                                    <Text style={[styles.priceLabel, { color: UI_COLORS.textMuted }]}>Slitting Charges</Text>
                                     <Text style={[styles.priceValue, { color: UI_COLORS.text }]}>₹{result.slitting_charges.toFixed(2)}</Text>
                                 </View>
                                 <View style={styles.priceItem}>
-                                    <Text style={styles.priceLabel}>Joining Charges</Text>
+                                    <Text style={[styles.priceLabel, { color: UI_COLORS.textMuted }]}>Joining Charges</Text>
                                     <Text style={[styles.priceValue, { color: UI_COLORS.text }]}>₹{result.joining_charges.toFixed(2)}</Text>
                                 </View>
                             </View>
 
-                            <View style={[styles.totalContainer, { backgroundColor: isDark ? 'rgba(63, 185, 80, 0.1)' : '#F0FFF4', borderColor: UI_COLORS.success }]}>
-                                <Text style={styles.totalLabel}>FINAL PRICE (INR)</Text>
+                            <View style={[styles.totalContainer, { backgroundColor: colors.success + '1A', borderColor: UI_COLORS.success }]}>
+                                <Text style={[styles.totalLabel, { color: UI_COLORS.textMuted }]}>FINAL PRICE (INR)</Text>
                                 <Text style={[styles.totalValue, { color: UI_COLORS.success }]}>
                                     ₹{result.final_price_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </Text>
@@ -346,7 +337,7 @@ export default function PriceCalculatorScreen() {
                         !calculating && selectedGrade && (
                             <View style={styles.infoBox}>
                                 <Ionicons name="information-circle-outline" size={16} color={UI_COLORS.accent} />
-                                <Text style={styles.infoText}>Enter dimensions to see results</Text>
+                                <Text style={[styles.infoText, { color: UI_COLORS.textMuted }]}>Enter dimensions to see results</Text>
                             </View>
                         )
                     )}
@@ -371,7 +362,7 @@ export default function PriceCalculatorScreen() {
                         <View style={styles.modalHeader}>
                             <View>
                                 <Text style={[styles.modalTitle, { color: UI_COLORS.headerText }]}>Habasit Price Master</Text>
-                                <Text style={styles.modalSubtitle}>Search and select grade</Text>
+                                <Text style={[styles.modalSubtitle, { color: UI_COLORS.textMuted }]}>Search and select grade</Text>
                             </View>
                             <TouchableOpacity onPress={() => setGradeModalVisible(false)} style={styles.modalClose}>
                                 <Ionicons name="close" size={24} color={UI_COLORS.textMuted} />
@@ -407,7 +398,7 @@ export default function PriceCalculatorScreen() {
                                     <TouchableOpacity 
                                         style={[styles.gradeItem, { 
                                             borderBottomColor: UI_COLORS.border,
-                                            backgroundColor: selectedGrade?.name === item.name ? 'rgba(88, 166, 255, 0.05)' : 'transparent'
+                                            backgroundColor: selectedGrade?.name === item.name ? colors.primarySoft : 'transparent'
                                         }]}
                                         onPress={() => {
                                             setSelectedGrade(item);
@@ -424,16 +415,16 @@ export default function PriceCalculatorScreen() {
                                             <View style={styles.gradeRow}>
                                                 <Text style={[styles.gradeName, { color: UI_COLORS.headerText }]}>{item.grade}</Text>
                                                 {item.uom && (
-                                                    <View style={[styles.miniTag, { backgroundColor: isDark ? '#21262D' : '#F1F5F9' }]}>
-                                                        <Text style={styles.miniTagText}>{item.uom}</Text>
+                                                    <View style={[styles.miniTag, { backgroundColor: colors.surfaceSecondary }]}>
+                                                        <Text style={[styles.miniTagText, { color: UI_COLORS.textMuted }]}>{item.uom}</Text>
                                                     </View>
                                                 )}
                                             </View>
-                                            <Text style={styles.gradeId}>{item.name}</Text>
+                                            <Text style={[styles.gradeId, { color: UI_COLORS.textMuted }]}>{item.name}</Text>
                                             {item.joint_type && (
                                                 <View style={styles.jointTypeRow}>
                                                     <Ionicons name="link-outline" size={10} color={UI_COLORS.textMuted} />
-                                                    <Text style={styles.jointTypeTagText}>Default Joint: {item.joint_type}</Text>
+                                                    <Text style={[styles.jointTypeTagText, { color: UI_COLORS.textMuted }]}>Default Joint: {item.joint_type}</Text>
                                                 </View>
                                             )}
                                         </View>
@@ -449,35 +440,19 @@ export default function PriceCalculatorScreen() {
                     </Animated.View>
                 </View>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        justifyContent: 'space-between',
-    },
-    headerTitleContainer: { flex: 1, marginLeft: 12 },
-    headerTitle: { fontSize: 18, fontWeight: '800' },
-    headerSubtitle: { fontSize: 10, color: '#8B949E', textTransform: 'uppercase', letterSpacing: 1 },
-    backBtn: { padding: 4 },
-    clearBtn: { padding: 8, backgroundColor: 'rgba(88, 166, 255, 0.1)', borderRadius: 12 },
     scrollView: { flex: 1 },
     card: {
-        borderRadius: 16,
+        borderRadius: Radius.lg,
         padding: 16,
         borderWidth: 1,
         marginBottom: 16,
         marginTop: 8,
-        ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
-            android: { elevation: 4 }
-        })
     },
     cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 },
     cardTitle: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -488,15 +463,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderRadius: 10,
+        borderRadius: Radius.md,
         paddingHorizontal: 12,
         height: 50,
     },
     dropdownText: { fontSize: 15, fontWeight: '500' },
-    dropdownSubtext: { fontSize: 10, color: '#8B949E', marginTop: 1 },
+    dropdownSubtext: { fontSize: 10, marginTop: 1 },
     staticField: {
         borderWidth: 1,
-        borderRadius: 10,
+        borderRadius: Radius.md,
         paddingHorizontal: 12,
         height: 50,
         justifyContent: 'center',
@@ -505,7 +480,7 @@ const styles = StyleSheet.create({
     row: { flexDirection: 'row', justifyContent: 'space-between' },
     textInput: {
         borderWidth: 1,
-        borderRadius: 10,
+        borderRadius: Radius.md,
         height: 50,
         paddingHorizontal: 12,
         fontSize: 15,
@@ -514,21 +489,21 @@ const styles = StyleSheet.create({
     loadingContainer: { alignItems: 'center', justifyContent: 'center', padding: 20, flexDirection: 'row', gap: 10 },
     calculatingText: { fontSize: 13, fontWeight: '500' },
     detailsBox: {
-        backgroundColor: 'rgba(139, 148, 158, 0.05)',
-        borderRadius: 12,
+        backgroundColor: 'rgba(139, 148, 158, 0.08)',
+        borderRadius: Radius.md,
         padding: 12,
         marginBottom: 16,
     },
     detailRow: { marginBottom: 8 },
-    detailLabel: { fontSize: 10, color: '#8B949E', textTransform: 'uppercase', marginBottom: 2 },
-    detailValue: { fontSize: 13, fontWeight: '600', color: '#C9D1D9' },
+    detailLabel: { fontSize: 10, textTransform: 'uppercase', marginBottom: 2 },
+    detailValue: { fontSize: 13, fontWeight: '600' },
     priceGrid: { flexDirection: 'row', marginBottom: 12 },
     priceItem: { flex: 1 },
-    priceLabel: { fontSize: 11, color: '#8B949E', marginBottom: 2 },
+    priceLabel: { fontSize: 11, marginBottom: 2 },
     priceValue: { fontSize: 15, fontWeight: '700' },
     totalContainer: {
         marginTop: 8,
-        borderRadius: 12,
+        borderRadius: Radius.md,
         padding: 16,
         alignItems: 'center',
         borderWidth: 1,
@@ -537,24 +512,24 @@ const styles = StyleSheet.create({
     totalLabel: { fontSize: 11, fontWeight: '800', marginBottom: 4, letterSpacing: 1 },
     totalValue: { fontSize: 32, fontWeight: '900' },
     infoBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 20, gap: 8 },
-    infoText: { fontSize: 13, color: '#8B949E' },
+    infoText: { fontSize: 13 },
     modalContent: {
         height: '75%',
         width: '100%',
         position: 'absolute',
         bottom: 0,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        borderTopLeftRadius: Radius.xl,
+        borderTopRightRadius: Radius.xl,
         padding: 20,
     },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
     modalTitle: { fontSize: 20, fontWeight: '800' },
-    modalSubtitle: { fontSize: 12, color: '#8B949E', marginTop: 2 },
+    modalSubtitle: { fontSize: 12, marginTop: 2 },
     modalClose: { padding: 4 },
     searchBox: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 12,
+        borderRadius: Radius.md,
         paddingHorizontal: 12,
         height: 50,
         borderWidth: 1,
@@ -569,11 +544,11 @@ const styles = StyleSheet.create({
     },
     gradeName: { fontSize: 16, fontWeight: '700' },
     gradeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    miniTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 0.5, borderColor: '#30363D' },
-    miniTagText: { fontSize: 9, fontWeight: '700', color: '#8B949E' },
+    miniTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 0.5, borderColor: 'transparent' },
+    miniTagText: { fontSize: 9, fontWeight: '700' },
     jointTypeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-    jointTypeTagText: { fontSize: 10, color: '#8B949E', fontWeight: '500' },
-    gradeId: { fontSize: 11, color: '#8B949E', marginTop: 2 },
+    jointTypeTagText: { fontSize: 10, fontWeight: '500' },
+    gradeId: { fontSize: 11, marginTop: 2 },
     uomTag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-    uomTagText: { fontSize: 10, fontWeight: '800', color: '#8B949E' }
+    uomTagText: { fontSize: 10, fontWeight: '800' }
 });

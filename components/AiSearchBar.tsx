@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { CustomerSearchResults, useCustomerSearch } from '@/components/CustomerSearch';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function AiSearchBar() {
@@ -36,6 +36,7 @@ export function AiSearchBar() {
                         backgroundColor: colors.surface,
                         borderColor: focused ? colors.primary : colors.border,
                     },
+                    Shadow.card(theme),
                 ]}
             >
                 <Ionicons name="sparkles" size={17} color={colors.primary} />
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 10,
         borderWidth: 1.5,
-        borderRadius: 16,
+        borderRadius: Radius.md,
         paddingHorizontal: 15,
         paddingVertical: 12,
     },
@@ -134,8 +135,8 @@ const styles = StyleSheet.create({
     bubble: {
         position: 'absolute',
         right: 22,
-        // Clears the FloatingNav (78px tall, sitting 30px off the bottom).
-        bottom: 124,
+        // Bottom-right corner; FloatingNav isn't rendered anywhere, so nothing needs clearing.
+        bottom: 28,
         width: 56,
         height: 56,
         borderRadius: 28,

@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { apiPost } from '@/utils/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import { useResponsive } from '@/hooks/useResponsive';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -43,7 +43,6 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const isDark = theme === 'dark';
     const { s, vs, ms } = useResponsive();
     const styles = useMemo(() => getStyles(theme, { s, vs, ms }), [theme, s, vs, ms]);
 
@@ -120,13 +119,13 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
         switch (s) {
             case 'COMPLETED':
             case 'APPROVED':
-                return { bg: 'rgba(0, 191, 165, 0.1)', text: '#00BFA5', border: 'rgba(0, 191, 165, 0.2)' };
+                return { bg: 'rgba(0, 191, 165, 0.1)', text: colors.success, border: 'rgba(0, 191, 165, 0.2)' };
             case 'DRAFT':
                 return { bg: 'rgba(148, 163, 184, 0.1)', text: '#64748B', border: 'rgba(148, 163, 184, 0.2)' };
             case 'CANCELLED':
                 return { bg: 'rgba(198, 40, 40, 0.1)', text: '#C62828', border: 'rgba(198, 40, 40, 0.2)' };
             default:
-                return { bg: 'rgba(2, 119, 189, 0.1)', text: '#0277BD', border: 'rgba(2, 119, 189, 0.2)' };
+                return { bg: 'rgba(245, 158, 11, 0.1)', text: colors.warning, border: 'rgba(245, 158, 11, 0.2)' };
         }
     };
 
@@ -236,7 +235,6 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
 }
 
 function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
-    const isDark = theme === 'dark';
     const colors = Colors[theme];
     return StyleSheet.create({
         container: { flex: 1 },
@@ -244,36 +242,34 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         listContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
         card: {
             backgroundColor: colors.surface,
-            borderRadius: 24,
+            borderRadius: Radius.lg,
             marginBottom: 16,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: isDark ? 0.3 : 0.04,
-            shadowRadius: 14,
-            elevation: 4,
+            borderWidth: 1,
+            borderColor: colors.border,
+            ...Shadow.card(theme),
             flexDirection: 'row',
             overflow: 'hidden',
         },
         statusAccent: { width: 5, height: '100%' },
         cardContent: { flex: 1, padding: 16 },
         cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-        idBadge: { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-        idText: { fontSize: 10, color: colors.textSecondary, fontWeight: '800' },
+        idBadge: { backgroundColor: colors.primarySoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+        idText: { fontSize: 10, color: colors.primary, fontWeight: '800' },
         statusPill: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
         statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
         statusText: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-        cardBody: { marginBottom: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#F8FAFC', borderRadius: 16, padding: 12 },
+        cardBody: { marginBottom: 16, backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, padding: 12 },
         customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-        thumbnailContainer: { width: 44, height: 44, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9' },
+        thumbnailContainer: { width: 44, height: 44, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
         thumbnail: { width: '100%', height: '100%', resizeMode: 'cover' },
-        iconContainer: { width: 36, height: 36, borderRadius: 12, backgroundColor: isDark ? 'rgba(0, 191, 165, 0.1)' : '#F0FDFA', justifyContent: 'center', alignItems: 'center' },
+        iconContainer: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.primarySoft, justifyContent: 'center', alignItems: 'center' },
         customerName: { fontSize: ms(16), fontWeight: '900', color: colors.text, textTransform: 'uppercase' },
         dateRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
         dateText: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
         cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
         amountContainer: { gap: 2 },
         amountLabel: { fontSize: 10, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase' },
-        amountText: { fontSize: ms(20), fontWeight: '900', color: '#00BFA5' },
+        amountText: { fontSize: ms(20), fontWeight: '900', color: colors.success },
         emptyText: { marginTop: 16, fontSize: 16, fontWeight: '600', color: colors.textSecondary }
     });
 }

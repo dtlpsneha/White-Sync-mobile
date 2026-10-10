@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,7 +92,7 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
         return (
             <Animated.View entering={FadeInDown.delay(index * 100).duration(500)}>
                 <TouchableOpacity
-                    style={[styles.itemCard, { backgroundColor: colors.surface }]}
+                    style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}
                     onPress={() => handleRecordPress(item)}
                     activeOpacity={0.7}
                 >
@@ -157,9 +157,9 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
                         </View>
                     </View>
 
-                    <View style={styles.cardFooter}>
+                    <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
                         {(item.total !== undefined && item.total !== null) && (
-                            <View style={[styles.costBadge, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(99, 102, 241, 0.08)' }]}>
+                            <View style={[styles.costBadge, { backgroundColor: colors.primarySoft }]}>
                                 <Text style={[styles.costLabel, { color: colors.primary }]}>Travel Cost</Text>
                                 <Text style={[styles.costValue, { color: colors.primary }]}>₹{item.total}</Text>
                             </View>
@@ -172,7 +172,7 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
                                     <Text style={[styles.badgeTextText, { color: '#EA580C' }]}>Follow-up</Text>
                                 </View>
                             )}
-                            <TouchableOpacity style={styles.actionBtn}>
+                            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceSecondary }]}>
                                 <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
@@ -221,15 +221,9 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         centerContainer: { padding: ms(36), justifyContent: 'center', alignItems: 'center' },
         listContent: { gap: vs(14) },
         itemCard: {
-            borderRadius: ms(24),
+            borderRadius: Radius.lg,
             padding: ms(20),
             borderWidth: 1,
-            borderColor: 'rgba(0,0,0,0.05)',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.05,
-            shadowRadius: 16,
-            elevation: 4,
             overflow: 'hidden'
         },
         cardHeader: {
@@ -273,15 +267,14 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
             justifyContent: 'space-between',
             alignItems: 'center',
             paddingTop: vs(14),
-            borderTopWidth: 1,
-            borderTopColor: 'rgba(0,0,0,0.03)'
+            borderTopWidth: 1
         },
         costBadge: {
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: s(12),
             paddingVertical: vs(7),
-            borderRadius: ms(12),
+            borderRadius: Radius.sm,
             gap: s(7)
         },
         costLabel: { fontSize: ms(9), fontWeight: '800', textTransform: 'uppercase', opacity: 0.6 },
@@ -301,7 +294,6 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
             width: ms(28),
             height: ms(28),
             borderRadius: ms(14),
-            backgroundColor: 'rgba(0,0,0,0.02)',
             justifyContent: 'center',
             alignItems: 'center'
         },
@@ -315,7 +307,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
             alignItems: 'center',
             gap: s(7),
             borderTopWidth: 1,
-            borderTopColor: 'rgba(0,0,0,0.02)'
+            borderTopColor: 'rgba(245,158,11,0.2)'
         },
         followUpAlertText: { fontSize: ms(10.5), fontWeight: '800' },
         emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: vs(50), gap: 14 },

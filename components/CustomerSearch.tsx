@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { searchCustomers, type CustomerSearchResult } from '@/services/smartopsApi';
 
@@ -171,6 +171,7 @@ export function CustomerSearchResults({
             style={[
                 styles.panel,
                 { backgroundColor: colors.surface, borderColor: colors.border, maxHeight },
+                Shadow.card(theme),
             ]}
         >
             {state.searching && (
@@ -223,7 +224,7 @@ export function CustomerSearchResults({
 
 const styles = StyleSheet.create({
     panel: {
-        borderRadius: 16,
+        borderRadius: Radius.lg,
         borderWidth: 1,
         overflow: 'hidden',
     },
@@ -248,9 +249,9 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
     },
     avatar: {
-        width: 34,
-        height: 34,
-        borderRadius: 10,
+        width: 38,
+        height: 38,
+        borderRadius: Radius.sm,
         alignItems: 'center',
         justifyContent: 'center',
     },

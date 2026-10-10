@@ -12,14 +12,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Customer, Item, getCustomersByNames, getItemsByCodes, searchCustomers, searchItems } from '@/services/frappeSearch';
 import {
     FiscalYear,
@@ -89,9 +89,25 @@ function formatPlain(value: number | undefined) {
     return (value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const NAVY = '#0E1E3B';
-const DANGER = '#DC3545';
-const SUCCESS = '#16A34A';
+/**
+ * DIS% exactly as the ERPNext "Daily Sales Report" client script shows it
+ * (fmtDisPct / disPctClass): "NIL" when the discount is empty or zero AND a list
+ * price is set (sold at list price); "0.00" when there is no list price; otherwise the
+ * number, with a "+" prefix when positive (sold above list price).
+ */
+function isDisNil(value: number | null | undefined, listPrice: number | null | undefined) {
+    return (value === null || value === undefined || value === 0) && (listPrice ?? 0) > 0;
+}
+function formatDisPct(value: number | null | undefined, listPrice: number | null | undefined) {
+    if (isDisNil(value, listPrice)) return 'NIL';
+    const out = formatPlain(value ?? 0);
+    return (value || 0) > 0 ? '+' + out : out;
+}
+function disPctColor(value: number | null | undefined, listPrice: number | null | undefined, colors: { text: string; danger: string; success: string }) {
+    if (isDisNil(value, listPrice)) return '#7C3AED';
+    if (!value) return colors.text;
+    return value < 0 ? colors.danger : colors.success;
+}
 
 type PickerOption = { label: string; value: string };
 type PickerState = { visible: boolean; title: string; options: PickerOption[]; selectedValue: string; onSelect: (v: string) => void };
@@ -193,7 +209,7 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
                 <TextInput
                     style={[styles.searchFieldInput, { color: colors.text }]}
                     placeholder={placeholder}
-                    placeholderTextColor={colors.textSecondary}
+                    placeholderTextColor={colors.placeholder}
                     value={query}
                     onChangeText={t => { setQuery(t); updateOpen(true); }}
                     onFocus={() => updateOpen(true)}
@@ -216,10 +232,10 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
             {open && (
                 <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     {loading ? (
-                        <ActivityIndicator size="small" color={NAVY} style={{ padding: 10 }} />
+                        <ActivityIndicator size="small" color={colors.primary} style={{ padding: 10 }} />
                     ) : error ? (
                         <TouchableOpacity style={{ padding: 10 }} onPress={() => setRetryTick(t => t + 1)}>
-                            <Text style={{ color: DANGER, fontSize: 12, fontWeight: '700' }}>{error} — tap to retry</Text>
+                            <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700' }}>{error} — tap to retry</Text>
                         </TouchableOpacity>
                     ) : results.length === 0 ? (
                         <Text style={{ padding: 10, color: colors.textSecondary, fontSize: 12 }}>
@@ -245,7 +261,7 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
                             ))}
                             {!showAll && results.length > 10 && (
                                 <TouchableOpacity style={{ padding: 10 }} onPress={() => setShowAll(true)}>
-                                    <Text style={{ color: NAVY, fontSize: 12, fontWeight: '700' }}>
+                                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>
                                         Show all {results.length} results
                                     </Text>
                                 </TouchableOpacity>
@@ -272,11 +288,11 @@ const PAGE_SIZE = 30;
 const InvoiceCard = React.memo(function InvoiceCard({ item, revealed, colors, styles }: { item: InvoiceHistoryRow; revealed: boolean; colors: any; styles: any }) {
     const paid = item.payment_status === 'Payment Paid';
     return (
-        <View style={[styles.invoiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={[styles.invoiceCard, Shadow.card(useColorScheme() ?? 'light'), { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.invoiceHead}>
                 <Text style={[styles.invoiceNo, { color: colors.text }]} numberOfLines={1}>{item.invoice_no}</Text>
-                <View style={[styles.statusPill, { backgroundColor: (paid ? SUCCESS : DANGER) + '1F' }]}>
-                    <Text style={{ color: paid ? SUCCESS : DANGER, fontSize: 10.5, fontWeight: '800' }}>{item.payment_status}</Text>
+                <View style={[styles.statusPill, { backgroundColor: (paid ? colors.success : colors.danger) + '1F' }]}>
+                    <Text style={{ color: paid ? colors.success : colors.danger, fontSize: 10.5, fontWeight: '800' }}>{item.payment_status}</Text>
                 </View>
             </View>
             <Text style={[styles.invoiceSub, { color: colors.textSecondary }]}>
@@ -291,7 +307,7 @@ const InvoiceCard = React.memo(function InvoiceCard({ item, revealed, colors, st
             <View style={styles.metricGridNoBorder}>
                 <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.invoice_total_value)}</Text></View>
                 <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>LP26</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.list_price)}</Text></View>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>DIS%</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.discount_percentage)}</Text></View>
+                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>DIS%</Text><Text style={[styles.mValue, { color: disPctColor(item.discount_percentage, item.list_price, colors), fontWeight: '800' }]} numberOfLines={1} adjustsFontSizeToFit>{formatDisPct(item.discount_percentage, item.list_price)}</Text></View>
             </View>
             {revealed && (
                 <View style={styles.metricGridNoBorder}>
@@ -480,6 +496,12 @@ export default function InvoiceHistoryScreen() {
         setRefreshing(false);
     };
 
+    // Re-fetch whenever the screen regains focus so ERP changes show up without
+    // leaving and reopening the app.
+    const reloadOnFocusRef = useRef<() => void>(() => {});
+    reloadOnFocusRef.current = () => { if (ready) fetchHistory(true); };
+    useFocusEffect(useCallback(() => { reloadOnFocusRef.current(); }, []));
+
     const openFiltersSheet = () => {
         setDraftFiscalYear(fiscalYear);
         setDraftMonth(month);
@@ -556,21 +578,12 @@ export default function InvoiceHistoryScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <SafeAreaView style={{ backgroundColor: colors.surface }} edges={['top']}>
-                <View style={[styles.topbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                        <Ionicons name="chevron-back" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={[styles.topbarTitle, { color: colors.text }]}>Sales Invoice History</Text>
-                    <TouchableOpacity
-                        style={{ width: 30, alignItems: 'flex-end' }}
-                        onPress={() => setProfitRevealed(v => !v)}
-                        accessibilityLabel={profitRevealed ? 'Hide Profit & Margin %' : 'Show Profit & Margin %'}
-                    >
-                        <Ionicons name={profitRevealed ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.text} />
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
+            <ScreenHeader
+                title="Sales Invoice History (Detailed)"
+                onBack={() => router.canGoBack() ? router.back() : router.replace('/home')}
+                rightIcon={profitRevealed ? 'eye-off-outline' : 'eye-outline'}
+                onRightPress={() => setProfitRevealed(v => !v)}
+            />
 
             {/*
               * Filters, chips, and search fields now live INSIDE this same
@@ -602,7 +615,7 @@ export default function InvoiceHistoryScreen() {
                 </View>
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8, paddingRight: s(18) }}>
-                    <TouchableOpacity style={[styles.chip, { backgroundColor: NAVY }]} onPress={openFiltersSheet}><Text style={styles.chipTextActive}>FY {fiscalYear}</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.chip, { backgroundColor: colors.primary }]} onPress={openFiltersSheet}><Text style={styles.chipTextActive}>FY {fiscalYear}</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ddmm(fromDate)} – {ddmm(toDate)}</Text></TouchableOpacity>
                     {ownExecutiveName ? (
                         <View style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{ownExecutiveName.toUpperCase()}</Text></View>
@@ -610,7 +623,7 @@ export default function InvoiceHistoryScreen() {
                         <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{execLabel(salesExecutive)}</Text></TouchableOpacity>
                     )}
                     <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}><Text style={[styles.chipText, { color: colors.textSecondary }]}>{brandLabelFor(brand)}</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.chip, { backgroundColor: paymentStatus ? NAVY : colors.surfaceSecondary }]} onPress={openFiltersSheet}>
+                    <TouchableOpacity style={[styles.chip, { backgroundColor: paymentStatus ? colors.primary : colors.surfaceSecondary }]} onPress={openFiltersSheet}>
                         <Text style={paymentStatus ? styles.chipTextActive : [styles.chipText, { color: colors.textSecondary }]}>{paymentStatusLabelFor(paymentStatus)}</Text>
                     </TouchableOpacity>
                 </ScrollView>
@@ -643,19 +656,19 @@ export default function InvoiceHistoryScreen() {
 
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
-                    {history && <Text style={[styles.countNum, { color: NAVY }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
+                    {history && <Text style={[styles.countNum, { color: colors.primary }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
                 </View>
 
                 {history?.truncated && (
-                    <View style={[styles.truncBanner, { backgroundColor: DANGER + '18' }]}>
-                        <Text style={{ color: DANGER, fontSize: 12, fontWeight: '700' }}>
+                    <View style={[styles.truncBanner, { backgroundColor: colors.danger + '18' }]}>
+                        <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700' }}>
                             Showing the first {history.total_count} rows — narrow the date range or filters to see the rest.
                         </Text>
                     </View>
                 )}
 
                 {loading && !history ? (
-                    <ActivityIndicator size="large" color={NAVY} style={{ marginTop: 30, marginBottom: 10 }} />
+                    <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 30, marginBottom: 10 }} />
                 ) : fetchError ? (
                     <View style={styles.emptyState}>
                         <Ionicons name="cloud-offline-outline" size={40} color={colors.textSecondary} />
@@ -673,7 +686,7 @@ export default function InvoiceHistoryScreen() {
                     <>
                         {rows.slice(0, visibleCount).map((row, idx) => <InvoiceCard key={`${row.invoice_no}-${idx}`} item={row} revealed={profitRevealed} colors={colors} styles={styles} />)}
                         {visibleCount < rows.length && (
-                            <ActivityIndicator size="small" color={NAVY} style={{ marginTop: vs(16) }} />
+                            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: vs(16) }} />
                         )}
                     </>
                 )}
@@ -737,7 +750,7 @@ export default function InvoiceHistoryScreen() {
                             />
                         )}
 
-                        <TouchableOpacity style={[styles.applyBtn, { backgroundColor: NAVY }]} onPress={applyFilters}>
+                        <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={applyFilters}>
                             <Text style={styles.applyBtnText}>APPLY FILTERS</Text>
                         </TouchableOpacity>
                     </View>
@@ -746,7 +759,7 @@ export default function InvoiceHistoryScreen() {
 
             <Modal visible={picker.visible} transparent animationType="fade" onRequestClose={() => setPicker(p => ({ ...p, visible: false }))}>
                 <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }} onPress={() => setPicker(p => ({ ...p, visible: false }))}>
-                    <View style={{ width: '100%', maxHeight: '70%', backgroundColor: colors.background, borderRadius: 24, padding: 24, gap: 16 }}>
+                    <View style={{ width: '100%', maxHeight: '70%', backgroundColor: colors.surface, borderRadius: Radius.xl, padding: 24, gap: 16 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{picker.title}</Text>
                             <TouchableOpacity onPress={() => setPicker(p => ({ ...p, visible: false }))}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
@@ -755,11 +768,11 @@ export default function InvoiceHistoryScreen() {
                             {picker.options.map(option => (
                                 <TouchableOpacity
                                     key={option.value}
-                                    style={{ padding: 16, borderRadius: 12, backgroundColor: picker.selectedValue === option.value ? colors.surfaceSecondary : 'transparent', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                                    style={{ padding: 16, borderRadius: Radius.md, backgroundColor: picker.selectedValue === option.value ? colors.primarySoft : 'transparent', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
                                     onPress={() => { picker.onSelect(option.value); setPicker(p => ({ ...p, visible: false })); }}
                                 >
-                                    <Text style={{ fontSize: 15, fontWeight: '600', color: picker.selectedValue === option.value ? NAVY : colors.text }}>{option.label}</Text>
-                                    {picker.selectedValue === option.value && <Ionicons name="checkmark-circle" size={20} color={NAVY} />}
+                                    <Text style={{ fontSize: 15, fontWeight: '600', color: picker.selectedValue === option.value ? colors.primary : colors.text }}>{option.label}</Text>
+                                    {picker.selectedValue === option.value && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
@@ -773,18 +786,15 @@ export default function InvoiceHistoryScreen() {
 function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) => number; ms: (n: number) => number }) {
     return StyleSheet.create({
         container: { flex: 1 },
-        topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: s(16), paddingVertical: vs(14), borderBottomWidth: 1 },
-        backBtn: { width: 30, height: 30, justifyContent: 'center' },
-        topbarTitle: { fontSize: ms(15.5), fontWeight: '800' },
 
         scrollContent: { paddingBottom: vs(40) },
 
         filtersRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: s(18), paddingTop: vs(16) },
-        filtersBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: ms(12), paddingVertical: vs(9), paddingHorizontal: s(14) },
+        filtersBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.md, paddingVertical: vs(9), paddingHorizontal: s(14) },
         filtersBtnText: { fontSize: ms(13), fontWeight: '700' },
 
         chipScroll: { marginTop: vs(10), paddingLeft: s(18) },
-        chip: { paddingHorizontal: s(16), paddingVertical: vs(8), borderRadius: 999 },
+        chip: { paddingHorizontal: s(16), paddingVertical: vs(8), borderRadius: Radius.pill },
         chipText: { fontSize: ms(12), fontWeight: '700' },
         chipTextActive: { fontSize: ms(12), fontWeight: '700', color: '#fff' },
 
@@ -793,7 +803,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         // and customer names wrapped to 2-3 lines in the half-width column. Full width
         // each, matching the single-field layout `components/CustomerSearch.tsx` uses.
         searchGrid: { gap: s(10), paddingHorizontal: s(18), marginTop: vs(14) },
-        searchField: { flex: 1, borderWidth: 1, borderRadius: ms(14), paddingHorizontal: s(12), paddingVertical: vs(10) },
+        searchField: { flex: 1, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: s(12), paddingVertical: vs(10) },
         searchFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         searchFieldValue: { flex: 1, fontSize: ms(12.5), fontWeight: '600' },
         searchFieldInput: { flex: 1, fontSize: ms(12.5), fontWeight: '600' },
@@ -812,7 +822,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         emptyState: { alignItems: 'center', paddingVertical: vs(60), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
 
-        invoiceCard: { borderWidth: 1, borderRadius: ms(18), padding: ms(16), marginHorizontal: s(18), marginTop: vs(12) },
+        invoiceCard: { borderWidth: 1, borderRadius: Radius.lg, padding: ms(16), marginHorizontal: s(18), marginTop: vs(12) },
         invoiceHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
         invoiceNo: { fontSize: ms(14.5), fontWeight: '800', flex: 1 },
         statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
@@ -826,7 +836,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         invoiceFoot: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: vs(12) },
         invoiceFootText: { fontSize: ms(11.5), fontWeight: '600' },
 
-        sheet: { borderTopLeftRadius: ms(24), borderTopRightRadius: ms(24), paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) },
+        sheet: { borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) },
         handle: { width: 40, height: 4, borderRadius: 999, alignSelf: 'center', marginBottom: vs(18) },
         sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: vs(16) },
         sheetTitle: { fontSize: ms(20), fontWeight: '800' },
@@ -835,10 +845,10 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         fieldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: s(14), marginBottom: vs(4) },
         fieldBlock: { flexBasis: '45%', flexGrow: 1, gap: 8, marginBottom: vs(14) },
         fieldLabel: { fontSize: ms(10.5), fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
-        selectBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: ms(12), paddingVertical: vs(11), paddingHorizontal: s(13) },
+        selectBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: Radius.md, paddingVertical: vs(11), paddingHorizontal: s(13) },
         selectValue: { fontSize: ms(13.5), fontWeight: '600' },
 
-        applyBtn: { borderRadius: ms(14), paddingVertical: vs(16), alignItems: 'center', marginTop: vs(6) },
+        applyBtn: { borderRadius: Radius.md, paddingVertical: vs(16), alignItems: 'center', marginTop: vs(6) },
         applyBtnText: { color: '#fff', fontSize: ms(14.5), fontWeight: '800', letterSpacing: 0.4 },
     });
 }

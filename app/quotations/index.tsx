@@ -1,12 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
+import { BackHandler, Modal, ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Ionicons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
 import QuotationList from '@/components/QuotationList';
+import { QuotationDashboardPanel } from '@/components/dashboard/QuotationDashboardPanel';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useResponsive } from '../../hooks/useResponsive';
 
 export default function QuotationListScreen() {
@@ -22,6 +23,7 @@ export default function QuotationListScreen() {
     const [filter, setFilter] = useState((params.filter as string) || 'All');
     const [searchQuery, setSearchQuery] = useState('');
     const [workflowStates, setWorkflowStates] = useState<string[]>(['All']);
+    const [dashboardVisible, setDashboardVisible] = useState(false);
 
     // This screen is reached via router.replace (see SideNav), so there is
     // nothing beneath it on the navigation stack — without this, Android's
@@ -86,76 +88,55 @@ export default function QuotationListScreen() {
 
     return (
         <View style={styles.container}>
-            <StatusBar style="dark" />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerTopRow}>
-                    <TouchableOpacity onPress={() => router.replace('/home')} style={styles.circularButton}>
-                        <Ionicons name="chevron-back" size={24} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Quotations</Text>
-                    <TouchableOpacity style={styles.circularButton}>
-                        <Ionicons name="options-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                </View>
-
+            
+            <ScreenHeader
+                title="Quotation"
+                onBack={() => router.replace('/home')}
+                rightIcon="options-outline"
+                onRightPress={() => setDashboardVisible(true)}
+            >
                 {/* Search Bar */}
-                <View style={styles.searchContainer}>
-                    <View style={styles.searchInner}>
-                        <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Search by ID or Customer..."
-                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : '#94A3B8'}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                        />
-                        {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                <View style={styles.searchInner}>
+                    <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search by ID or Customer..."
+                        placeholderTextColor={colors.placeholder}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                    {searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchQuery('')}>
+                            <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Filter Pills */}
-                <View style={styles.filterBarContainer}>
-                    <RNScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.filterScrollContent}
-                    >
-                        {workflowStates.map((item) => {
-                            const isActive = filter === item;
-                            const catColor = getCategoryColor(item);
-                            
-                            return (
-                                <TouchableOpacity
-                                    key={item}
-                                    style={[
-                                        styles.filterPill, 
-                                        isActive && { 
-                                            backgroundColor: catColor, 
-                                            borderColor: catColor,
-                                            shadowColor: catColor,
-                                            elevation: 4,
-                                            shadowOpacity: 0.3,
-                                            shadowRadius: 8,
-                                            shadowOffset: { width: 0, height: 4 }
-                                        }
-                                    ]}
-                                    onPress={() => setFilter(item)}
-                                >
-                                    <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-                                        {item}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </RNScrollView>
-                </View>
-            </View>
+                <RNScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterScrollContent}
+                    style={styles.filterBarContainer}
+                >
+                    {workflowStates.map((item) => {
+                        const isActive = filter === item;
+                        const catColor = getCategoryColor(item);
+                        return (
+                            <TouchableOpacity
+                                key={item}
+                                style={[styles.filterPill, isActive && styles.filterPillActive]}
+                                onPress={() => setFilter(item)}
+                                activeOpacity={0.85}
+                            >
+                                <Text style={[styles.filterText, isActive && { color: catColor, fontWeight: '800' }]}>
+                                    {item}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </RNScrollView>
+            </ScreenHeader>
 
             <View style={styles.listContainer}>
                 <QuotationList
@@ -165,6 +146,27 @@ export default function QuotationListScreen() {
                     onStatesLoaded={handleStatesLoaded}
                 />
             </View>
+
+            <Modal
+                visible={dashboardVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setDashboardVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.background }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>Quotation Overview</Text>
+                            <TouchableOpacity onPress={() => setDashboardVisible(false)} style={styles.modalClose}>
+                                <Ionicons name="close" size={22} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+                            <QuotationDashboardPanel onSelectFilter={(key) => { setFilter(key); setDashboardVisible(false); }} />
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -175,107 +177,38 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
     return StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: isDark ? colors.background : '#F8FAFC',
-        },
-        header: {
-            backgroundColor: colors.surface,
-            paddingTop: vs(60),
-            paddingBottom: 0,
-            borderBottomLeftRadius: 32,
-            borderBottomRightRadius: 32,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: isDark ? 0.3 : 0.05,
-            shadowRadius: 20,
-            elevation: 10,
-            zIndex: 100,
-        },
-        headerTopRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 20,
-            marginBottom: 24,
-            width: '100%',
-        },
-        circularButton: {
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9',
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 5,
-            elevation: 2,
-        },
-        headerTitle: {
-            fontSize: ms(22),
-            fontWeight: '900',
-            color: colors.text,
-            letterSpacing: -0.5,
-        },
-        searchContainer: {
-            paddingHorizontal: 20,
-            marginBottom: 16,
+            backgroundColor: colors.background,
         },
         searchInner: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
-            borderRadius: 20,
-            height: 56,
-            paddingHorizontal: 16,
-            borderWidth: 1,
-            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'transparent',
-        },
-        searchIcon: {
-            marginRight: 12,
-        },
-        searchInput: {
-            flex: 1,
-            fontSize: 16,
-            fontWeight: '600',
-            color: colors.text,
-        },
-        filterBarContainer: {
-            paddingVertical: 16,
-        },
-        filterScrollContent: {
-            paddingHorizontal: 20,
-            gap: 12,
-        },
-        filterPill: {
-            paddingVertical: 12,
-            paddingHorizontal: 22,
+            backgroundColor: colors.surface,
             borderRadius: 16,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+            height: 50,
+            paddingHorizontal: 14,
+        },
+        searchIcon: { marginRight: 10 },
+        searchInput: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+        filterBarContainer: { marginTop: 14, marginHorizontal: -16 },
+        filterScrollContent: { paddingHorizontal: 16, gap: 10 },
+        filterPill: {
+            paddingVertical: 9,
+            paddingHorizontal: 18,
+            borderRadius: 999,
+            backgroundColor: 'rgba(255,255,255,0.18)',
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: 'rgba(255,255,255,0.3)',
         },
-        filterPillActive: {
-            backgroundColor: colors.primary,
-            borderColor: colors.primary,
-            shadowColor: colors.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 4,
-        },
-        filterText: {
-            color: colors.textSecondary,
-            fontWeight: '700',
-            fontSize: 14,
-        },
-        filterTextActive: {
-            color: '#FFF',
-            fontWeight: '800',
-        },
+        filterPillActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+        filterText: { color: 'rgba(255,255,255,0.92)', fontWeight: '700', fontSize: 13 },
         listContainer: {
             flex: 1,
         },
+        modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+        modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '88%', paddingTop: 8 },
+        modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9' },
+        modalTitle: { fontSize: ms(18), fontWeight: '900' },
+        modalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
         fab: {
             position: 'absolute',
             bottom: vs(160),

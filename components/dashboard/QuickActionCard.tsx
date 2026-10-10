@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 
@@ -42,7 +42,8 @@ export function QuickActionCard({
                     {
                         backgroundColor: colors.surface,
                         borderColor: colors.border,
-                        borderRadius: ms(18),
+                        borderRadius: Radius.lg,
+                        ...Shadow.card(theme),
                         padding: ms(14),
                         gap: s(12),
                     },
@@ -52,7 +53,7 @@ export function QuickActionCard({
                 <View
                     style={[
                         styles.iconWrap,
-                        { width: ms(44), height: ms(44), borderRadius: ms(14), backgroundColor: `${color}1A` },
+                        { width: ms(44), height: ms(44), borderRadius: Radius.md, backgroundColor: `${color}1A` },
                     ]}
                 >
                     <Ionicons name={icon} size={ms(22)} color={color} />

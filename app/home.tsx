@@ -3,31 +3,54 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
     Easing,
     FadeInDown,
     FadeInUp,
     useAnimatedProps,
+    useAnimatedStyle,
+    withSpring,
     useSharedValue,
     withTiming
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
+import { apiUrl } from '@/constants/config';
 
 import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { QuickActionCard } from '@/components/dashboard/QuickActionCard';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
-import { FloatingNav } from '@/components/FloatingNav';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useNotifications, type PersistentNotification } from '@/context/NotificationsContext';
 import Svg, { Circle, G } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useResponsive } from '../hooks/useResponsive';
-import { apiUrl } from '@/constants/config';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** Card that springs down on press and gives a light haptic tap. */
+function Tappable({ onPress, style, children }: { onPress: () => void; style?: any; children: React.ReactNode }) {
+    const scale = useSharedValue(1);
+    const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+    return (
+        <AnimatedPressable
+            onPressIn={() => { scale.value = withSpring(0.96, { damping: 15, stiffness: 320 }); }}
+            onPressOut={() => { scale.value = withSpring(1, { damping: 12, stiffness: 260 }); }}
+            onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
+                onPress();
+            }}
+            style={[style, pressStyle]}
+        >
+            {children}
+        </AnimatedPressable>
+    );
+}
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -38,14 +61,6 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
  */
 const CANCELLED_COLOR = '#C62828';
 
-/** Quick Action accent colors — used only as icon/chip tints now (see QuickActionCard),
- * not full-tile backgrounds, so unlike the KpiCard colors these don't need theme tokens. */
-const QUICK_ACTION_COLORS = {
-    salesOrders: '#6366F1',
-    calculator: '#10B981',
-    dailySalesReport: '#F59E0B',
-    invoiceHistory: '#0891B2',
-};
 
 const DonutSegment = ({ center, radius, strokeWidth, color, percentage, rotation, progress }: any) => {
     const circumference = 2 * Math.PI * radius;
@@ -156,6 +171,8 @@ export default function HomeScreen() {
     const { s, vs, ms, width } = useResponsive();
     const styles = getStyles(theme, { s, vs, ms, width });
 
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
     const [userName, setUserName] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -169,6 +186,7 @@ export default function HomeScreen() {
         conversionRate: '0%',
         avgQuoteValue: '₹0',
     });
+    const pendingQuotes = Object.entries(statsMap).find(([k]) => k.toUpperCase() === 'PENDING')?.[1]?.quotes ?? 0;
     const [lastUpdated, setLastUpdated] = useState<string>(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 
     const [lastSeenPendingIds, setLastSeenPendingIds] = useState<string[]>([]);
@@ -356,35 +374,11 @@ export default function HomeScreen() {
                 const previousIds: string[] = stored ? JSON.parse(stored) : [];
 
                 // Skip notifications on initial load to avoid "Dashboard Notification" annoyance
-                if (previousIds.length > 0 && !isInitialLoad) {
-                    const newQuotes = quotes.filter((q: any) => !previousIds.includes(q.name));
-                    // A live server can surface several genuinely new quotations in one
-                    // poll (real sales activity, not a dedup bug) — one notification per
-                    // quote turned into a burst of popups. Batch them into a single
-                    // notification instead; only fall back to the detailed single-quote
-                    // message when there's exactly one.
-                    if (newQuotes.length === 1) {
-                        const quote = newQuotes[0];
-                        const formattedAmount = quote.grand_total
-                            ? `${quote.currency || ''} ${Number(quote.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                            : '';
-                        await notificationService.postLocalNotification(
-                            `📄 New Quotation`,
-                            `${quote.customer_name} quotation of ${formattedAmount} for approval.`,
-                            { id: quote.name },
-                            "QUOTATION_WORKFLOW"
-                        );
-                    } else if (newQuotes.length > 1) {
-                        const names = newQuotes.slice(0, 2).map((q: any) => q.customer_name).join(', ');
-                        const rest = newQuotes.length - 2;
-                        await notificationService.postLocalNotification(
-                            `📄 ${newQuotes.length} New Quotations`,
-                            `${names}${rest > 0 ? ` and ${rest} more` : ''} for approval.`,
-                            { ids: newQuotes.map((q: any) => q.name) },
-                            "QUOTATION_WORKFLOW"
-                        );
-                    }
-                }
+                // Local notification removed — FCM push (sent server-side only to the
+                // assigned quotation_approver's device) handles alerting the right person.
+                // Posting a local notification here fired for every user whose poll
+                // happened to surface a pending quote, regardless of whether they were
+                // the approver.
 
                 // Store every ID seen this poll, not a truncated slice — a cap
                 // here (there used to be one, capped to the first 50) meant
@@ -423,13 +417,33 @@ export default function HomeScreen() {
         ]);
     };
 
+    // On first layout Android can leave this page scrolled to the bottom once the
+    // content is taller than the screen, hiding the header. Pin to the top while the
+    // content settles (first ~2s), then leave scrolling entirely to the user.
+    const scrollRef = useRef<ScrollView>(null);
+    const settleUntil = useRef(0);
+    const pinToTopWhileSettling = () => {
+        if (!settleUntil.current) settleUntil.current = Date.now() + 2000;
+        if (Date.now() < settleUntil.current) scrollRef.current?.scrollTo({ y: 0, animated: false });
+    };
+
     if (loading && !refreshing) {
         return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.text} /></View>;
     }
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.scrollContent} contentContainerStyle={{ paddingBottom: 120 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />}>
+            <LinearGradient
+                pointerEvents="none"
+                colors={theme === 'dark' ? ['#222763', colors.background] : ['#DDE1FF', colors.background]}
+                style={styles.bgTint}
+            />
+            <ScrollView
+                ref={scrollRef}
+                onContentSizeChange={pinToTopWhileSettling}
+                style={styles.scrollContent}
+                contentContainerStyle={{ paddingBottom: 120 }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />}>
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {permissionDenied ? (
                     <View style={styles.deniedContainer}>
@@ -442,143 +456,97 @@ export default function HomeScreen() {
                     </View>
                 ) : (
                     <>
-                        <View style={styles.header}>
-                            <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: vs(8) }}>
-                                    <Image source={require('../assets/images/logo.png')} style={{ width: ms(28), height: ms(28), borderRadius: ms(6), marginRight: s(8) }} resizeMode="contain" />
-                                    <Text style={{ fontSize: ms(18), fontWeight: '900', color: colors.primary }}>White Sync</Text>
-                                </View>
-                                <Text style={styles.welcomeText}>WELCOME BACK</Text>
-                                <Text style={styles.userNameText}>{userName || 'User'}</Text>
-                                <View style={styles.liveIndicatorContainer}><View style={styles.liveDot} /><Text style={styles.liveText}>Last updated: {lastUpdated}</Text></View>
+                        <LinearGradient colors={['#4338CA', '#7367F0', '#A78BFA']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+                            <View pointerEvents="none" style={styles.heroDeco}>
+                                <View style={[styles.heroCircle, { width: ms(170), height: ms(170), right: -ms(40), top: -ms(50) }]} />
+                                <View style={[styles.heroCircle, { width: ms(110), height: ms(110), right: ms(60), bottom: -ms(50), opacity: 0.6 }]} />
                             </View>
-                            <TouchableOpacity onPress={handleLogout} style={styles.profileButton}><View style={styles.avatar}><Text style={styles.avatarText}>{userName ? userName[0].toUpperCase() : 'U'}</Text></View></TouchableOpacity>
-                        </View>
+                            <View style={styles.heroTop}>
+                                <View style={styles.heroBrand}>
+                                    <Image source={require('../assets/images/logo.png')} style={{ width: ms(28), height: ms(28), borderRadius: ms(8), marginRight: s(8), backgroundColor: '#FFF' }} resizeMode="contain" />
+                                    <Text style={styles.heroBrandText}>White Sync</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => router.push('/profile' as any)} activeOpacity={0.8} style={styles.heroAvatar}>
+                                    <Text style={styles.heroAvatarText}>{userName ? userName[0].toUpperCase() : 'U'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.heroWelcome}>{greeting},</Text>
+                            <Text style={styles.heroName} numberOfLines={1}>{userName || 'User'}</Text>
+                            <View style={styles.heroUpdated}>
+                                <View style={styles.liveDot} />
+                                <Text style={styles.heroUpdatedText}>Updated {lastUpdated}</Text>
+                            </View>
+                        </LinearGradient>
 
                         <View style={styles.aiSearchWrap}>
                             <AiSearchBar />
                         </View>
 
-                        <SectionHeader
-                            title="Quotations"
-                            subtitle="Live status overview — tap a card to filter"
-                        />
-                        <View style={styles.kpiGrid}>
-                            {Object.keys(statsMap).map((statusKey, index) => {
-                                const status = statsMap[statusKey];
-                                const isPending = statusKey.toUpperCase() === 'PENDING';
-                                const isApproved = statusKey.toUpperCase() === 'APPROVED';
-                                const isReview = statusKey.toUpperCase() === 'REVIEW' || statusKey.toUpperCase() === 'DECLINED';
-                                const isCancelled = statusKey.toUpperCase() === 'CANCELLED' || statusKey.toUpperCase() === 'REJECTED';
-
-                                const cardColor = isPending ? colors.info :
-                                    isApproved ? colors.success :
-                                        isReview ? colors.danger :
-                                            isCancelled ? CANCELLED_COLOR :
-                                                colors.secondary; // Default for any other status
-
-                                const iconName = isPending ? 'time-outline' :
-                                    isApproved ? 'trending-up-outline' :
-                                        isReview ? 'trending-down-outline' :
-                                            isCancelled ? 'close-circle-outline' :
-                                                'document-text-outline';
-
-                                return (
-                                    <KpiCard
-                                        key={statusKey}
-                                        title={statusKey}
-                                        icon={iconName as any}
-                                        color={cardColor}
-                                        delay={100 * (index + 1)}
-                                        onPress={() => router.push({ pathname: '/quotations', params: { filter: statusKey } })}
-                                        rows={[
-                                            { icon: 'document-text-outline', label: 'Quotes', value: String(status.quotes) },
-                                            { icon: 'cash-outline', label: 'Values', value: status.value.toLocaleString('en-IN') },
-                                            { icon: 'people-outline', label: 'Customers', value: String(status.customers) },
-                                        ]}
-                                    />
-                                );
-                            })}
+                        <SectionHeader title="Overview" subtitle="Your quotations at a glance" icon="pulse" />
+                        <View style={styles.statGrid}>
+                            {([
+                                { label: 'TOTAL QUOTES', value: String(summaryStats.totalQuotes), icon: 'documents', colors: ['#4F46E5', '#7C3AED'] as const, filter: undefined },
+                                { label: 'PENDING', value: String(pendingQuotes), icon: 'time', colors: ['#F59E0B', '#F97316'] as const, filter: 'PENDING' },
+                                { label: 'APPROVAL RATE', value: summaryStats.conversionRate, icon: 'checkmark-done', colors: ['#10B981', '#047857'] as const, filter: 'APPROVED' },
+                                { label: 'TOTAL VALUE', value: summaryStats.totalValue, icon: 'cash', colors: ['#EC4899', '#8B5CF6'] as const, filter: undefined },
+                            ]).map((t, i) => (
+                                <Animated.View key={t.label} entering={FadeInDown.delay(i * 90).springify().damping(14)} style={styles.statCell}>
+                                    <Tappable
+                                        style={styles.statTileWrap}
+                                        onPress={() => router.replace((t.filter ? { pathname: '/quotations', params: { filter: t.filter } } : '/quotations') as any)}
+                                    >
+                                        <LinearGradient colors={t.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statTile}>
+                                            <Ionicons name={t.icon as any} size={ms(70)} color="rgba(255,255,255,0.16)" style={styles.statBgIcon} />
+                                            <View style={styles.statTop}>
+                                                <View style={styles.statIconChip}>
+                                                    <Ionicons name={t.icon as any} size={ms(16)} color="#FFF" />
+                                                </View>
+                                            </View>
+                                            <View>
+                                                <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{t.value}</Text>
+                                                <Text style={styles.statLabel} numberOfLines={1}>{t.label}</Text>
+                                            </View>
+                                        </LinearGradient>
+                                    </Tappable>
+                                </Animated.View>
+                            ))}
                         </View>
 
-                        <SectionHeader
-                            title="Quotation Performance"
-                            subtitle="Approval trends across all quotations"
-                        />
-                        <Animated.View entering={FadeInUp.delay(500).duration(800)} style={styles.donutCard}>
-                            <View style={styles.donutHeader}>
-                                <View><Text style={styles.donutTitle}>Donut Chart</Text><Text style={styles.donutSubtitle}>Quote distribution overview</Text></View>
-                                <TouchableOpacity style={styles.detailsButton} onPress={() => router.push('/quotations')}><Text style={styles.detailsButtonText}>View Details</Text><Ionicons name="arrow-forward-outline" size={ms(14)} color="#FFF" style={{ transform: [{ rotate: '-45deg' }] }} /></TouchableOpacity>
-                            </View>
-                            <View style={styles.chartWrapper}>
-                                <DonutChart
-                                    data={Object.keys(statsMap).map(k => statsMap[k].quotes)}
-                                    colors={Object.keys(statsMap).map(k => {
-                                        const uk = k.toUpperCase();
-                                        if (uk === 'PENDING') return colors.info;
-                                        if (uk === 'APPROVED') return colors.success;
-                                        if (uk === 'REVIEW' || uk === 'DECLINED') return colors.danger;
-                                        if (uk === 'CANCELLED' || uk === 'REJECTED') return CANCELLED_COLOR;
-                                        return colors.secondary;
-                                    })}
-                                    centerText={summaryStats.totalQuotes.toString()}
-                                />
-                            </View>
-                            <View style={styles.donutStatsRow}>
-                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{summaryStats.totalQuotes}</Text><Text style={styles.donutStatLabel}>Total Quotes</Text></View>
-                                <View style={[styles.donutStat, styles.donutStatBorder, { flex: 1.5 }]}><Text style={styles.donutStatValue}>{summaryStats.totalValue.replace('INR', '₹')}</Text><Text style={styles.donutStatLabel}>Total Value</Text></View>
-                                <View style={styles.donutStat}><Text style={styles.donutStatValue}>{summaryStats.totalCustomers}</Text><Text style={styles.donutStatLabel}>Customers</Text></View>
-                            </View>
-                        </Animated.View>
-
-                        <Animated.View entering={FadeInUp.delay(600)} style={styles.metricsContainer}>
-                            <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{summaryStats.conversionRate}</Text></View></View>
-                            <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
-                        </Animated.View>
-
-                        <SectionHeader
-                            title="Quick Actions"
-                            subtitle="Reports & tools"
-                        />
-                        <View style={styles.quickActionsList}>
-                            <QuickActionCard
-                                title="Sales Orders"
-                                subtitle="Manage orders"
-                                icon="cart-outline"
-                                color={QUICK_ACTION_COLORS.salesOrders}
-                                delay={100}
-                                onPress={() => router.push('/sales-orders')}
-                            />
-                            <QuickActionCard
-                                title="Price Calculator"
-                                subtitle="Habasit belt price calculator"
-                                icon="calculator-outline"
-                                color={QUICK_ACTION_COLORS.calculator}
-                                delay={150}
-                                onPress={() => router.push('/price-calculator')}
-                            />
-                            <QuickActionCard
-                                title="Daily Sales Report"
-                                subtitle="Sales & collection summary"
-                                icon="bar-chart-outline"
-                                color={QUICK_ACTION_COLORS.dailySalesReport}
-                                delay={200}
-                                onPress={() => router.push('/daily-sales-report')}
-                            />
-                            <QuickActionCard
-                                title="Invoice History"
-                                subtitle="Sales invoice records"
-                                icon="receipt-outline"
-                                color={QUICK_ACTION_COLORS.invoiceHistory}
-                                delay={250}
-                                onPress={() => router.push('/daily-sales-report/invoice-history')}
-                            />
+                        <SectionHeader title="Quick Navigation" subtitle="Tap a section to open it" icon="apps" />
+                        <View style={styles.navSection}>
+                            {([
+                                { label: 'QUOTATION', sub: 'Create & track quotations', icon: 'document-text', from: '#FBBF24', to: '#F97316', route: '/quotations', mode: 'replace' as const },
+                                { label: 'CUSTOMER PURCHASE ORDER', sub: 'Orders from customers', icon: 'cart', from: '#2DD4BF', to: '#0D9488', route: '/sales-orders', mode: 'replace' as const },
+                                { label: 'SALES INVOICE HISTORY (DETAILED)', sub: 'Line-item invoice detail', icon: 'receipt', from: '#38BDF8', to: '#0284C7', route: '/daily-sales-report/invoice-history', mode: 'push' as const },
+                                { label: 'DAILY SALES INVOICE (CUMULATIVE)', sub: 'Brand-wise daily totals', icon: 'bar-chart', from: '#FB7185', to: '#E11D48', route: '/daily-sales-report', mode: 'push' as const },
+                                { label: 'HABASIT CALCULATOR', sub: 'Belt price estimate', icon: 'calculator', from: '#34D399', to: '#059669', route: '/price-calculator', mode: 'push' as const },
+                                { label: 'CUSTOMER VISIT', sub: 'Field visit records', icon: 'calendar', from: '#A78BFA', to: '#7C3AED', route: '/maintenance', mode: 'replace' as const },
+                            ]).map((item, i) => (
+                                <Animated.View key={item.label} entering={FadeInDown.delay(300 + i * 80).springify().damping(15)}>
+                                    <Tappable
+                                        style={[styles.navRowCard, { backgroundColor: item.to + (theme === 'dark' ? '26' : '14'), borderColor: item.to + (theme === 'dark' ? '55' : '40') }]}
+                                        onPress={() => item.mode === 'push' ? router.push(item.route as any) : router.replace(item.route as any)}
+                                    >
+                                        <View style={[styles.navRowAccent, { backgroundColor: item.to }]} />
+                                        <LinearGradient colors={[item.from, item.to]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.navRowIcon}>
+                                            <Ionicons name={item.icon as any} size={ms(24)} color="#FFF" />
+                                        </LinearGradient>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.navRowTitle, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
+                                            <Text style={[styles.navRowSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</Text>
+                                        </View>
+                                        <View style={[styles.navRowChevron, { backgroundColor: item.to + '26' }]}>
+                                            <Ionicons name="chevron-forward" size={16} color={item.to} />
+                                        </View>
+                                    </Tappable>
+                                </Animated.View>
+                            ))}
                         </View>
+
                     </>
                 )}
             </ScrollView>
             {!permissionDenied && <AiBubble />}
-            <FloatingNav />
         </SafeAreaView>
     );
 }
@@ -606,13 +574,14 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         avatar: { width: ms(48), height: ms(48), borderRadius: ms(16), backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
         avatarText: { fontSize: ms(20), fontWeight: '900', color: '#FFF' },
         topActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: s(24), gap: s(8) },
-        iconButton: { width: ms(40), height: ms(40), borderRadius: ms(20), backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+        iconButton: { width: ms(40), height: ms(40), borderRadius: ms(20), backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border, position: 'relative' as const },
+        notificationBadge: { position: 'absolute', top: -6, right: -6, width: ms(20), height: ms(20), borderRadius: ms(10), justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.background },
+        notificationBadgeText: { fontSize: ms(10), fontWeight: '900', color: '#FFF' },
         aiSearchWrap: {
         paddingHorizontal: 20,
         marginBottom: 18,
     },
     kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(16), gap: s(16) },
-    quickActionsList: { paddingHorizontal: s(16), paddingBottom: s(16), gap: vs(10) },
         donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(24), elevation: 5 },
         donutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: vs(24) },
         donutTitle: { fontSize: ms(20), fontWeight: '900', color: colors.text },
@@ -629,7 +598,76 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         metricCard: { flexDirection: 'row', alignItems: 'center', padding: ms(16), borderRadius: ms(24), gap: s(16) },
         metricIcon: { width: ms(40), height: ms(40), borderRadius: ms(16), justifyContent: 'center', alignItems: 'center' },
         metricLabel: { fontSize: ms(12), color: colors.textSecondary, fontWeight: '700' },
-        metricValue: { fontSize: ms(18), fontWeight: '900' }
+        metricValue: { fontSize: ms(18), fontWeight: '900' },
+        bgTint: { position: 'absolute', top: 0, left: 0, right: 0, height: vs(430) },
+        heroDeco: { ...StyleSheet.absoluteFillObject, borderRadius: ms(28), overflow: 'hidden' },
+        heroCircle: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
+        navSection: { paddingHorizontal: s(16), paddingBottom: s(24), gap: s(10) },
+        navRowCard: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: s(14),
+            paddingVertical: ms(13),
+            paddingRight: ms(14),
+            paddingLeft: ms(16),
+            borderRadius: ms(22),
+            borderWidth: 1,
+            overflow: 'hidden',
+        },
+        navRowAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
+        navRowIcon: {
+            width: ms(52),
+            height: ms(52),
+            borderRadius: ms(17),
+            justifyContent: 'center',
+            alignItems: 'center',
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 3 },
+        },
+        navRowTitle: { fontSize: ms(13), fontWeight: '800', letterSpacing: 0.3 },
+        navRowSub: { fontSize: ms(11), fontWeight: '500', marginTop: 2 },
+        navRowChevron: { width: ms(30), height: ms(30), borderRadius: ms(15), justifyContent: 'center', alignItems: 'center' },
+        statGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(20), gap: s(10) },
+        statCell: { width: '48.4%' },
+        statTileWrap: { borderRadius: ms(22), elevation: 5, shadowColor: '#4338CA', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
+        statTile: { borderRadius: ms(22), padding: ms(14), minHeight: ms(112), justifyContent: 'space-between', overflow: 'hidden' },
+        statBgIcon: { position: 'absolute', right: -ms(8), bottom: -ms(10) },
+        statTop: { flexDirection: 'row', alignItems: 'center' },
+        statIconChip: { width: ms(30), height: ms(30), borderRadius: ms(10), backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
+        statValue: { fontSize: ms(25), fontWeight: '900', color: '#FFF', letterSpacing: -0.5 },
+        statLabel: { fontSize: ms(10), fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.9, marginTop: 2 },
+        hero: {
+            marginHorizontal: s(16),
+            marginBottom: vs(18),
+            borderRadius: ms(28),
+            padding: ms(22),
+            elevation: 6,
+            shadowColor: '#4338CA',
+            shadowOpacity: 0.3,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 8 },
+        },
+        heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vs(18) },
+        heroBrand: { flexDirection: 'row', alignItems: 'center' },
+        heroBrandText: { fontSize: ms(15), fontWeight: '900', color: '#FFF', letterSpacing: 0.3 },
+        heroAvatar: {
+            width: ms(44),
+            height: ms(44),
+            borderRadius: ms(14),
+            backgroundColor: 'rgba(255,255,255,0.22)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.45)',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        heroAvatarText: { fontSize: ms(18), fontWeight: '900', color: '#FFF' },
+        heroWelcome: { fontSize: ms(11), fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 1.6 },
+        heroName: { fontSize: ms(26), fontWeight: '900', color: '#FFF', marginTop: vs(2) },
+        heroUpdated: { flexDirection: 'row', alignItems: 'center', gap: s(6), marginTop: vs(12) },
+        heroUpdatedText: { fontSize: ms(11), color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
     });
 }
 

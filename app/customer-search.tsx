@@ -2,10 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CustomerSearchResults, useCustomerSearch } from '@/components/CustomerSearch';
-import { Colors } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /**
@@ -23,37 +23,39 @@ export default function CustomerSearchScreen() {
     const state = useCustomerSearch(query);
 
     return (
-        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View style={[styles.topbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-                <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
-                    <Ionicons name="arrow-back" size={22} color={colors.text} />
-                </Pressable>
-                <Ionicons name="search" size={16} color={colors.text} style={{ marginLeft: 12 }} />
-                <TextInput
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search a customer by name or phone…"
-                    placeholderTextColor={colors.placeholder}
-                    autoCapitalize="none"
-                    returnKeyType="search"
-                    autoFocus
-                    style={[styles.input, { color: colors.text }]}
-                />
-                {query.length > 0 && (
-                    <Pressable
-                        onPress={() => {
-                            setQuery('');
-                            Keyboard.dismiss();
-                        }}
-                        hitSlop={8}
-                        accessibilityLabel="Clear search"
-                    >
-                        <Ionicons name="close-circle" size={17} color={colors.placeholder} />
-                    </Pressable>
-                )}
-            </View>
+            <ScreenHeader
+                title="Customer Search"
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+            >
+                <View style={styles.searchBox}>
+                    <Ionicons name="search" size={16} color={colors.primary} />
+                    <TextInput
+                        value={query}
+                        onChangeText={setQuery}
+                        placeholder="Search a customer by name or phone…"
+                        placeholderTextColor={colors.placeholder}
+                        autoCapitalize="none"
+                        returnKeyType="search"
+                        autoFocus
+                        style={styles.input}
+                    />
+                    {query.length > 0 && (
+                        <Pressable
+                            onPress={() => {
+                                setQuery('');
+                                Keyboard.dismiss();
+                            }}
+                            hitSlop={8}
+                            accessibilityLabel="Clear search"
+                        >
+                            <Ionicons name="close-circle" size={17} color={colors.placeholder} />
+                        </Pressable>
+                    )}
+                </View>
+            </ScreenHeader>
 
             <View style={{ padding: 16 }}>
                 <CustomerSearchResults
@@ -67,23 +69,25 @@ export default function CustomerSearchScreen() {
                     }}
                 />
             </View>
-        </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    topbar: {
+    searchBox: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: StyleSheet.hairlineWidth,
+        backgroundColor: '#FFFFFF',
+        borderRadius: Radius.md,
+        paddingHorizontal: 14,
+        height: 46,
+        gap: 8,
     },
     input: {
         flex: 1,
         fontSize: 14.5,
         fontWeight: '600',
-        marginLeft: 8,
+        color: '#0F172A',
         paddingVertical: 4,
     },
 });

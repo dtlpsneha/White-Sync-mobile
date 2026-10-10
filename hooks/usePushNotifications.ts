@@ -13,34 +13,37 @@ import { apiUrl } from '../constants/config';
  * Registers this device's Expo push token against the logged-in ERPNext
  * user (`register_push_token`), so the server can push a notification to
  * them directly — e.g. when a Quotation is assigned to them — without the
- * app needing to be open. Runs once per app load, then again whenever the
- * app returns to the foreground while logged in, since a token can rotate
- * and there's otherwise no other point where a freshly-logged-in session
- * would pick one up.
+ * app needing to be open. Notification persistence is handled by
+ * NotificationsContext which stores them to disk.
  */
 async function registerForPushNotificationsAsync(): Promise<string | undefined> {
     if (!Device.isDevice) {
-        // Push tokens aren't meaningful on a simulator/emulator.
+        console.log('[usePushNotifications] Not a physical device, skipping');
         return undefined;
     }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
+        console.log('[usePushNotifications] Requesting notification permissions...');
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
     }
     if (finalStatus !== 'granted') {
+        console.log('[usePushNotifications] Notification permission denied');
         return undefined;
     }
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     if (!projectId) {
+        console.log('[usePushNotifications] No EAS project ID found in app.json');
         return undefined;
     }
 
     try {
+        console.log('[usePushNotifications] Getting Expo push token...');
         const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
+        console.log('[usePushNotifications] ✅ Got token:', tokenResponse.data.substring(0, 20) + '...');
         return tokenResponse.data;
     } catch (error) {
         console.error('[usePushNotifications] Failed to get Expo push token:', error);
@@ -51,25 +54,44 @@ async function registerForPushNotificationsAsync(): Promise<string | undefined> 
 async function registerTokenWithServer(token: string): Promise<boolean> {
     try {
         const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-        // Not logged in yet — nothing to attach the token to. The retry
-        // loop / next foreground will try again.
-        if (!sessionCookies) return false;
-
+        if (!sessionCookies) {
+            console.log('[usePushNotifications] No session cookies, skipping token registration');
+            return false;
+        }
+        console.log('[usePushNotifications] Registering token:', token.substring(0, 20) + '...');
         const res = await apiPost(apiUrl('/api/method/register_push_token'), { token }, sessionCookies);
-        return res.ok;
+        if (res.ok) {
+            console.log('[usePushNotifications] ✅ Token registered successfully');
+            return true;
+        } else {
+            console.error('[usePushNotifications] Token registration failed:', res.data);
+            return false;
+        }
     } catch (error) {
         console.error('[usePushNotifications] Failed to register push token with server:', error);
         return false;
     }
 }
 
+/**
+ * Registers this device's push token for whichever user is logged in right now.
+ * Call it right after a successful login: the hook below only registers at app
+ * start / on foreground, so without this a user who logs in (or switches user)
+ * keeps a stale token on the server and never receives pushes until the app is
+ * restarted.
+ */
+export async function registerPushTokenForCurrentUser(): Promise<boolean> {
+    const token = await registerForPushNotificationsAsync();
+    if (!token) return false;
+    return registerTokenWithServer(token);
+}
+
 export const usePushNotifications = () => {
     const [expoPushToken, setExpoPushToken] = useState<string | undefined>(undefined);
     const [notification, setNotification] = useState<Notifications.Notification | undefined>(undefined);
     const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
-    const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
-
     const router = useRouter();
+    const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
 
     useEffect(() => {
         notificationService.setupChannels();
@@ -89,16 +111,9 @@ export const usePushNotifications = () => {
 
         registerAndSend();
 
-        // The app is already "active" on cold start — AppState only fires on
-        // a TRANSITION into active, so logging in during that same first
-        // launch (the common case: open app -> log in -> Home) never
-        // triggers a foreground event to retry the registration that
-        // no-opped earlier for having no session yet. Poll briefly after
-        // mount until the token is actually saved server-side, covering
-        // exactly that gap without needing the login screen to know about
-        // this hook. Capped at 2 minutes so it doesn't poll forever if the
-        // user just sits on the login screen — the AppState listener below
-        // still catches login whenever the app is next foregrounded.
+        // Poll briefly after mount until the token is saved server-side,
+        // covering the gap where the user logs in during the same cold start.
+        // Capped at 2 minutes; the AppState listener catches later foregrounds.
         let retryCount = 0;
         const MAX_RETRIES = 24;
         const retryInterval = setInterval(() => {
@@ -110,9 +125,6 @@ export const usePushNotifications = () => {
             registerAndSend();
         }, 5000);
 
-        // A session can also start (login) or a token can rotate after the
-        // app was already running and gets backgrounded/foregrounded, so
-        // re-registering on every foreground catches that case too.
         const appStateSub = AppState.addEventListener('change', state => {
             if (state === 'active') registerAndSend();
         });
@@ -121,22 +133,25 @@ export const usePushNotifications = () => {
             setNotification(notification);
         });
 
-        const openQuotationFromResponse = (response: Notifications.NotificationResponse | null) => {
-            const data = response?.notification.request.content.data;
+        // Tapping a notification navigates to the quotation. The same response can
+        // arrive from both the listener and the cold-start lookup, so open it once.
+        let handledResponseId: string | null = null;
+        const openFromResponse = (response: Notifications.NotificationResponse | null) => {
+            if (!response) return;
+            const key = response.notification.request.identifier;
+            if (key === handledResponseId) return;
+            const data = response.notification.request.content.data;
             if (data && data.id) {
+                handledResponseId = key;
                 router.push({ pathname: '/quotations/[id]', params: { id: data.id as string } });
             }
         };
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(openFromResponse);
 
-        // Catches the tap that COLD-STARTS the app (from killed/background)
-        // — the app wasn't running yet when that tap happened, so the live
-        // listener below never sees it. Without this, a cold-start tap just
-        // opens the app to whatever its default launch route is.
-        Notifications.getLastNotificationResponseAsync().then(openQuotationFromResponse);
-
-        // Catches taps while the app is already running (foreground or
-        // backgrounded-but-alive).
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(openQuotationFromResponse);
+        // App was closed and launched by tapping a push: the listener above misses it.
+        Notifications.getLastNotificationResponseAsync()
+            .then(response => { setTimeout(() => { if (!cancelled) openFromResponse(response); }, 800); })
+            .catch(() => { });
 
         return () => {
             cancelled = true;

@@ -18,10 +18,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { initials } from '@/components/CustomerSearch';
-import { Colors } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { chatErrorMessage, lookupCustomer, type CustomerLookupOut } from '@/services/smartopsApi';
 
@@ -101,17 +101,13 @@ export default function CustomerProfileScreen() {
     const assignment = data?.assigned_to.assignment ?? null;
 
     return (
-        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View style={[styles.topBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
-                <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
-                    <Ionicons name="arrow-back" size={22} color={colors.text} />
-                </Pressable>
-                <Text style={[styles.topBarTitle, { color: colors.text }]} numberOfLines={1}>
-                    {displayName}
-                </Text>
-            </View>
+            <ScreenHeader
+                title={displayName}
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+            />
 
             {loading ? (
                 <View style={styles.centered}>
@@ -276,7 +272,7 @@ export default function CustomerProfileScreen() {
                     </Pressable>
                 </ScrollView>
             )}
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -370,19 +366,6 @@ function ActivityCard({
 }
 
 const styles = StyleSheet.create({
-    topBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-        paddingHorizontal: 18,
-        paddingVertical: 14,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    topBarTitle: {
-        flex: 1,
-        fontSize: 16,
-        fontWeight: '800',
-    },
     centered: {
         flex: 1,
         alignItems: 'center',
@@ -405,7 +388,7 @@ const styles = StyleSheet.create({
     avatar: {
         width: 54,
         height: 54,
-        borderRadius: 16,
+        borderRadius: Radius.md,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -438,9 +421,9 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     card: {
-        borderRadius: 16,
-        borderWidth: StyleSheet.hairlineWidth,
-        padding: 15,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        padding: 16,
     },
     mutedText: {
         fontSize: 13,
@@ -476,8 +459,8 @@ const styles = StyleSheet.create({
     statCard: {
         flex: 1,
         gap: 3,
-        borderRadius: 16,
-        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
         paddingVertical: 13,
         paddingHorizontal: 11,
     },
@@ -555,7 +538,7 @@ const styles = StyleSheet.create({
     },
     askButton: {
         marginTop: 6,
-        borderRadius: 14,
+        borderRadius: Radius.md,
         paddingVertical: 15,
         flexDirection: 'row',
         alignItems: 'center',
