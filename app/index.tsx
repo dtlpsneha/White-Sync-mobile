@@ -18,11 +18,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect } from 'react';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Colors, Gradients, Radius, Shadow } from '@/constants/theme';
 import Animated, { FadeInUp, FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useResponsive } from '../hooks/useResponsive';
 import { apiGet, apiPost } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
+import { registerPushTokenForCurrentUser } from '@/hooks/usePushNotifications';
+import { ensureDevicePermissions } from '../services/DevicePermissions';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -121,6 +124,11 @@ export default function LoginScreen() {
                     console.error('[Login] Profile fetch error:', pe);
                 }
 
+                // Bind this device's push token to the user who just logged in, so a
+                // user switch doesn't leave the server with a stale token.
+                await registerPushTokenForCurrentUser();
+                await ensureDevicePermissions();
+
                 Alert.alert('Success', `Welcome, ${data.full_name || 'User'}!`);
                 router.replace('/home');
             } else {
@@ -144,6 +152,7 @@ export default function LoginScreen() {
     };
 
     return (
+        <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}
@@ -151,7 +160,7 @@ export default function LoginScreen() {
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                 <View style={styles.inner}>
                     <Stack.Screen options={{ headerShown: false }} />
-                    <StatusBar style="dark" />
+                    <StatusBar style="light" />
 
                     <Animated.View entering={FadeInUp.duration(1000).springify()} style={styles.headerContainer}>
                         <Image source={require('../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
@@ -166,11 +175,11 @@ export default function LoginScreen() {
                         <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.inputWrapper}>
                             <Text style={styles.inputLabel}>Email Address</Text>
                             <View style={styles.inputContainer}>
-                                <Ionicons name="mail-outline" size={20} color="#90A4AE" style={styles.inputIcon} />
+                                <Ionicons name="mail-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
                                 <TextInput
                                     style={styles.input}
                                     placeholder="yourname@email.com"
-                                    placeholderTextColor="#B0BEC5"
+                                    placeholderTextColor={colors.placeholder}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     value={email}
@@ -182,11 +191,11 @@ export default function LoginScreen() {
                         <Animated.View entering={FadeInDown.delay(700).springify()} style={styles.inputWrapper}>
                             <Text style={styles.inputLabel}>Password</Text>
                             <View style={styles.inputContainer}>
-                                <Ionicons name="lock-closed-outline" size={20} color="#90A4AE" style={styles.inputIcon} />
+                                <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} style={styles.inputIcon} />
                                 <TextInput
                                     style={styles.input}
                                     placeholder="••••••••"
-                                    placeholderTextColor="#B0BEC5"
+                                    placeholderTextColor={colors.placeholder}
                                     secureTextEntry={!showPassword}
                                     value={password}
                                     onChangeText={setPassword}
@@ -195,7 +204,7 @@ export default function LoginScreen() {
                                     <Ionicons
                                         name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                                         size={20}
-                                        color="#90A4AE"
+                                        color={colors.textSecondary}
                                     />
                                 </TouchableOpacity>
                             </View>
@@ -224,16 +233,15 @@ export default function LoginScreen() {
                 </View>
             </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
+        </LinearGradient>
     );
 }
 
 function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
-    const isDark = theme === 'dark';
     const colors = Colors[theme];
     return StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: colors.background,
         },
         inner: {
             flex: 1,
@@ -241,7 +249,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             padding: 24,
         },
         headerContainer: {
-            marginBottom: 32,
+            marginBottom: 28,
             alignItems: 'center',
         },
         logo: {
@@ -249,12 +257,13 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             height: ms(80),
             marginBottom: vs(16),
             borderRadius: ms(20),
+            backgroundColor: '#FFFFFF',
         },
 
         appName: {
             fontSize: ms(32),
             fontWeight: '900',
-            color: colors.primary,
+            color: '#FFFFFF',
             letterSpacing: -0.5,
             marginBottom: vs(8),
         },
@@ -264,16 +273,22 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         welcomeText: {
             fontSize: ms(22),
             fontWeight: '700',
-            color: colors.text,
+            color: '#FFFFFF',
             marginBottom: vs(4),
         },
         subText: {
             fontSize: ms(15),
-            color: colors.textSecondary,
+            color: 'rgba(255,255,255,0.8)',
             fontWeight: '500',
         },
         formContainer: {
             width: '100%',
+            backgroundColor: colors.surface,
+            borderRadius: Radius.xl,
+            borderWidth: 1,
+            borderColor: colors.border,
+            padding: 22,
+            ...Shadow.raised(theme),
         },
         inputWrapper: {
             marginBottom: 20,
@@ -288,17 +303,12 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         inputContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: isDark ? colors.surface : '#FFF',
-            borderRadius: ms(18),
+            backgroundColor: colors.surfaceSecondary,
+            borderRadius: Radius.md,
             paddingHorizontal: s(16),
-            height: vs(58),
-            borderWidth: 1.5,
-            borderColor: isDark ? colors.surfaceSecondary : '#F0F4F8',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: vs(4) },
-            shadowOpacity: isDark ? 0.3 : 0.02,
-            shadowRadius: ms(10),
-            elevation: 2,
+            height: vs(56),
+            borderWidth: 1,
+            borderColor: colors.border,
         },
         inputIcon: {
             marginRight: 12,
@@ -311,7 +321,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
         forgotPassword: {
             alignSelf: 'flex-end',
-            marginBottom: 32,
+            marginBottom: 24,
         },
         forgotPasswordText: {
             fontSize: 14,
@@ -320,12 +330,12 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
         loginButton: {
             backgroundColor: colors.primary,
-            borderRadius: ms(18),
-            height: vs(58),
+            borderRadius: Radius.md,
+            height: vs(56),
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: vs(32),
+            marginBottom: vs(24),
             shadowColor: colors.primary,
             shadowOffset: { width: 0, height: vs(8) },
             shadowOpacity: 0.3,
@@ -353,7 +363,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
         signupLink: {
             fontSize: 14,
-            color: colors.success,
+            color: colors.primary,
             fontWeight: '800',
         },
     });

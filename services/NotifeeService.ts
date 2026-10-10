@@ -5,6 +5,7 @@
 // there instead of crashing the whole tree — persistent notifications are
 // simply unavailable until a real dev-client/standalone build is installed.
 let notifeeModule: typeof import('@notifee/react-native') | null | undefined;
+let initialNotificationHandled = false;
 
 function getNotifee() {
     if (notifeeModule !== undefined) return notifeeModule;
@@ -19,6 +20,19 @@ function getNotifee() {
 }
 
 export const notifeeService = {
+    async requestPermission() {
+        const mod = getNotifee();
+        if (!mod) return false;
+        try {
+            const permission = await mod.default.requestPermission();
+            console.log('[NotifeeService] Permission result:', permission);
+            return permission.granted;
+        } catch (error) {
+            console.error('[NotifeeService] Failed to request permission:', error);
+            return false;
+        }
+    },
+
     async setupChannels() {
         const mod = getNotifee();
         if (!mod) return;
@@ -106,13 +120,27 @@ export const notifeeService = {
         }
     },
 
+    async getInitialQuotationId(): Promise<string | undefined> {
+        const mod = getNotifee();
+        if (!mod || initialNotificationHandled) return undefined;
+        initialNotificationHandled = true;
+        try {
+            const initial = await mod.default.getInitialNotification();
+            return initial?.notification?.data?.id as string | undefined;
+        } catch (e) {
+            console.error('[NotifeeService] getInitialNotification failed:', e);
+            return undefined;
+        }
+    },
+
     async setupNotificationHandlers(onViewPress: (quotationId: string) => void) {
         const mod = getNotifee();
         if (!mod) return;
 
         mod.default.onForegroundEvent(({ type, detail }) => {
             console.log('[NotifeeService] Foreground event:', type, detail);
-            if (detail.pressAction?.id === 'view') {
+            const isPress = type === mod.EventType.PRESS || (type === mod.EventType.ACTION_PRESS && detail.pressAction?.id === 'view');
+            if (isPress) {
                 const quotationId = detail.notification?.data?.id as string | undefined;
                 if (quotationId) {
                     onViewPress(quotationId);

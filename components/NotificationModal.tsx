@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications } from '@/context/NotificationsContext';
 
@@ -37,7 +37,7 @@ export const NotificationModal = () => {
     return (
         <Modal visible={!!latestUnread} transparent animationType="fade">
             <View style={styles.overlay} pointerEvents="box-none">
-                <View style={[styles.card, { backgroundColor: colors.surface }]} pointerEvents="auto">
+                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.raised(theme)]} pointerEvents="auto">
                     <View style={[styles.iconBox, { backgroundColor: colors.primary }]}>
                         <Ionicons name="notifications" size={32} color="#FFF" />
                     </View>
@@ -80,19 +80,15 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     card: {
-        borderRadius: 20,
+        borderRadius: Radius.xl,
+        borderWidth: 1,
         padding: 24,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10,
     },
     iconBox: {
         width: 60,
         height: 60,
-        borderRadius: 12,
+        borderRadius: Radius.md,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -117,7 +113,7 @@ const styles = StyleSheet.create({
     button: {
         flex: 1,
         paddingVertical: 12,
-        borderRadius: 10,
+        borderRadius: Radius.md,
         justifyContent: 'center',
         alignItems: 'center',
     },

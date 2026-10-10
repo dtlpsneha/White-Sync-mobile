@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useNotifications } from '@/context/NotificationsContext';
 import { useRouter } from 'expo-router';
 import { notifeeService } from '@/services/NotifeeService';
+import { FloatingNotifications } from '@/modules/floating-notifications';
 
 export const NotificationPopup = () => {
     const { notifications, markAsRead } = useNotifications();
@@ -11,13 +12,15 @@ export const NotificationPopup = () => {
     useEffect(() => {
         // Setup Notifee notification handlers for persistent popups
         notifeeService.setupChannels();
-        notifeeService.setupNotificationHandlers((quotationId) => {
+        const openQuotation = (quotationId: string) => {
             markAsRead(quotationId);
             router.push({
                 pathname: '/quotations/[id]',
                 params: { id: quotationId }
             });
-        });
+        };
+        notifeeService.setupNotificationHandlers(openQuotation);
+        notifeeService.getInitialQuotationId().then(id => { if (id) openQuotation(id); });
 
         // When notification arrives, display as persistent popup via Notifee
         const listener = Notifications.addNotificationReceivedListener((notification) => {
@@ -29,6 +32,7 @@ export const NotificationPopup = () => {
 
             console.log('[NotificationPopup] Received notification, displaying persistently');
             notifeeService.displayPersistentNotification(title, body, data, quotationId);
+            FloatingNotifications.showOverlay(title, body, quotationId ?? null);
         });
 
         return () => listener.remove();

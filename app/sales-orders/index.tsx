@@ -3,11 +3,11 @@ import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, Scrol
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { StatusBar } from 'expo-status-bar';
 import SalesOrderList from '@/components/SalesOrderList';
 import { apiPost } from '@/utils/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { apiUrl } from '@/constants/config';
 
@@ -17,7 +17,6 @@ export default function SalesOrderScreen() {
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const isDark = theme === 'dark';
     const { s, vs, ms } = useResponsive();
     const styles = getStyles(theme, { s, vs, ms });
 
@@ -71,57 +70,49 @@ export default function SalesOrderScreen() {
 
     return (
         <View style={styles.container}>
-            <StatusBar style="dark" />
-
-            <View style={styles.header}>
-                <View style={styles.headerTopRow}>
-                    <TouchableOpacity onPress={() => router.replace('/home')} style={styles.circularButton}>
-                        <Ionicons name="chevron-back" size={24} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Customer Purchase Order</Text>
-                    <TouchableOpacity style={styles.circularButton}>
-                        <Ionicons name="options-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
+            <ScreenHeader
+                title="Customer Purchase Order"
+                onBack={() => router.replace('/home')}
+            >
+                <View style={styles.searchInner}>
+                    <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search orders..."
+                        placeholderTextColor={colors.placeholder}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                    {searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchQuery('')}>
+                            <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
-                <View style={styles.searchContainer}>
-                    <View style={styles.searchInner}>
-                        <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Search orders..."
-                            placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : '#94A3B8'}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                        />
-                        {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
-
-                <View style={styles.filterBarContainer}>
-                    <RNScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.filterScrollContent}
-                    >
-                        {workflowStates.map((item) => (
+                <RNScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterScrollContent}
+                    style={styles.filterBarContainer}
+                >
+                    {workflowStates.map((item) => {
+                        const isActive = filter === item;
+                        return (
                             <TouchableOpacity
                                 key={item}
-                                style={[styles.filterPill, filter === item && styles.filterPillActive]}
+                                style={[styles.filterPill, isActive && styles.filterPillActive]}
                                 onPress={() => setFilter(item)}
+                                activeOpacity={0.85}
                             >
-                                <Text style={[styles.filterText, filter === item && styles.filterTextActive]}>
+                                <Text style={[styles.filterText, isActive && { color: colors.primary, fontWeight: '800' }]}>
                                     {item}
                                 </Text>
                             </TouchableOpacity>
-                        ))}
-                    </RNScrollView>
-                </View>
-            </View>
+                        );
+                    })}
+                </RNScrollView>
+            </ScreenHeader>
 
             <View style={styles.listContainer}>
                 <SalesOrderList filter={filter} searchQuery={searchQuery} scrollEnabled={true} />
@@ -133,58 +124,42 @@ export default function SalesOrderScreen() {
                 activeOpacity={0.8}
                 onPress={() => router.push('/sales-orders/create' as any)}
             >
-                <Ionicons name="add" size={32} color="#FFF" />
+                <Ionicons name="add" size={32} color={colors.onPrimary} />
             </TouchableOpacity>
         </View>
     );
 }
 
 function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
-    const isDark = theme === 'dark';
     const colors = Colors[theme];
     return StyleSheet.create({
-        container: { flex: 1, backgroundColor: isDark ? colors.background : '#F8FAFC' },
-        header: {
-            backgroundColor: colors.surface,
-            paddingTop: vs(60),
-            borderBottomLeftRadius: 32,
-            borderBottomRightRadius: 32,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: isDark ? 0.3 : 0.05,
-            shadowRadius: 20,
-            elevation: 10,
-            zIndex: 100,
-        },
-        headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 24 },
-        circularButton: {
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9',
-            justifyContent: 'center',
+        container: { flex: 1, backgroundColor: colors.background },
+        searchInner: {
+            flexDirection: 'row',
             alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 5,
-            elevation: 2,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            height: 50,
+            paddingHorizontal: 14,
         },
-        headerTitle: { fontSize: ms(22), fontWeight: '900', color: colors.text, letterSpacing: -0.5 },
-        searchContainer: { paddingHorizontal: 20, marginBottom: 16 },
-        searchInner: { flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9', borderRadius: 20, height: 56, paddingHorizontal: 16, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'transparent' },
-        searchIcon: { marginRight: 12 },
-        searchInput: { flex: 1, fontSize: 16, fontWeight: '600', color: colors.text },
-        filterBarContainer: { paddingVertical: 16 },
-        filterScrollContent: { paddingHorizontal: 20, gap: 12 },
-        filterPill: { paddingVertical: 12, paddingHorizontal: 22, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9', borderWidth: 1, borderColor: colors.border },
-        filterPillActive: { backgroundColor: colors.primary, borderColor: colors.primary, shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-        filterText: { color: colors.textSecondary, fontWeight: '700', fontSize: 14 },
-        filterTextActive: { color: '#FFF', fontWeight: '800' },
+        searchIcon: { marginRight: 10 },
+        searchInput: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+        filterBarContainer: { marginTop: 14, marginHorizontal: -16 },
+        filterScrollContent: { paddingHorizontal: 16, gap: 10 },
+        filterPill: {
+            paddingVertical: 9,
+            paddingHorizontal: 18,
+            borderRadius: 999,
+            backgroundColor: 'rgba(255,255,255,0.18)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.3)',
+        },
+        filterPillActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+        filterText: { color: 'rgba(255,255,255,0.92)', fontWeight: '700', fontSize: 13 },
         listContainer: { flex: 1 },
         fab: {
             position: 'absolute',
-            bottom: vs(160),
+            bottom: vs(70),
             right: 24,
             width: 64,
             height: 64,

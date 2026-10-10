@@ -1,16 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { DailySummaryRow, brandLabel, getDailySummary } from '@/services/dailySalesReportApi';
-
-const NAVY = '#0E1E3B';
-const DANGER = '#DC3545';
 
 type DisplayUnit = 'absolute' | 'lacs';
 
@@ -45,39 +42,38 @@ export default function BrandDetailScreen() {
     const [row, setRow] = useState<DailySummaryRow | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            const res = await getDailySummary({
-                fiscalYear: params.fiscalYear,
-                month: params.month,
-                date: params.date,
-                salesExecutive: params.salesExecutive,
-            });
-            if (res.ok) {
-                const match = res.data.rows.find(r => r.brand === params.brand) || null;
-                setRow(match);
-            }
-            setLoading(false);
-        })();
-    }, [params.brand, params.fiscalYear, params.month, params.date, params.salesExecutive]);
+    const loadRow = async () => {
+        setLoading(true);
+        const res = await getDailySummary({
+            fiscalYear: params.fiscalYear,
+            month: params.month,
+            date: params.date,
+            salesExecutive: params.salesExecutive,
+        });
+        if (res.ok) {
+            const match = res.data.rows.find(r => r.brand === params.brand) || null;
+            setRow(match);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => { loadRow(); }, [params.brand, params.fiscalYear, params.month, params.date, params.salesExecutive]);
+
+    const loadRowRef = useRef(loadRow);
+    loadRowRef.current = loadRow;
+    useFocusEffect(useCallback(() => { loadRowRef.current(); }, []));
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <SafeAreaView style={{ backgroundColor: colors.surface }} edges={['top']}>
-                <View style={[styles.topbar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}>
-                        <Ionicons name="chevron-back" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={[styles.topbarTitle, { color: colors.text }]}>{brandLabel(params.brand || '').toUpperCase()}</Text>
-                    <View style={{ width: 30 }} />
-                </View>
-            </SafeAreaView>
+            <ScreenHeader
+                title={brandLabel(params.brand || '').toUpperCase()}
+                onBack={() => router.canGoBack() ? router.back() : router.replace('/home')}
+            />
 
             {loading ? (
-                <ActivityIndicator size="large" color={NAVY} style={{ marginTop: 60 }} />
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 60 }} />
             ) : !row ? (
                 <View style={styles.emptyState}>
                     <Ionicons name="alert-circle-outline" size={40} color={colors.textSecondary} />
@@ -85,32 +81,32 @@ export default function BrandDetailScreen() {
                 </View>
             ) : (
                 <ScrollView contentContainerStyle={styles.scrollContent}>
-                    <View style={[styles.statCard, { backgroundColor: 'rgba(220,53,69,0.10)', borderColor: 'transparent' }]}>
+                    <View style={[styles.statCard, { backgroundColor: colors.danger + '1A', borderColor: colors.danger + '33' }]}>
                         <View style={styles.statTop}>
-                            <Text style={[styles.statLabel, { color: '#7A2020' }]}>Payment Pending</Text>
-                            <View style={[styles.statIconCircle, { backgroundColor: 'rgba(220,53,69,0.16)' }]}>
-                                <Ionicons name="warning-outline" size={15} color={DANGER} />
+                            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Payment Pending</Text>
+                            <View style={[styles.statIconCircle, { backgroundColor: colors.danger + '29' }]}>
+                                <Ionicons name="warning-outline" size={15} color={colors.danger} />
                             </View>
                         </View>
-                        <Text style={[styles.statValue, { color: DANGER }]}>₹{formatAmount(row.payment_pending, display)}{unitSuffix}</Text>
-                        <Text style={[styles.statCaption, { color: '#7A2020' }]}>Requires immediate attention</Text>
+                        <Text style={[styles.statValue, { color: colors.danger }]}>₹{formatAmount(row.payment_pending, display)}{unitSuffix}</Text>
+                        <Text style={[styles.statCaption, { color: colors.textSecondary }]}>Requires immediate attention</Text>
                     </View>
 
-                    <View style={[styles.sectionHeader, { backgroundColor: colors.surfaceSecondary }]}>
-                        <Ionicons name="bar-chart-outline" size={15} color={colors.text} />
+                    <View style={[styles.sectionHeader, { backgroundColor: colors.primarySoft }]}>
+                        <Ionicons name="bar-chart-outline" size={15} color={colors.primary} />
                         <Text style={[styles.sectionHeaderText, { color: colors.text }]}>Sales Breakdown</Text>
                     </View>
-                    <View style={[styles.breakdownList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={[styles.breakdownList, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <BreakdownRow label="As On Date" caption="Today's figures" value={`₹${formatAmount(row.sales_as_on, display)}${unitSuffix}`} colors={colors} styles={styles} />
                         <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.sales_mtd, display)}${unitSuffix}`} alt colors={colors} styles={styles} />
                         <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.sales_fytd, display)}${unitSuffix}`} colors={colors} styles={styles} />
                     </View>
 
-                    <View style={[styles.sectionHeader, { backgroundColor: colors.surfaceSecondary }]}>
-                        <Ionicons name="wallet-outline" size={15} color={colors.text} />
+                    <View style={[styles.sectionHeader, { backgroundColor: colors.primarySoft }]}>
+                        <Ionicons name="wallet-outline" size={15} color={colors.primary} />
                         <Text style={[styles.sectionHeaderText, { color: colors.text }]}>Collection Breakdown</Text>
                     </View>
-                    <View style={[styles.breakdownList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={[styles.breakdownList, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <BreakdownRow label="As On Date" caption="Today's figures" value={`₹${formatAmount(row.collection_as_on, display)}${unitSuffix}`} colors={colors} styles={styles} />
                         <BreakdownRow label="Up to Date" caption="Current month" value={`₹${formatAmount(row.collection_mtd, display)}${unitSuffix}`} alt colors={colors} styles={styles} />
                         <BreakdownRow label="FY Up to Date" caption="Financial year" value={`₹${formatAmount(row.collection_fytd, display)}${unitSuffix}`} colors={colors} styles={styles} />
@@ -124,26 +120,23 @@ export default function BrandDetailScreen() {
 function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) => number; ms: (n: number) => number }) {
     return StyleSheet.create({
         container: { flex: 1 },
-        topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: s(16), paddingVertical: vs(14), borderBottomWidth: 1 },
-        backBtn: { width: 30, height: 30, justifyContent: 'center' },
-        topbarTitle: { fontSize: ms(16), fontWeight: '800', letterSpacing: 0.4 },
 
         emptyState: { alignItems: 'center', paddingTop: vs(80), gap: 12, paddingHorizontal: s(24) },
         emptyText: { fontSize: ms(13), fontWeight: '600', textAlign: 'center' },
 
         scrollContent: { padding: 18, paddingBottom: 40 },
 
-        statCard: { borderWidth: 1, borderRadius: ms(20), padding: ms(16), marginBottom: vs(12) },
+        statCard: { borderWidth: 1, borderRadius: Radius.lg, padding: ms(16), marginBottom: vs(12) },
         statTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
         statLabel: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
         statIconCircle: { width: ms(32), height: ms(32), borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
         statValue: { fontSize: ms(24), fontWeight: '800', marginTop: vs(12), marginBottom: 4 },
         statCaption: { fontSize: ms(12.5), fontWeight: '600' },
 
-        sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: ms(12), padding: ms(11), marginTop: vs(20) },
+        sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: Radius.md, padding: ms(11), marginTop: vs(20) },
         sectionHeaderText: { fontSize: ms(13.5), fontWeight: '800' },
 
-        breakdownList: { borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: ms(16), borderBottomRightRadius: ms(16), overflow: 'hidden' },
+        breakdownList: { borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: Radius.lg, borderBottomRightRadius: Radius.lg, overflow: 'hidden' },
         bRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: ms(14) },
         bRowLabel: { fontSize: ms(12.5), fontWeight: '800', letterSpacing: 0.3, marginBottom: 2 },
         bRowCaption: { fontSize: ms(11.5), fontWeight: '600' },

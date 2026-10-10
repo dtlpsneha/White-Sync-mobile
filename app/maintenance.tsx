@@ -1,14 +1,13 @@
 import MaintenanceList from '@/components/MaintenanceList';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, BackHandler, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiGet } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
 
@@ -61,7 +60,6 @@ export default function MaintenanceScreen() {
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const isDark = theme === 'dark';
     const { s, vs, ms } = useResponsive();
     const styles = getStyles({ s, vs, ms });
 
@@ -144,35 +142,29 @@ export default function MaintenanceScreen() {
     });
 
     const totalInteractions = currentMonthRecords.length;
-    const uniqueCustomers = new Set(records.map(v => v.customer_name)).size;
+    const uniqueCustomers = new Set(
+        records.map(v => v.customer_name || v.customer || v.new_customer).filter(Boolean)
+    ).size;
+
+    const followUps = records.filter(v => Number(v.follow_up_required) === 1).length;
+    const partial = records.filter(v => (v.completion_status || '').toLowerCase() === 'partially completed').length;
 
     const stats = [
-        { label: 'Total Customers', value: String(uniqueCustomers), trend: 'All Time', icon: 'people', gradient: ['#00BFA5', '#009688'] },
-        { label: 'Interactions', value: String(totalInteractions), trend: 'This Month', icon: 'chatbubbles', gradient: ['#10B981', '#059669'] },
+        { label: 'TOTAL CUSTOMERS', value: String(uniqueCustomers), note: 'All time', icon: 'people-outline', color: '#4F46E5' },
+        { label: 'INTERACTIONS', value: String(totalInteractions), note: 'This month', icon: 'chatbubbles-outline', color: '#10B981' },
+        { label: 'FOLLOW-UPS', value: String(followUps), note: 'Required', icon: 'notifications-outline', color: '#F59E0B' },
+        { label: 'PARTIALLY COMPLETED', value: String(partial), note: 'Visits', icon: 'hourglass-outline', color: '#EF4444' },
     ];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
-                <LinearGradient
-                    colors={isDark ? ['#0B3D91', '#01579B'] : ['#0288D1', '#01579B']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.headerGradient}
-                >
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={() => router.replace('/home')} style={styles.backBtn}>
-                            <Ionicons name="chevron-back" size={ms(20)} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <View>
-                            <Text style={styles.headerTitle}>Customer Visit</Text>
-                            <Text style={styles.headerSubtitle}>Relationship Management</Text>
-                        </View>
-                    </View>
-                </LinearGradient>
-            </SafeAreaView>
+            <ScreenHeader
+                title="Customer Visit"
+                subtitle="Relationship Management"
+                onBack={() => router.replace('/home')}
+            />
 
             <ScrollView
                 style={styles.scrollContent}
@@ -182,43 +174,21 @@ export default function MaintenanceScreen() {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                 }
             >
-                <View style={styles.statsContainer}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.statsScroll}
-                        decelerationRate="fast"
-                    >
-                        {stats.map((stat, index) => (
-                            <TouchableOpacity key={index} activeOpacity={0.9} style={styles.statWrapper}>
-                                <LinearGradient
-                                    colors={stat.gradient as any}
-                                    style={styles.statCard}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                >
-                                    <View style={styles.statHeader}>
-                                        <View style={styles.statIconBox}>
-                                            <Ionicons name={stat.icon as any} size={22} color="#FFF" />
-                                        </View>
-                                        <Ionicons name="stats-chart" size={12} color="rgba(255,255,255,0.4)" />
-                                    </View>
-                                    
-                                    <View style={styles.statBody}>
-                                        <Text style={styles.statValueText}>{stat.value}</Text>
-                                        <Text style={styles.statLabelText}>{stat.label}</Text>
-                                    </View>
-                                    
-                                    <View style={styles.statFooterRow}>
-                                        <View style={styles.statTrendBadge}>
-                                            <Text style={styles.statTrendText}>{stat.trend}</Text>
-                                        </View>
-                                        <Ionicons name="chevron-forward-circle" size={18} color="rgba(255,255,255,0.6)" />
-                                    </View>
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
+                <View style={styles.statGrid}>
+                    {stats.map((stat) => (
+                        <View
+                            key={stat.label}
+                            style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}
+                        >
+                            <View style={[styles.statAccent, { backgroundColor: stat.color }]} />
+                            <View style={styles.statTop}>
+                                <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1}>{stat.label}</Text>
+                                <Ionicons name={stat.icon as any} size={ms(20)} color={stat.color} />
+                            </View>
+                            <Text style={[styles.statValue, { color: stat.color }]} numberOfLines={1} adjustsFontSizeToFit>{stat.value}</Text>
+                            <Text style={[styles.statNote, { color: stat.color }]} numberOfLines={1}>{stat.note}</Text>
+                        </View>
+                    ))}
                 </View>
 
                 <View style={styles.section}>
@@ -246,14 +216,15 @@ export default function MaintenanceScreen() {
                 </View>
             </ScrollView>
 
-            {/* New Floating Action Button */}
-            <TouchableOpacity 
-                style={[styles.fab, { backgroundColor: '#00BFA5' }]} 
+            <TouchableOpacity
+                style={[styles.fab, { backgroundColor: colors.primary }, Shadow.raised(theme)]}
                 onPress={() => router.push('/maintenance/create')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                accessibilityLabel="Add Visit"
             >
                 <Ionicons name="add" size={32} color="#FFFFFF" />
             </TouchableOpacity>
+
         </View>
     );
 }
@@ -261,92 +232,45 @@ export default function MaintenanceScreen() {
 function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) => number; ms: (n: number) => number }) {
     return StyleSheet.create({
         container: { flex: 1 },
-        headerGradient: {
-            marginHorizontal: s(16),
-            marginTop: vs(16),
-            marginBottom: vs(18),
-            borderRadius: ms(24),
-            elevation: 6,
-            shadowColor: '#01579B',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.3,
-            shadowRadius: 16,
-        },
-        header: { flexDirection: 'row', alignItems: 'center', gap: s(12), padding: ms(18) },
-        backBtn: {
-            width: ms(36),
-            height: ms(36),
-            borderRadius: ms(18),
-            backgroundColor: 'rgba(255,255,255,0.18)',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.3)',
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-        headerTitle: { fontSize: ms(20), fontWeight: '900', letterSpacing: -0.5, color: '#FFFFFF' },
-        headerSubtitle: { fontSize: ms(11), fontWeight: '700', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.4, marginTop: vs(2), textTransform: 'uppercase' },
+        scrollContent: { flex: 1 },
+        scrollInner: { paddingTop: vs(8), paddingBottom: vs(120) },
         fab: {
             position: 'absolute',
-            bottom: vs(150),
+            bottom: vs(40),
             right: s(24),
             width: ms(60),
             height: ms(60),
             borderRadius: ms(30),
             justifyContent: 'center',
             alignItems: 'center',
-            shadowColor: '#00BFA5',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.4,
-            shadowRadius: 10,
-            elevation: 8,
             zIndex: 50,
         },
-        scrollContent: { flex: 1 },
-        scrollInner: { paddingTop: vs(20), paddingBottom: vs(110) },
-        statsContainer: { marginTop: vs(8) },
-        statsScroll: { paddingHorizontal: s(20), gap: s(14), paddingBottom: vs(12) },
-        statWrapper: { width: s(190), height: vs(170) },
-        statCard: {
-            flex: 1,
-            borderRadius: ms(28),
-            padding: ms(18),
+        statGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), gap: s(10), marginTop: vs(14) },
+        statTile: {
+            width: '48.4%',
+            borderRadius: Radius.lg,
+            borderWidth: 1,
+            paddingVertical: ms(14),
+            paddingRight: ms(14),
+            paddingLeft: ms(18),
+            overflow: 'hidden',
+            minHeight: ms(108),
             justifyContent: 'space-between',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: 0.2,
-            shadowRadius: 16,
-            elevation: 8
         },
-        statHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-        statIconBox: {
-            width: ms(40),
-            height: ms(40),
-            borderRadius: ms(14),
-            backgroundColor: 'rgba(255,255,255,0.25)',
-            justifyContent: 'center',
-            alignItems: 'center'
-        },
-        statBody: { gap: 2 },
-        statValueText: { fontSize: ms(30), fontWeight: '900', color: '#FFF', letterSpacing: -1 },
-        statLabelText: { fontSize: ms(12), fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.2 },
-        statFooterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: vs(8) },
-        statTrendBadge: {
-            backgroundColor: 'rgba(255,255,255,0.15)',
-            paddingHorizontal: s(10),
-            paddingVertical: vs(5),
-            borderRadius: ms(10)
-        },
-        statTrendText: { fontSize: ms(9.5), fontWeight: '900', color: '#FFF', textTransform: 'uppercase', opacity: 0.9 },
+        statAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
+        statTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: s(6) },
+        statLabel: { fontSize: ms(10), fontWeight: '800', letterSpacing: 0.7, flexShrink: 1 },
+        statValue: { fontSize: ms(28), fontWeight: '900', letterSpacing: -0.5 },
+        statNote: { fontSize: ms(11), fontWeight: '700' },
         section: { paddingHorizontal: s(20), marginTop: vs(22) },
         sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: s(10), marginBottom: vs(18) },
         sectionAccent: { width: 5, height: ms(18), borderRadius: 3 },
         sectionTitle: { fontSize: ms(16), fontWeight: '900', letterSpacing: -0.3 },
         loadingBox: { padding: ms(50), alignItems: 'center', gap: 12 },
         loadingText: { fontSize: ms(13), fontWeight: '600' },
-        errorBox: { padding: ms(32), alignItems: 'center', gap: 14, backgroundColor: 'rgba(255,0,0,0.02)', borderRadius: ms(20) },
+        errorBox: { padding: ms(32), alignItems: 'center', gap: 14, backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: Radius.lg },
         errorText: { fontSize: ms(13), color: '#EF4444', textAlign: 'center', fontWeight: '500' },
-        retryBtn: { paddingHorizontal: s(22), paddingVertical: vs(11), backgroundColor: '#EF4444', borderRadius: ms(12) },
+        retryBtn: { paddingHorizontal: s(22), paddingVertical: vs(11), backgroundColor: '#EF4444', borderRadius: Radius.md },
         retryText: { color: '#FFF', fontWeight: '700' }
     });
 }

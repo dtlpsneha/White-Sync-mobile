@@ -4,10 +4,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { StatusBar } from 'expo-status-bar';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { apiGet, apiPost, uploadFile } from '@/utils/api';
 import * as ImagePicker from 'expo-image-picker';
@@ -330,16 +330,15 @@ export default function CreateSalesOrderScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
             style={[styles.container, { backgroundColor: colors.background }]}
         >
-            <StatusBar style="dark" />
-            <View style={[styles.header, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/sales-orders')} style={styles.backButton}>
-                    <Ionicons name="close" size={28} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>{edit_id ? 'Edit Sales Order' : 'New Sales Order'}</Text>
-                <TouchableOpacity onPress={handleSave} disabled={isSaving}>
-                    {isSaving ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={[styles.saveText, { color: colors.primary }]}>{edit_id ? 'Update' : 'Save'}</Text>}
-                </TouchableOpacity>
-            </View>
+            <ScreenHeader
+                title={edit_id ? 'Edit Sales Order' : 'New Sales Order'}
+                onBack={() => router.canGoBack() ? router.back() : router.replace('/sales-orders')}
+                right={
+                    <TouchableOpacity onPress={handleSave} disabled={isSaving} style={styles.saveBtn}>
+                        {isSaving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveText}>{edit_id ? 'Update' : 'Save'}</Text>}
+                    </TouchableOpacity>
+                }
+            />
 
             {isLoadingData ? (
                 <View style={styles.center}>
@@ -357,7 +356,7 @@ export default function CreateSalesOrderScreen() {
                             <TextInput 
                                 style={[styles.input, { color: colors.text }]}
                                 placeholder="Search Customer..."
-                                placeholderTextColor={colors.textSecondary}
+                                placeholderTextColor={colors.placeholder}
                                 value={form.customer_name}
                                 onChangeText={(t) => {
                                     setForm(p => ({ ...p, customer: t, customer_name: t }));
@@ -414,7 +413,7 @@ export default function CreateSalesOrderScreen() {
                             <Text style={styles.label}>Attachment</Text>
                             {form.attach ? (
                                 <TouchableOpacity onPress={() => setForm(p => ({ ...p, attach: '' }))}>
-                                    <Text style={{ color: '#EF5350', fontSize: 12, fontWeight: '800' }}>REMOVE</Text>
+                                    <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '800' }}>REMOVE</Text>
                                 </TouchableOpacity>
                             ) : null}
                         </View>
@@ -449,7 +448,7 @@ export default function CreateSalesOrderScreen() {
                     <Animated.View entering={FadeInUp.delay(200).springify()} style={styles.itemsSection}>
                         <View style={styles.sectionHeader}>
                             <Text style={[styles.sectionTitle, { color: colors.text }]}>Items</Text>
-                            <TouchableOpacity onPress={addItemRow} style={[styles.addBtn, { backgroundColor: colors.primary + '15' }]}>
+                            <TouchableOpacity onPress={addItemRow} style={[styles.addBtn, { backgroundColor: colors.primarySoft }]}>
                                 <Ionicons name="add" size={20} color={colors.primary} />
                                 <Text style={[styles.addBtnText, { color: colors.primary }]}>Add Item</Text>
                             </TouchableOpacity>
@@ -460,14 +459,14 @@ export default function CreateSalesOrderScreen() {
                                 <View style={styles.itemRowHeader}>
                                     <Text style={[styles.itemIdx, { color: colors.textSecondary }]}>#{idx + 1}</Text>
                                     <TouchableOpacity onPress={() => removeItemRow(idx)}>
-                                        <Ionicons name="trash-outline" size={20} color="#EF5350" />
+                                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
                                     </TouchableOpacity>
                                 </View>
 
                                 <TextInput 
                                     style={[styles.itemInput, { color: colors.text }]} 
                                     placeholder="Item Code"
-                                    placeholderTextColor={colors.textSecondary}
+                                    placeholderTextColor={colors.placeholder}
                                     value={item.item_code}
                                     onChangeText={(t) => {
                                         updateItem(idx, 'item_code', t);
@@ -499,7 +498,7 @@ export default function CreateSalesOrderScreen() {
                                 <TextInput 
                                     style={[styles.itemInput, { color: colors.text }]} 
                                     placeholder="Warehouse"
-                                    placeholderTextColor={colors.textSecondary}
+                                    placeholderTextColor={colors.placeholder}
                                     value={item.warehouse}
                                     onChangeText={(t) => {
                                         updateItem(idx, 'warehouse', t);
@@ -575,27 +574,25 @@ const getStyles = (theme: 'light' | 'dark') => {
     return StyleSheet.create({
         container: { flex: 1 },
         center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-        header: { height: 100, paddingTop: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: c.border },
-        headerTitle: { fontSize: 18, fontWeight: '900' },
-        backButton: { width: 44, height: 44, justifyContent: 'center' },
-        saveText: { fontWeight: '900', fontSize: 16 },
+        saveBtn: { minWidth: 44, height: 40, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+        saveText: { fontWeight: '900', fontSize: 14, color: '#FFF' },
         scrollContent: { padding: 20 },
-        card: { padding: 20, borderRadius: 24, marginBottom: 20, elevation: 2 },
+        card: { padding: 20, borderRadius: Radius.lg, marginBottom: 20, borderWidth: 1, borderColor: c.border, ...Shadow.card(theme) },
         label: { fontSize: 12, fontWeight: '800', color: c.textSecondary, marginBottom: 8, textTransform: 'uppercase' },
         searchBox: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border, paddingBottom: 8 },
         input: { flex: 1, fontSize: 16, fontWeight: '700', color: c.text },
-        resultsContainer: { marginTop: 12, backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 8 },
+        resultsContainer: { marginTop: 12, backgroundColor: c.surfaceSecondary, borderRadius: Radius.md, padding: 8 },
         resultItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border },
         itemsSection: { marginBottom: 20 },
         sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
         sectionTitle: { fontSize: 20, fontWeight: '900' },
-        addBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
+        addBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.md },
         addBtnText: { fontWeight: '800', marginLeft: 4, fontSize: 14 },
-        itemCard: { padding: 16, borderRadius: 20, marginBottom: 16, elevation: 2 },
+        itemCard: { padding: 16, borderRadius: Radius.lg, marginBottom: 16, borderWidth: 1, borderColor: c.border, ...Shadow.card(theme) },
         itemRowHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
         itemIdx: { fontSize: 12, fontWeight: '900' },
         itemInput: { fontSize: 15, fontWeight: '800', borderBottomWidth: 1, borderBottomColor: c.border, marginBottom: 12, color: c.text },
-        itemResults: { backgroundColor: c.surfaceSecondary, borderRadius: 12, marginBottom: 12 },
+        itemResults: { backgroundColor: c.surfaceSecondary, borderRadius: Radius.md, marginBottom: 12 },
         qtyRateRow: { flexDirection: 'row', alignItems: 'flex-end' },
         subLabel: { fontSize: 10, fontWeight: '700', color: c.textSecondary, marginBottom: 4 },
         miniInput: { borderBottomWidth: 1, borderBottomColor: c.border, fontSize: 15, fontWeight: '800', paddingBottom: 4, color: c.text },
@@ -604,9 +601,9 @@ const getStyles = (theme: 'light' | 'dark') => {
         totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
         totalLabel: { fontSize: 16, fontWeight: '800' },
         totalValue: { fontSize: 26, fontWeight: '900' },
-        imagePreviewContainer: { marginTop: 10, borderRadius: 16, overflow: 'hidden', height: 180, backgroundColor: c.surfaceSecondary },
+        imagePreviewContainer: { marginTop: 10, borderRadius: Radius.md, overflow: 'hidden', height: 180, backgroundColor: c.surfaceSecondary },
         imagePreview: { width: '100%', height: '100%', resizeMode: 'cover' },
-        uploadBox: { height: 120, borderStyle: 'dashed', borderWidth: 2, borderColor: c.border, borderRadius: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surfaceSecondary, marginTop: 8 },
+        uploadBox: { height: 120, borderStyle: 'dashed', borderWidth: 2, borderColor: c.border, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surfaceSecondary, marginTop: 8 },
         uploadText: { marginTop: 8, fontSize: 13, fontWeight: '800' }
     });
 };

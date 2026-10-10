@@ -10,7 +10,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 
@@ -35,7 +35,7 @@ export function SectionHeader({
     return (
         <View style={[styles.row, { paddingHorizontal: s(16), marginBottom: vs(10) }]}>
             {icon ? (
-                <View style={[styles.iconWrap, { width: ms(34), height: ms(34), borderRadius: ms(12), backgroundColor: colors.primary + '18' }]}>
+                <View style={[styles.iconWrap, { width: ms(34), height: ms(34), borderRadius: Radius.md, backgroundColor: colors.primarySoft }]}>
                     <Ionicons name={icon} size={ms(17)} color={colors.primary} />
                 </View>
             ) : null}

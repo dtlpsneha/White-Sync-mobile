@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useResponsive } from '../hooks/useResponsive';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { apiPost } from '@/utils/api';
@@ -406,17 +406,13 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
         card: {
             backgroundColor: colors.surface,
-            borderRadius: 24,
-            marginBottom: 16,
-            shadowColor: colors.cardShadow,
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: isDark ? 0.3 : 0.04,
-            shadowRadius: 14,
-            elevation: 6,
-            borderWidth: isDark ? 1 : 0,
+            borderRadius: Radius.lg,
+            marginBottom: 14,
+            borderWidth: 1,
             borderColor: colors.border,
             flexDirection: 'row',
             overflow: 'hidden',
+            ...Shadow.card(theme),
         },
         statusAccent: {
             width: 5,
@@ -433,14 +429,14 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             marginBottom: 10,
         },
         idBadge: {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+            backgroundColor: colors.primarySoft,
             paddingHorizontal: 8,
             paddingVertical: 3,
             borderRadius: 6,
         },
         idText: {
             fontSize: 10,
-            color: colors.textSecondary,
+            color: colors.primary,
             fontWeight: '800',
             letterSpacing: 0.5,
         },

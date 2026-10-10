@@ -1,7 +1,7 @@
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -19,7 +19,7 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
     const pathname = usePathname();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
-    const isDark = theme === 'dark';
+    const colors = Colors[theme];
     const { ms } = useResponsive();
 
     const [expanded, setExpanded] = useState(false);
@@ -32,7 +32,7 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
     const navItems = useMemo(() => [
         { id: 'home', icon: 'home-outline', activeIcon: 'home', label: 'Home', route: '/home', color: '#3B82F6', mode: 'replace' as const },
         { id: 'quotes', icon: 'document-text-outline', activeIcon: 'document-text', label: 'Quotes', route: '/quotations', color: '#F59E0B', mode: 'replace' as const },
-        { id: 'orders', icon: 'cart-outline', activeIcon: 'cart', label: 'Sales Orders', route: '/sales-orders', color: '#00BFA5', mode: 'replace' as const },
+        { id: 'orders', icon: 'cart-outline', activeIcon: 'cart', label: 'Sales Orders', route: '/sales-orders', color: '#14B8A6', mode: 'replace' as const },
         { id: 'visits', icon: 'calendar-outline', activeIcon: 'calendar', label: 'Visits', route: '/maintenance', color: '#8B5CF6', mode: 'replace' as const },
         { id: 'calculator', icon: 'calculator-outline', activeIcon: 'calculator', label: 'Price Calculator', route: '/price-calculator', color: '#10B981', mode: 'push' as const },
         { id: 'invoiceHistory', icon: 'receipt-outline', activeIcon: 'receipt', label: 'Sales Invoice History', route: '/daily-sales-report/invoice-history', color: '#0891B2', mode: 'push' as const },
@@ -62,12 +62,12 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
                     styles.toggleButton,
                     onDark
                         ? { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.3)' }
-                        : { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'transparent' },
+                        : { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
                 ]}
                 onPress={() => setExpanded(true)}
                 activeOpacity={0.8}
             >
-                <Ionicons name="menu-outline" size={ms(20)} color={onDark ? '#FFF' : (isDark ? '#FFF' : '#263238')} />
+                <Ionicons name="menu-outline" size={ms(20)} color={onDark ? '#FFF' : colors.text} />
             </TouchableOpacity>
 
             <Modal visible={expanded} transparent animationType="none" onRequestClose={closeMenu}>
@@ -84,17 +84,12 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
                     style={[
                         styles.menu,
                         {
-                            backgroundColor: isDark ? '#15181d' : '#FFFFFF',
-                            borderColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)',
-                        }
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                        },
+                        Shadow.raised(theme)
                     ]}
                 >
-                    <LinearGradient
-                        colors={isDark
-                            ? ['rgba(255,255,255,0.04)', 'transparent']
-                            : ['rgba(255,255,255,0.6)', 'transparent']}
-                        style={StyleSheet.absoluteFill}
-                    />
                     {navItems.map((item) => {
                         const isActive = activeIndex === navItems.indexOf(item);
                         return (
@@ -111,7 +106,7 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
                                         color={item.color}
                                     />
                                 </View>
-                                <Animated.Text style={[styles.menuLabel, { color: isDark ? '#FFF' : '#263238', fontWeight: isActive ? '800' : '600' }]}>
+                                <Animated.Text style={[styles.menuLabel, { color: colors.text, fontWeight: isActive ? '800' : '600' }]}>
                                     {item.label}
                                 </Animated.Text>
                             </TouchableOpacity>
@@ -127,7 +122,7 @@ const styles = StyleSheet.create({
     toggleButton: {
         width: 40,
         height: 40,
-        borderRadius: 20,
+        borderRadius: Radius.md,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
@@ -137,21 +132,9 @@ const styles = StyleSheet.create({
         top: Platform.OS === 'android' ? 70 : 90,
         left: 20,
         width: 220,
-        borderRadius: 20,
+        borderRadius: Radius.lg,
         borderWidth: 1,
         paddingVertical: 8,
-        overflow: 'hidden',
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 12 },
-                shadowOpacity: 0.15,
-                shadowRadius: 20,
-            },
-            android: {
-                elevation: 12,
-            }
-        })
     },
     menuItem: {
         flexDirection: 'row',
@@ -163,7 +146,7 @@ const styles = StyleSheet.create({
     menuIconWrap: {
         width: 32,
         height: 32,
-        borderRadius: 12,
+        borderRadius: Radius.sm,
         alignItems: 'center',
         justifyContent: 'center',
     },

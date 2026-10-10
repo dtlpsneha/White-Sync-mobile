@@ -18,7 +18,7 @@ import Svg, { Circle, G } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { apiUrl } from '@/constants/config';
@@ -57,7 +57,7 @@ const DonutSegment = ({ center, radius, strokeWidth, color, percentage, rotation
 };
 
 const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: number[], colors: string[], centerText?: string, strokeWidth?: number }) => {
-    const isDark = useColorScheme() === 'dark';
+    const t = Colors[useColorScheme() ?? 'light'];
     const total = data.reduce((acc, val) => acc + val, 0);
     const radius = 70;
     const center = radius + strokeWidth;
@@ -81,14 +81,14 @@ const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: numb
                         cx={center}
                         cy={center}
                         r={radius}
-                        stroke={isDark ? '#334155' : '#E6E6E6'}
+                        stroke={t.border}
                         strokeWidth={strokeWidth}
                         fill="none"
                     />
                 </Svg>
                 <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ fontSize: ms(24), fontWeight: '900', color: isDark ? '#FFF' : '#263238' }}>0</Text>
-                    <Text style={{ fontSize: ms(10), color: isDark ? '#94A3B8' : '#78909C', fontWeight: '700', textTransform: 'uppercase' }}>Total</Text>
+                    <Text style={{ fontSize: ms(24), fontWeight: '900', color: t.text }}>0</Text>
+                    <Text style={{ fontSize: ms(10), color: t.textSecondary, fontWeight: '700', textTransform: 'uppercase' }}>Total</Text>
                 </View>
             </View>
         );
@@ -124,8 +124,8 @@ const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: numb
                 </G>
             </Svg>
             <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ fontSize: ms(28), fontWeight: '900', color: isDark ? '#FFF' : '#263238' }}>{centerText ?? total}</Text>
-                <Text style={{ fontSize: ms(10), color: isDark ? '#94A3B8' : '#78909C', fontWeight: '700', textTransform: 'uppercase' }}>Total Quotes</Text>
+                <Text style={{ fontSize: ms(28), fontWeight: '900', color: t.text }}>{centerText ?? total}</Text>
+                <Text style={{ fontSize: ms(10), color: t.textSecondary, fontWeight: '700', textTransform: 'uppercase' }}>Total Quotes</Text>
             </View>
         </View>
     );
@@ -334,8 +334,8 @@ export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (s
             </Animated.View>
 
             <Animated.View entering={FadeInUp.delay(600)} style={styles.metricsContainer}>
-                <View style={[styles.metricCard, { backgroundColor: '#E0F2F1', borderLeftColor: '#00BFA5', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#00BFA5' }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: '#00695C' }]}>{summaryStats.conversionRate}</Text></View></View>
-                <View style={[styles.metricCard, { backgroundColor: '#E1F5FE', borderLeftColor: '#0277BD', borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: '#0277BD' }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: '#01579B' }]}>{summaryStats.avgQuoteValue}</Text></View></View>
+                <View style={[styles.metricCard, { backgroundColor: colors.success + '1A', borderLeftColor: colors.success, borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: colors.success }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: colors.success }]}>{summaryStats.conversionRate}</Text></View></View>
+                <View style={[styles.metricCard, { backgroundColor: colors.primarySoft, borderLeftColor: colors.primary, borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: colors.primary }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: colors.primary }]}>{summaryStats.avgQuoteValue}</Text></View></View>
             </Animated.View>
         </View>
     );
@@ -345,7 +345,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
     const colors = Colors[theme];
     return StyleSheet.create({
         kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(16), gap: s(16) },
-        donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(24), elevation: 5 },
+        donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: Radius.lg, borderWidth: 1, borderColor: colors.border, padding: ms(24), ...Shadow.card(theme) },
         donutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: vs(24) },
         donutTitle: { fontSize: ms(20), fontWeight: '900', color: colors.text },
         donutSubtitle: { fontSize: ms(12), color: colors.textSecondary, marginTop: vs(2) },
@@ -356,8 +356,8 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         donutStatValue: { fontSize: ms(16), fontWeight: '900', color: colors.text },
         donutStatLabel: { fontSize: ms(10), color: colors.textSecondary, marginTop: vs(4), fontWeight: '700' },
         metricsContainer: { padding: s(16), gap: vs(12) },
-        metricCard: { flexDirection: 'row', alignItems: 'center', padding: ms(16), borderRadius: ms(24), gap: s(16) },
-        metricIcon: { width: ms(40), height: ms(40), borderRadius: ms(16), justifyContent: 'center', alignItems: 'center' },
+        metricCard: { flexDirection: 'row', alignItems: 'center', padding: ms(16), borderRadius: Radius.lg, gap: s(16) },
+        metricIcon: { width: ms(40), height: ms(40), borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center' },
         metricLabel: { fontSize: ms(12), color: colors.textSecondary, fontWeight: '700' },
         metricValue: { fontSize: ms(18), fontWeight: '900' },
         errorState: { alignItems: 'center', paddingVertical: vs(50), gap: 12, paddingHorizontal: s(24) },

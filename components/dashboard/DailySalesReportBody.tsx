@@ -12,10 +12,11 @@ import {
     View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
 import {
     DailySummary,
@@ -98,8 +99,6 @@ function formatAmount(value: number | undefined, display: DisplayUnit) {
     return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Brand-specific navy/red accent palette from the approved design canvas — kept constant across themes (a brand accent, not a neutral), while surfaces/text still follow the app's real light/dark tokens. */
-const NAVY = '#0E1E3B';
 
 /**
  * Exact colors/structure from the live ERPNext "Daily Sales Report" Client
@@ -113,7 +112,6 @@ const TABLE_PENDING_BG = '#9a5b0a';
 const TABLE_HEADER_TEXT = '#e8ecf5';
 const TABLE_SUBHEAD_TEXT = '#c7d0e6';
 const TABLE_TOTAL_BG = '#3730a3';
-const TABLE_STRIPE_BG = '#eef2fb';
 const TABLE_GROUP_BORDER = '#c7cede';
 
 /** The 7 scrollable numeric columns, in the website's own left-to-right order. */
@@ -159,7 +157,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
     const numCellStyle = { fontSize: ms(11.5), fontWeight: '600' as const, textAlign: 'right' as const };
 
     return (
-        <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: ms(12), overflow: 'hidden', marginHorizontal: s(18) }}>
+        <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: Radius.lg, overflow: 'hidden', marginHorizontal: s(18) }}>
             {/* Frozen "Name of Organisation" column */}
             <View style={{ width: FROZEN_WIDTH, borderRightWidth: 2, borderRightColor: TABLE_GROUP_BORDER }}>
                 <View style={{ height: HEADER_TOTAL_H, backgroundColor: '#312e81', justifyContent: 'center', paddingHorizontal: s(8) }}>
@@ -172,7 +170,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                             key={row.brand}
                             style={{
                                 height: BODY_ROW_H, justifyContent: 'center', paddingHorizontal: s(8),
-                                backgroundColor: idx % 2 === 1 ? TABLE_STRIPE_BG : colors.surface,
+                                backgroundColor: idx % 2 === 1 ? colors.surfaceSecondary : colors.surface,
                             }}
                         >
                             <Text
@@ -224,7 +222,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
 
                     {rows.map((row, idx) => {
                         const isUnassigned = row.brand === 'Unassigned';
-                        const rowBg = idx % 2 === 1 ? TABLE_STRIPE_BG : colors.surface;
+                        const rowBg = idx % 2 === 1 ? colors.surfaceSecondary : colors.surface;
                         return (
                             <View key={row.brand} style={{ flexDirection: 'row', height: BODY_ROW_H, backgroundColor: rowBg }}>
                                 {TABLE_NUM_COLS.map((col, i) => (
@@ -388,6 +386,10 @@ export function DailySalesReportBody() {
         setLoading(false);
     };
 
+    const reloadOnFocusRef = useRef<() => void>(() => {});
+    reloadOnFocusRef.current = () => { if (ready) fetchSummary(); };
+    useFocusEffect(React.useCallback(() => { reloadOnFocusRef.current(); }, []));
+
     const openFiltersSheet = () => {
         setDraftFiscalYear(fiscalYear);
         setDraftMonthOptions(monthOptions);
@@ -484,14 +486,14 @@ export function DailySalesReportBody() {
                     <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Date</Text>
                     <Text style={[styles.dateValue, { color: colors.text }]}>{month === 'All' ? 'FY To Date' : ddmmyy(date)}</Text>
                 </View>
-                <TouchableOpacity style={[styles.filtersBtn, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={openFiltersSheet}>
+                <TouchableOpacity style={[styles.filtersBtn, Shadow.card(theme), { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={openFiltersSheet}>
                     <Ionicons name="options-outline" size={15} color={colors.text} />
                     <Text style={[styles.filtersBtnText, { color: colors.text }]}>Filters</Text>
                 </TouchableOpacity>
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={{ gap: 8, paddingRight: s(18) }}>
-                <TouchableOpacity style={[styles.chip, { backgroundColor: NAVY }]} onPress={openFiltersSheet}>
+                <TouchableOpacity style={[styles.chip, { backgroundColor: colors.primary }]} onPress={openFiltersSheet}>
                     <Text style={styles.chipTextActive}>FY {fiscalYear}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.chip, { backgroundColor: colors.surfaceSecondary }]} onPress={openFiltersSheet}>
@@ -514,7 +516,7 @@ export function DailySalesReportBody() {
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Executive Summary</Text>
 
             {loading && !summary ? (
-                <ActivityIndicator size="large" color={NAVY} style={{ marginTop: 40 }} />
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
             ) : fetchError ? (
                 <View style={styles.emptyState}>
                     <Ionicons name="cloud-offline-outline" size={40} color={colors.textSecondary} />
@@ -527,12 +529,12 @@ export function DailySalesReportBody() {
             ) : (
                 <>
                     <View style={styles.searchRow}>
-                        <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <View style={[styles.searchBox, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                             <Ionicons name="search" size={16} color={colors.textSecondary} />
                             <TextInput
                                 style={[styles.searchInput, { color: colors.text }]}
                                 placeholder="Search organisation"
-                                placeholderTextColor={colors.textSecondary}
+                                placeholderTextColor={colors.placeholder}
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}
                             />
@@ -624,7 +626,7 @@ export function DailySalesReportBody() {
                             </View>
                         </View>
 
-                        <TouchableOpacity style={[styles.applyBtn, { backgroundColor: NAVY }]} onPress={applyFilters}>
+                        <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={applyFilters}>
                             <Text style={styles.applyBtnText}>APPLY FILTERS</Text>
                         </TouchableOpacity>
                     </View>
@@ -636,7 +638,7 @@ export function DailySalesReportBody() {
                     style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
                     onPress={() => setPicker(p => ({ ...p, visible: false }))}
                 >
-                    <View style={{ width: '100%', maxHeight: '70%', backgroundColor: colors.background, borderRadius: 24, padding: 24, gap: 16 }}>
+                    <View style={{ width: '100%', maxHeight: '70%', backgroundColor: colors.surface, borderRadius: Radius.xl, padding: 24, gap: 16 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>{picker.title}</Text>
                             <TouchableOpacity onPress={() => setPicker(p => ({ ...p, visible: false }))}>
@@ -648,14 +650,14 @@ export function DailySalesReportBody() {
                                 <TouchableOpacity
                                     key={option.value}
                                     style={{
-                                        padding: 16, borderRadius: 12,
-                                        backgroundColor: picker.selectedValue === option.value ? colors.surfaceSecondary : 'transparent',
+                                        padding: 16, borderRadius: Radius.md,
+                                        backgroundColor: picker.selectedValue === option.value ? colors.primarySoft : 'transparent',
                                         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
                                     }}
                                     onPress={() => { picker.onSelect(option.value); setPicker(p => ({ ...p, visible: false })); }}
                                 >
-                                    <Text style={{ fontSize: 15, fontWeight: '600', color: picker.selectedValue === option.value ? NAVY : colors.text }}>{option.label}</Text>
-                                    {picker.selectedValue === option.value && <Ionicons name="checkmark-circle" size={20} color={NAVY} />}
+                                    <Text style={{ fontSize: 15, fontWeight: '600', color: picker.selectedValue === option.value ? colors.primary : colors.text }}>{option.label}</Text>
+                                    {picker.selectedValue === option.value && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
@@ -671,25 +673,25 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         dateRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: s(18), paddingTop: vs(18) },
         dateLabel: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 },
         dateValue: { fontSize: ms(23), fontWeight: '800' },
-        filtersBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: ms(12), paddingVertical: vs(9), paddingHorizontal: s(14) },
+        filtersBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.md, paddingVertical: vs(9), paddingHorizontal: s(14) },
         filtersBtnText: { fontSize: ms(13), fontWeight: '700' },
 
         chipScroll: { marginTop: vs(14), paddingLeft: s(18) },
-        chip: { paddingHorizontal: s(16), paddingVertical: vs(8), borderRadius: 999 },
+        chip: { paddingHorizontal: s(16), paddingVertical: vs(8), borderRadius: Radius.pill },
         chipText: { fontSize: ms(12.5), fontWeight: '700' },
         chipTextActive: { fontSize: ms(12.5), fontWeight: '700', color: '#fff' },
 
         sectionLabel: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginHorizontal: s(18), marginTop: vs(22), marginBottom: vs(10) },
 
         searchRow: { flexDirection: 'row', gap: s(10), paddingHorizontal: s(18), marginTop: vs(22), marginBottom: vs(14) },
-        searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: s(16), paddingVertical: vs(4) },
+        searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: s(16), paddingVertical: vs(4) },
         searchInput: { flex: 1, fontSize: ms(14), fontWeight: '500', paddingVertical: vs(8) },
-        sortBtn: { width: ms(44), height: ms(44), borderWidth: 1, borderRadius: ms(14), justifyContent: 'center', alignItems: 'center' },
+        sortBtn: { width: ms(44), height: ms(44), borderWidth: 1, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center' },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(50), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
 
-        sheet: { borderTopLeftRadius: ms(24), borderTopRightRadius: ms(24), paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) },
+        sheet: { borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) },
         handle: { width: 40, height: 4, borderRadius: 999, alignSelf: 'center', marginBottom: vs(18) },
         sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: vs(16) },
         sheetTitle: { fontSize: ms(20), fontWeight: '800' },
@@ -699,14 +701,14 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         fieldBlock: { flex: 1, gap: 8, marginBottom: vs(14) },
         fieldBlockFull: { gap: 8, marginBottom: vs(14) },
         fieldLabel: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
-        selectBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: ms(12), paddingVertical: vs(12), paddingHorizontal: s(14) },
+        selectBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: Radius.md, paddingVertical: vs(12), paddingHorizontal: s(14) },
         selectValue: { fontSize: ms(14.5), fontWeight: '600' },
 
-        segmented: { flexDirection: 'row', borderWidth: 1, borderRadius: ms(12), padding: 4, gap: 4 },
+        segmented: { flexDirection: 'row', borderWidth: 1, borderRadius: Radius.md, padding: 4, gap: 4 },
         segment: { flex: 1, alignItems: 'center', paddingVertical: vs(9), borderRadius: ms(9) },
         segmentText: { fontSize: ms(12.5), fontWeight: '700' },
 
-        applyBtn: { borderRadius: ms(14), paddingVertical: vs(16), alignItems: 'center', marginTop: vs(6) },
+        applyBtn: { borderRadius: Radius.md, paddingVertical: vs(16), alignItems: 'center', marginTop: vs(6) },
         applyBtnText: { color: '#fff', fontSize: ms(14.5), fontWeight: '800', letterSpacing: 0.4 },
     });
 }

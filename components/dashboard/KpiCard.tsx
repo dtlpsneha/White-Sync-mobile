@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { Radius } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
 
 export type KpiRow = { icon: keyof typeof Ionicons.glyphMap; label: string; value: string };
@@ -32,7 +33,7 @@ export function KpiCard({
                 styles.card,
                 {
                     width: (width - s(52)) / 2,
-                    borderRadius: ms(20),
+                    borderRadius: Radius.lg,
                     backgroundColor: color,
                 },
             ]}

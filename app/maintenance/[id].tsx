@@ -1,4 +1,5 @@
-import { Colors } from '@/constants/theme';
+import { Colors, Gradients, Radius, Shadow } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiGet, apiPut, uploadFile } from '@/utils/api';
 import { parseFrappeError } from '@/utils/frappeError';
@@ -19,7 +20,6 @@ import {
     Platform,
     Pressable,
     ScrollView,
-    StatusBar,
     StyleSheet,
     Text,
     TextInput,
@@ -27,7 +27,7 @@ import {
     View
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import {
     Contact,
@@ -799,21 +799,11 @@ export default function MaintenanceDetailScreen() {
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-            <View
-                style={[styles.headerGradient, { backgroundColor: isDark ? '#000000' : '#F8FAFC' }]}
-            >
-                <SafeAreaView>
-                    <View style={styles.header}>
-                        <TouchableOpacity testID="backBtn" onPress={() => router.canGoBack() ? router.back() : router.replace('/maintenance')} style={styles.backButton} activeOpacity={0.7}>
-                            <Ionicons name="chevron-back" size={24} color={colors.primary} />
-                        </TouchableOpacity>
-                        <Text testID="visitHeaderTitle" style={[styles.headerTitle, { color: colors.text }]}>Visit Details</Text>
-                        <View style={{ width: 44 }} />
-                    </View>
-                </SafeAreaView>
-            </View>
+            <ScreenHeader
+                title="Visit Details"
+                onBack={() => router.canGoBack() ? router.back() : router.replace('/maintenance')}
+            />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                 <ScrollView
@@ -826,13 +816,13 @@ export default function MaintenanceDetailScreen() {
                         <View style={{ flex: 1, marginRight: 12 }}>
                             <View style={styles.titleRow}>
                                 <Text testID="visitTitle" style={[styles.headerTitle, { color: colors.text }]}>Visit Details</Text>
-                                <View style={styles.idBadgePill} testID="visitIDBadge">
-                                    <Text style={styles.idBadgeText}>{form.name}</Text>
+                                <View style={[styles.idBadgePill, { backgroundColor: colors.primarySoft }]} testID="visitIDBadge">
+                                    <Text style={[styles.idBadgeText, { color: colors.primary }]}>{form.name}</Text>
                                 </View>
                             </View>
                             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Complete visit information</Text>
                         </View>
-                        <TouchableOpacity testID="editVisitBtn" style={styles.premiumEditBtn} onPress={() => setIsEditing(!isEditing)}>
+                        <TouchableOpacity testID="editVisitBtn" style={[styles.premiumEditBtn, { backgroundColor: colors.primary }]}onPress={() => setIsEditing(!isEditing)}>
                             <Ionicons name={isEditing ? "close" : "create-outline"} size={20} color="#FFF" />
                             <Text style={styles.premiumEditBtnText}>{isEditing ? "Cancel" : "Edit"}</Text>
                         </TouchableOpacity>
@@ -866,7 +856,7 @@ export default function MaintenanceDetailScreen() {
 
                     {/* Hero Card */}
                     <LinearGradient
-                        colors={['#1E40AF', '#1E3A8A']}
+                        colors={Gradients.brand}
                         style={styles.heroCard}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
@@ -902,7 +892,7 @@ export default function MaintenanceDetailScreen() {
                                     <Ionicons name="cube-outline" size={14} color="rgba(255,255,255,0.7)" />
                                     <Text style={styles.heroLabel}>Status</Text>
                                 </View>
-                                <View style={[styles.heroBadge, { backgroundColor: '#10B981' }]} testID="visitStatusBadge">
+                                <View style={[styles.heroBadge, { backgroundColor: colors.success }]} testID="visitStatusBadge">
                                     <Text style={styles.heroBadgeText}>{form.status}</Text>
                                 </View>
                             </View>
@@ -942,15 +932,15 @@ export default function MaintenanceDetailScreen() {
                                         activeTab === tab.id && styles.activeTabItem,
                                         // A white pill looked out of place against the
                                         // dark background; use the elevated surface there.
-                                        { backgroundColor: activeTab === tab.id ? (isDark ? colors.surfaceVariant : '#FFF') : 'transparent' }
+                                        { backgroundColor: activeTab === tab.id ? colors.primarySoft : colors.surfaceSecondary }
                                     ]}
                                     onPress={() => setActiveTab(tab.id as any)}
                                 >
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                        <Ionicons name={tab.icon as any} size={14} color={activeTab === tab.id ? (isDark ? colors.tint : '#1E3A8A') : colors.textSecondary} />
+                                        <Ionicons name={tab.icon as any} size={14} color={activeTab === tab.id ? colors.primary : colors.textSecondary} />
                                         <Text style={[
                                             styles.tabText,
-                                            { color: activeTab === tab.id ? (isDark ? colors.tint : '#1E3A8A') : colors.textSecondary }
+                                            { color: activeTab === tab.id ? colors.primary : colors.textSecondary }
                                         ]}>
                                             {tab.label}
                                         </Text>
@@ -1824,7 +1814,7 @@ export default function MaintenanceDetailScreen() {
                                                 ].map(opt => (
                                                     <TouchableOpacity
                                                         key={opt.label}
-                                                        style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border, flex: 1, alignItems: 'center' }, form.follow_up_required === opt.value && { backgroundColor: isDark ? '#334155' : '#EEF2FF', borderColor: colors.primary }]}
+                                                        style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border, flex: 1, alignItems: 'center' }, form.follow_up_required === opt.value && { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}
                                                         onPress={() => updateForm('follow_up_required', opt.value)}
                                                     >
                                                         <Text style={[styles.chipText, { color: colors.textSecondary }, form.follow_up_required === opt.value && { color: colors.primary }]}>{opt.label}</Text>
@@ -1983,7 +1973,7 @@ export default function MaintenanceDetailScreen() {
                                     style={{
                                         padding: 16,
                                         borderRadius: 12,
-                                        backgroundColor: selectionModal.selectedValue === option ? (isDark ? '#334155' : '#EEF2FF') : 'transparent',
+                                        backgroundColor: selectionModal.selectedValue === option ? colors.primarySoft : 'transparent',
                                         flexDirection: 'row',
                                         justifyContent: 'space-between',
                                         alignItems: 'center'
@@ -2041,13 +2031,12 @@ export default function MaintenanceDetailScreen() {
 const Section = ({ title, icon, children, style }: any) => {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
-    const isDark = colorScheme === 'dark';
 
     return (
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(colorScheme ?? 'light'), style]}>
             <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIconBox, { backgroundColor: isDark ? 'rgba(99,102,241,0.2)' : '#EEF2FF' }]}>
-                    <Ionicons name={icon} size={16} color="#6366F1" />
+                <View style={[styles.sectionIconBox, { backgroundColor: colors.primarySoft }]}>
+                    <Ionicons name={icon} size={16} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
@@ -2061,7 +2050,6 @@ const Section = ({ title, icon, children, style }: any) => {
 const DetailItem = ({ label, value, icon, flex, testID }: any) => {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? 'light'];
-    const isDark = colorScheme === 'dark';
 
     return (
         <View
@@ -2071,9 +2059,9 @@ const DetailItem = ({ label, value, icon, flex, testID }: any) => {
                 flex && { flex },
                 {
                     borderLeftWidth: 3,
-                    borderLeftColor: isDark ? 'rgba(99,102,241,0.5)' : '#C7D2FE',
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFF',
-                    borderRadius: 12,
+                    borderLeftColor: colors.primary,
+                    backgroundColor: colors.surfaceSecondary,
+                    borderRadius: Radius.md,
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                 }
@@ -2101,7 +2089,6 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     idBadgePill: {
-        backgroundColor: '#E0F2FE',
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 8,
@@ -2109,7 +2096,6 @@ const styles = StyleSheet.create({
     idBadgeText: {
         fontSize: 10,
         fontWeight: '800',
-        color: '#0369A1',
     },
     headerSubtitle: {
         fontSize: 13,
@@ -2120,11 +2106,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: '#2563EB',
         paddingHorizontal: 16,
         paddingVertical: 10,
-        borderRadius: 12,
-        shadowColor: '#2563EB',
+        borderRadius: Radius.md,
+        shadowColor: '#4338CA',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -2136,10 +2121,10 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     heroCard: {
-        borderRadius: 24,
+        borderRadius: Radius.lg,
         padding: 24,
         marginBottom: 24,
-        shadowColor: '#1E3A8A',
+        shadowColor: '#4338CA',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.2,
         shadowRadius: 20,
@@ -2225,13 +2210,12 @@ const styles = StyleSheet.create({
     tabItem: {
         paddingHorizontal: 20,
         paddingVertical: 12,
-        borderRadius: 14,
-        backgroundColor: 'rgba(0,0,0,0.05)',
+        borderRadius: Radius.pill,
     },
     activeTabItem: {
-        shadowColor: '#000',
+        shadowColor: '#4338CA',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.12,
         shadowRadius: 4,
         elevation: 2,
     },
@@ -2244,24 +2228,6 @@ const styles = StyleSheet.create({
     },
     center: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerGradient: {
-        paddingBottom: 10,
-        zIndex: 100,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    backButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -2331,15 +2297,10 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     section: {
-        borderRadius: 28,
-        padding: 24,
-        marginBottom: 20,
+        borderRadius: Radius.lg,
+        padding: 20,
+        marginBottom: 16,
         borderWidth: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 16 },
-        shadowOpacity: 0.1,
-        shadowRadius: 24,
-        elevation: 6,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -2393,7 +2354,7 @@ const styles = StyleSheet.create({
         marginLeft: 4,
     },
     input: {
-        borderRadius: 16,
+        borderRadius: Radius.md,
         padding: 16,
         fontSize: 15,
         fontWeight: '600',
@@ -2402,7 +2363,7 @@ const styles = StyleSheet.create({
     searchBox: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 16,
+        borderRadius: Radius.md,
         paddingHorizontal: 16,
         height: 56,
         borderWidth: 1,
@@ -2484,12 +2445,12 @@ const styles = StyleSheet.create({
     },
     itemCard: {
         padding: 20,
-        borderRadius: 24,
-        borderWidth: 1.5,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
         marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.05,
+        shadowColor: '#4338CA',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
         shadowRadius: 12,
         elevation: 2,
     },
@@ -2562,15 +2523,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        height: 60,
-        borderRadius: 20,
+        height: 56,
+        borderRadius: Radius.md,
         paddingHorizontal: 24,
         gap: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 8,
+        shadowColor: '#4338CA',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 14,
+        elevation: 6,
         marginTop: 10,
     },
     saveButtonText: {
@@ -2585,17 +2546,17 @@ const styles = StyleSheet.create({
     },
     totalCard: {
         padding: 32,
-        borderRadius: 32,
-        borderWidth: 2,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
         marginVertical: 8,
-        shadowColor: '#6366F1',
-        shadowOffset: { width: 0, height: 16 },
-        shadowOpacity: 0.25,
-        shadowRadius: 24,
-        elevation: 15,
+        shadowColor: '#4338CA',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+        elevation: 6,
     },
     totalLabel: {
         fontSize: 14,

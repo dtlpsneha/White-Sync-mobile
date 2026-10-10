@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { renameChat, type ChatSessionSummary } from '@/services/smartopsApi';
 
@@ -78,7 +78,7 @@ function Row({
                 styles.row,
                 {
                     borderBottomColor: colors.border,
-                    backgroundColor: active ? `${colors.primary}18` : 'transparent',
+                    backgroundColor: active ? colors.primarySoft : 'transparent',
                 },
             ]}
         >
@@ -181,8 +181,8 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.4)',
     },
     sheet: {
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+        borderTopLeftRadius: Radius.xl,
+        borderTopRightRadius: Radius.xl,
         maxHeight: '75%',
     },
     header: {

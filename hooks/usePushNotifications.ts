@@ -73,6 +73,19 @@ async function registerTokenWithServer(token: string): Promise<boolean> {
     }
 }
 
+/**
+ * Registers this device's push token for whichever user is logged in right now.
+ * Call it right after a successful login: the hook below only registers at app
+ * start / on foreground, so without this a user who logs in (or switches user)
+ * keeps a stale token on the server and never receives pushes until the app is
+ * restarted.
+ */
+export async function registerPushTokenForCurrentUser(): Promise<boolean> {
+    const token = await registerForPushNotificationsAsync();
+    if (!token) return false;
+    return registerTokenWithServer(token);
+}
+
 export const usePushNotifications = () => {
     const router = useRouter();
     const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
@@ -112,13 +125,25 @@ export const usePushNotifications = () => {
             if (state === 'active') registerAndSend();
         });
 
-        // Tapping a notification navigates to the quotation
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        // Tapping a notification navigates to the quotation. The same response can
+        // arrive from both the listener and the cold-start lookup, so open it once.
+        let handledResponseId: string | null = null;
+        const openFromResponse = (response: Notifications.NotificationResponse | null) => {
+            if (!response) return;
+            const key = response.notification.request.identifier;
+            if (key === handledResponseId) return;
             const data = response.notification.request.content.data;
             if (data && data.id) {
+                handledResponseId = key;
                 router.push({ pathname: '/quotations/[id]', params: { id: data.id as string } });
             }
-        });
+        };
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(openFromResponse);
+
+        // App was closed and launched by tapping a push: the listener above misses it.
+        Notifications.getLastNotificationResponseAsync()
+            .then(response => { setTimeout(() => { if (!cancelled) openFromResponse(response); }, 800); })
+            .catch(() => { });
 
         return () => {
             cancelled = true;

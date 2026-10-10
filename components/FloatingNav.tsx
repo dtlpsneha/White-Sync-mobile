@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 
@@ -26,7 +27,7 @@ const NAV_ROUTES = [
 const NAV_ITEMS = [
     { id: 'home',       label: 'Home',                         icon: 'home-outline' as const,          activeIcon: 'home' as const,          route: '/home',                           color: '#3B82F6', mode: 'replace' as const },
     { id: 'quotes',     label: 'Quotation',                    icon: 'document-text-outline' as const, activeIcon: 'document-text' as const, route: '/quotations',                     color: '#F59E0B', mode: 'replace' as const },
-    { id: 'orders',     label: 'Customer Purchase Order',      icon: 'cart-outline' as const,          activeIcon: 'cart' as const,          route: '/sales-orders',                   color: '#00BFA5', mode: 'replace' as const },
+    { id: 'orders',     label: 'Customer Purchase Order',      icon: 'cart-outline' as const,          activeIcon: 'cart' as const,          route: '/sales-orders',                   color: '#14B8A6', mode: 'replace' as const },
     { id: 'visits',     label: 'Customer Visit',               icon: 'calendar-outline' as const,      activeIcon: 'calendar' as const,      route: '/maintenance',                    color: '#8B5CF6', mode: 'replace' as const },
     { id: 'daily-sales',label: 'Daily Sales Report',           icon: 'bar-chart-outline' as const,     activeIcon: 'bar-chart' as const,     route: '/daily-sales-report',             color: '#F97316', mode: 'push' as const },
     { id: 'invoices',   label: 'Sales Invoice History',        icon: 'receipt-outline' as const,       activeIcon: 'receipt' as const,       route: '/daily-sales-report/invoice-history', color: '#0891B2', mode: 'push' as const },
@@ -38,7 +39,9 @@ export const FloatingNav = () => {
     const router = useRouter();
     const pathname = usePathname();
     const colorScheme = useColorScheme();
-    const isDark = (colorScheme ?? 'light') === 'dark';
+    const theme = colorScheme ?? 'light';
+    const isDark = theme === 'dark';
+    const colors = Colors[theme];
     const insets = useSafeAreaInsets();
     const { ms } = useResponsive();
 
@@ -159,11 +162,11 @@ export const FloatingNav = () => {
             >
                 <View style={[
                     styles.dragHandle,
-                    { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(248, 248, 248, 0.95)' }
+                    { backgroundColor: colors.surface, borderColor: colors.border }
                 ]}>
                     <View style={[
                         styles.dragBar,
-                        { backgroundColor: isDark ? '#64748B' : '#CBD5E1' }
+                        { backgroundColor: colors.textSecondary }
                     ]} />
                 </View>
 
@@ -171,8 +174,8 @@ export const FloatingNav = () => {
                     style={[
                         styles.navContainer,
                         {
-                            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.98)' : 'rgba(255, 255, 255, 0.98)',
-                            borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                            backgroundColor: colors.surface,
+                            borderTopColor: colors.border,
                         },
                         animatedStyle,
                     ]}
@@ -209,8 +212,10 @@ const styles = StyleSheet.create({
         height: 28,
         alignItems: 'center',
         justifyContent: 'center',
-        borderTopLeftRadius: 18,
-        borderTopRightRadius: 18,
+        borderTopLeftRadius: Radius.lg,
+        borderTopRightRadius: Radius.lg,
+        borderWidth: 1,
+        borderBottomWidth: 0,
     },
     dragBar: {
         width: 40,
@@ -249,7 +254,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 8,
         paddingHorizontal: 4,
-        borderRadius: 12,
+        borderRadius: Radius.md,
         gap: 4,
     },
     label: {

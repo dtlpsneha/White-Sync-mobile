@@ -12,10 +12,16 @@ import { NotificationModal } from '@/components/NotificationModal';
 import { View } from 'react-native';
 // Must be imported at module scope so the background task is defined before
 // the runtime tries to execute it (even when the app is not fully mounted).
+import '../services/BackgroundNotificationHandler';
+import { registerBackgroundNotificationTask } from '../services/BackgroundNotificationHandler';
 import { notificationService } from '../services/NotificationService';
+import { notifeeService } from '../services/NotifeeService';
 
-// Set up channels as early as possible.
+// Set up channels and register background task as early as possible.
 try { notificationService.setupChannels(); } catch (e) { console.warn('[Layout] notificationService.setupChannels failed:', e); }
+try { notifeeService.setupChannels(); } catch (e) { console.warn('[Layout] notifeeService.setupChannels failed:', e); }
+try { notifeeService.requestPermission(); } catch (e) { console.warn('[Layout] notifeeService.requestPermission failed:', e); }
+try { registerBackgroundNotificationTask(); } catch (e) { console.warn('[Layout] registerBackgroundNotificationTask failed:', e); }
 
 function RootLayoutContent() {
   const { theme } = useTheme();

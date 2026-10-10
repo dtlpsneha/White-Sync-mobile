@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications } from '@/context/NotificationsContext';
 
@@ -25,6 +25,7 @@ export const NotificationBanner = () => {
                 {
                     backgroundColor: colors.primary,
                 },
+                Shadow.card(theme),
             ]}
         >
             <TouchableOpacity
@@ -54,8 +55,8 @@ const styles = StyleSheet.create({
         paddingTop: 8,
         paddingBottom: 8,
         paddingHorizontal: 12,
-        borderBottomLeftRadius: 12,
-        borderBottomRightRadius: 12,
+        borderBottomLeftRadius: Radius.md,
+        borderBottomRightRadius: Radius.md,
     },
     content: {
         flexDirection: 'row',
@@ -65,7 +66,7 @@ const styles = StyleSheet.create({
     iconWrapper: {
         width: 32,
         height: 32,
-        borderRadius: 8,
+        borderRadius: Radius.sm,
         backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',

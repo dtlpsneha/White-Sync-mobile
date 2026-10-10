@@ -31,11 +31,11 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChatHistorySheet } from '@/components/ChatHistorySheet';
 import { CustomerSearchResults, initials, useCustomerSearch } from '@/components/CustomerSearch';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
     chatErrorMessage,
@@ -247,7 +247,7 @@ export default function AiChatScreen() {
     const showPrompts = !!chipName && messages.length === 0;
 
     return (
-        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
             <Stack.Screen options={{ headerShown: false }} />
             <KeyboardAvoidingView
                 style={{ flex: 1, backgroundColor: colors.background }}
@@ -256,49 +256,42 @@ export default function AiChatScreen() {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-                    <View style={styles.headerTop}>
-                        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} hitSlop={10} accessibilityLabel="Back">
-                            <Ionicons name="arrow-back" size={22} color={colors.text} />
-                        </Pressable>
-                        <View style={[styles.headerIcon, { backgroundColor: colors.primary }]}>
-                            <Ionicons name="sparkles" size={15} color="#FFF" />
+                <ScreenHeader
+                    title="SmartOps AI"
+                    subtitle="Type / to look up a customer"
+                    onBack={() => router.canGoBack() ? router.back() : router.replace('/home')}
+                    right={
+                        <View style={styles.headerActions}>
+                            <Pressable
+                                onPress={handleNewChat}
+                                hitSlop={8}
+                                style={styles.headerButton}
+                                accessibilityLabel="New chat"
+                            >
+                                <Ionicons name="create-outline" size={20} color="#FFF" />
+                            </Pressable>
+                            <Pressable
+                                onPress={() => setHistoryOpen(true)}
+                                hitSlop={8}
+                                style={styles.headerButton}
+                                accessibilityLabel="Chat history"
+                            >
+                                <Ionicons name="time-outline" size={20} color="#FFF" />
+                            </Pressable>
                         </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.title, { color: colors.text }]}>SmartOps AI</Text>
-                            <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                                Type / to look up a customer
-                            </Text>
-                        </View>
-                        <Pressable
-                            onPress={handleNewChat}
-                            hitSlop={8}
-                            style={styles.headerButton}
-                            accessibilityLabel="New chat"
-                        >
-                            <Ionicons name="create-outline" size={20} color={colors.textSecondary} />
-                        </Pressable>
-                        <Pressable
-                            onPress={() => setHistoryOpen(true)}
-                            hitSlop={8}
-                            style={styles.headerButton}
-                            accessibilityLabel="Chat history"
-                        >
-                            <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
-                        </Pressable>
-                    </View>
-
+                    }
+                >
                     {chipName && (
-                        <View style={[styles.customerChip, { backgroundColor: `${colors.primary}18` }]}>
-                            <View style={[styles.chipAvatar, { backgroundColor: colors.primary }]}>
-                                <Text style={styles.chipAvatarText}>{initials(chipName)}</Text>
+                        <View style={styles.customerChip}>
+                            <View style={styles.chipAvatar}>
+                                <Text style={[styles.chipAvatarText, { color: colors.primary }]}>{initials(chipName)}</Text>
                             </View>
-                            <Text style={[styles.chipText, { color: colors.primary }]} numberOfLines={1}>
+                            <Text style={styles.chipText} numberOfLines={1}>
                                 {chipName}
                             </Text>
                         </View>
                     )}
-                </View>
+                </ScreenHeader>
 
                 {loadError && <Text style={[styles.banner, { color: colors.danger }]}>{loadError}</Text>}
                 {data && !data.live && (
@@ -390,7 +383,7 @@ export default function AiChatScreen() {
                         style={[
                             styles.composerField,
                             {
-                                backgroundColor: colors.background,
+                                backgroundColor: colors.surfaceSecondary,
                                 borderColor: slashMode ? colors.primary : colors.border,
                             },
                         ]}
@@ -456,7 +449,7 @@ export default function AiChatScreen() {
                 onSelect={handleReopen}
                 onRenamed={handleRenamed}
             />
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -481,7 +474,7 @@ function PromptChip({
             style={({ pressed }) => [
                 styles.promptChip,
                 compact && styles.promptChipCompact,
-                { backgroundColor: `${colors.primary}18`, opacity: pressed || disabled ? 0.6 : 1 },
+                { backgroundColor: colors.primarySoft, opacity: pressed || disabled ? 0.6 : 1 },
             ]}
         >
             <Text style={[styles.promptChipText, { color: colors.primary }]} numberOfLines={1} ellipsizeMode="tail">
@@ -658,36 +651,19 @@ function QuoteRow({ row, colors }: { row: QuoteSummary; colors: ThemeColors }) {
 }
 
 const styles = StyleSheet.create({
-    header: {
-        paddingHorizontal: 18,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 9,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    headerTop: {
+    headerActions: {
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 11,
-    },
-    headerIcon: {
-        width: 30,
-        height: 30,
-        borderRadius: 9,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    title: {
-        fontSize: 16.5,
-        fontWeight: '800',
-    },
-    subtitle: {
-        fontSize: 11.5,
-        fontWeight: '500',
-        marginTop: 1,
+        gap: 6,
     },
     headerButton: {
-        padding: 4,
+        width: 36,
+        height: 36,
+        borderRadius: Radius.sm,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     customerChip: {
         flexDirection: 'row',
@@ -697,22 +673,26 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
         paddingRight: 12,
         paddingLeft: 5,
-        borderRadius: 999,
+        borderRadius: Radius.pill,
         maxWidth: '100%',
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
     },
     chipAvatar: {
         width: 20,
         height: 20,
-        borderRadius: 999,
+        borderRadius: Radius.pill,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: '#FFF',
     },
     chipAvatarText: {
-        color: '#FFF',
         fontSize: 9,
         fontWeight: '800',
     },
     chipText: {
+        color: '#FFF',
         fontSize: 12.5,
         fontWeight: '700',
         flexShrink: 1,
@@ -795,7 +775,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 9,
-        borderRadius: 14,
+        borderRadius: Radius.md,
         borderWidth: 1,
         paddingHorizontal: 14,
         paddingVertical: 12,
@@ -816,7 +796,7 @@ const styles = StyleSheet.create({
         marginLeft: 4,
     },
     bubble: {
-        borderRadius: 16,
+        borderRadius: Radius.lg,
         paddingHorizontal: 14,
         paddingVertical: 11,
         gap: 8,
@@ -848,8 +828,8 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     resultCard: {
-        borderRadius: 16,
-        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
         overflow: 'hidden',
     },
     resultRow: {
@@ -890,7 +870,7 @@ const styles = StyleSheet.create({
     composerField: {
         flex: 1,
         borderWidth: 1.5,
-        borderRadius: 22,
+        borderRadius: Radius.xl,
         paddingHorizontal: 16,
         paddingVertical: 6,
         justifyContent: 'center',

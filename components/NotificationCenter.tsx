@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import type { PersistentNotification } from '@/context/NotificationsContext';
@@ -72,6 +72,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             </View>
 
             <FlatList
+                contentContainerStyle={{ padding: ms(16), paddingTop: ms(4) }}
                 data={notifications}
                 keyExtractor={(item) => item.id}
                 scrollEnabled={false}
@@ -85,9 +86,11 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                         style={[
                             styles.notificationItem,
                             {
-                                backgroundColor: item.read ? colors.surface : (isDark ? 'rgba(59,130,246,0.1)' : '#DBEAFE'),
-                                borderLeftColor: item.read ? colors.border : '#3B82F6',
+                                backgroundColor: item.read ? colors.surface : colors.primarySoft,
+                                borderColor: colors.border,
+                                borderLeftColor: item.read ? colors.border : colors.primary,
                             },
+                            Shadow.card(theme),
                         ]}
                     >
                         <View style={styles.notificationContent}>
@@ -127,8 +130,6 @@ function getStyles(theme: 'light' | 'dark', { ms, isDark }: any) {
             alignItems: 'center',
             paddingHorizontal: ms(16),
             paddingVertical: ms(16),
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
         },
         headerTitle: {
             fontSize: ms(18),
@@ -148,9 +149,10 @@ function getStyles(theme: 'light' | 'dark', { ms, isDark }: any) {
             alignItems: 'center',
             paddingHorizontal: ms(16),
             paddingVertical: ms(14),
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderRadius: Radius.lg,
+            borderWidth: 1,
             borderLeftWidth: 4,
+            marginBottom: ms(10),
         },
         notificationContent: {
             flex: 1,

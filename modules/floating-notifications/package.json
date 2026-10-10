@@ -1,0 +1,7 @@
+{
+  "name": "floating-notifications",
+  "version": "1.0.0",
+  "description": "Local Expo module: system-wide notification listener + floating overlay popups",
+  "main": "index.ts",
+  "private": true
+}

@@ -4,8 +4,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { StatusBar } from 'expo-status-bar';
-import { Colors } from '@/constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiPost } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
@@ -16,7 +17,7 @@ export default function PrintPreviewScreen() {
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const isDark = theme === 'dark';
+    const insets = useSafeAreaInsets();
 
     const [htmlContent, setHtmlContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -120,30 +121,20 @@ export default function PrintPreviewScreen() {
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F1F5F9' }]}>
-            <StatusBar style="light" />
-
-            {/* Premium Header */}
-            <View style={[styles.premiumHeader, { backgroundColor: isDark ? '#121212' : '#1E293B' }]}>
-                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/quotations')} style={styles.closeButton}>
-                    <Ionicons name="close" size={24} color="#FFF" />
-                </TouchableOpacity>
-                <View style={styles.premiumHeaderTitle}>
-                    <Text style={styles.headerMainTitle}>Print Preview</Text>
-                    <View style={styles.idBadgeMini}>
-                        <Text style={styles.idBadgeText}>#{id}</Text>
-                    </View>
-                </View>
-                <TouchableOpacity onPress={fetchPrintHTML} style={styles.refreshIcon}>
-                    <Ionicons name="refresh" size={20} color="#FFF" />
-                </TouchableOpacity>
-            </View>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <ScreenHeader
+                title="Print Preview"
+                subtitle={`#${id}`}
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/quotations'))}
+                rightIcon="refresh"
+                onRightPress={fetchPrintHTML}
+            />
 
             {/* Floating Format Selector */}
             {!formatsLoading && printFormats.length > 0 && (
-                <View style={styles.floatingSelectorContainer}>
+                <View style={[styles.floatingSelectorContainer, { top: insets.top + 82 }]}>
                     <TouchableOpacity
-                        style={[styles.glassSelector, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.9)' }]}
+                        style={[styles.glassSelector, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}
                         onPress={() => setIsDropdownVisible(true)}
                     >
                         <Ionicons name="document-text-outline" size={16} color={colors.primary} />
@@ -215,8 +206,8 @@ export default function PrintPreviewScreen() {
                     </View>
                 ) : error ? (
                     <View style={styles.centerContainer}>
-                        <View style={styles.errorIconBox}>
-                            <Ionicons name="alert-circle" size={40} color="#EF4444" />
+                        <View style={[styles.errorIconBox, { backgroundColor: colors.danger + '22' }]}>
+                            <Ionicons name="alert-circle" size={40} color={colors.danger} />
                         </View>
                         <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
                         <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={fetchPrintHTML}>
@@ -245,65 +236,8 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    premiumHeader: {
-        backgroundColor: '#1E293B',
-        paddingTop: 60,
-        paddingBottom: 20,
-        paddingHorizontal: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-    },
-    closeButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    premiumHeaderTitle: {
-        flex: 1,
-        alignItems: 'center',
-        paddingHorizontal: 8,
-    },
-    headerMainTitle: {
-        color: '#FFF',
-        fontSize: 18,
-        fontWeight: '800',
-        letterSpacing: 0.5,
-    },
-    idBadgeMini: {
-        backgroundColor: 'rgba(56, 189, 248, 0.2)',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 6,
-        marginTop: 4,
-        borderWidth: 1,
-        borderColor: 'rgba(56, 189, 248, 0.3)',
-    },
-    idBadgeText: {
-        color: '#38BDF8',
-        fontSize: 10,
-        fontWeight: '900',
-    },
-    refreshIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     floatingSelectorContainer: {
         position: 'absolute',
-        top: 135,
         left: 0,
         right: 0,
         zIndex: 100,
@@ -315,13 +249,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 10,
-        borderRadius: 30,
+        borderRadius: Radius.pill,
+        borderWidth: 1,
         maxWidth: '90%',
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
         gap: 8,
     },
     selectorText: {
@@ -356,8 +286,8 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     modalContent: {
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
+        borderTopLeftRadius: Radius.xl,
+        borderTopRightRadius: Radius.xl,
         maxHeight: '80%',
         paddingBottom: 40,
     },
@@ -382,7 +312,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 18,
         paddingHorizontal: 20,
-        borderRadius: 16,
+        borderRadius: Radius.md,
         marginBottom: 8,
     },
     formatIconLabel: {
@@ -411,7 +341,6 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: '#FEE2E2',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
@@ -426,8 +355,7 @@ const styles = StyleSheet.create({
     retryButton: {
         paddingHorizontal: 32,
         paddingVertical: 14,
-        borderRadius: 14,
-        elevation: 4,
+        borderRadius: Radius.md,
     },
     retryButtonText: {
         color: '#FFF',
