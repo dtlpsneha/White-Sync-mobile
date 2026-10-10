@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { AppState } from 'react-native';
@@ -87,6 +87,9 @@ export async function registerPushTokenForCurrentUser(): Promise<boolean> {
 }
 
 export const usePushNotifications = () => {
+    const [expoPushToken, setExpoPushToken] = useState<string | undefined>(undefined);
+    const [notification, setNotification] = useState<Notifications.Notification | undefined>(undefined);
+    const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
     const router = useRouter();
     const responseListener = useRef<Notifications.Subscription | undefined>(undefined);
 
@@ -99,6 +102,7 @@ export const usePushNotifications = () => {
         const registerAndSend = () => {
             registerForPushNotificationsAsync().then(token => {
                 if (cancelled || !token) return;
+                setExpoPushToken(token);
                 registerTokenWithServer(token).then(sent => {
                     if (sent) registeredWithServer = true;
                 });
@@ -125,6 +129,10 @@ export const usePushNotifications = () => {
             if (state === 'active') registerAndSend();
         });
 
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+            setNotification(notification);
+        });
+
         // Tapping a notification navigates to the quotation. The same response can
         // arrive from both the listener and the cold-start lookup, so open it once.
         let handledResponseId: string | null = null;
@@ -149,8 +157,11 @@ export const usePushNotifications = () => {
             cancelled = true;
             clearInterval(retryInterval);
             appStateSub.remove();
+            notificationListener.current?.remove();
             responseListener.current?.remove();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    return { expoPushToken, notification };
 };
