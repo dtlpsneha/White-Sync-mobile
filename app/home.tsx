@@ -543,6 +543,33 @@ export default function HomeScreen() {
                             ))}
                         </View>
 
+                        <SectionHeader title="Customer Statements" subtitle="Outstanding bills and ledger PDFs" icon="document-text" />
+                        <View style={styles.navSection}>
+                            {([
+                                { label: 'LEDGER PDF', sub: 'Sales & receipts, 1 April to today', icon: 'list', from: '#818CF8', to: '#4F46E5', kind: 'ledger' },
+                                { label: 'OUTSTANDING PDF', sub: 'Unpaid bills', icon: 'time', from: '#F59E0B', to: '#EA580C', kind: 'outstanding' },
+                            ]).map((item, i) => (
+                                <Animated.View key={item.kind} entering={FadeInDown.delay(900 + i * 80).springify().damping(15)}>
+                                    <Tappable
+                                        style={[styles.navRowCard, { backgroundColor: item.to + (theme === 'dark' ? '26' : '14'), borderColor: item.to + (theme === 'dark' ? '55' : '40') }]}
+                                        onPress={() => router.push({ pathname: '/customer-statement', params: { kind: item.kind } } as any)}
+                                    >
+                                        <View style={[styles.navRowAccent, { backgroundColor: item.to }]} />
+                                        <LinearGradient colors={[item.from, item.to]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.navRowIcon}>
+                                            <Ionicons name={item.icon as any} size={ms(24)} color="#FFF" />
+                                        </LinearGradient>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.navRowTitle, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
+                                            <Text style={[styles.navRowSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</Text>
+                                        </View>
+                                        <View style={[styles.navRowChevron, { backgroundColor: item.to + '26' }]}>
+                                            <Ionicons name="chevron-forward" size={16} color={item.to} />
+                                        </View>
+                                    </Tappable>
+                                </Animated.View>
+                            ))}
+                        </View>
+
                     </>
                 )}
             </ScrollView>
