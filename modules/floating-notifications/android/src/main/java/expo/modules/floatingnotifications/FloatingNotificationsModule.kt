@@ -2,6 +2,7 @@ package expo.modules.floatingnotifications
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -54,6 +55,12 @@ class FloatingNotificationsModule : Module() {
             )
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
+        }
+
+        // Copies a file (e.g. a generated statement PDF) into the phone's Downloads folder.
+        // Returns the saved location as text.
+        Function("saveToDownloads") { path: String, fileName: String ->
+            saveToDownloads(path, fileName)
         }
 
         Function("isListenerServiceConnected") {
@@ -119,6 +126,32 @@ class FloatingNotificationsModule : Module() {
                 )
             }
         }
+    }
+
+    private fun saveToDownloads(path: String, fileName: String): String {
+        val source = java.io.File(path)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/pdf")
+                put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("Could not create the file in Downloads")
+            resolver.openOutputStream(uri)?.use { out ->
+                source.inputStream().use { input -> input.copyTo(out) }
+            } ?: throw IllegalStateException("Could not write the file")
+            values.clear()
+            values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            return "Downloads/$fileName"
+        }
+        val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+        dir.mkdirs()
+        val dest = java.io.File(dir, fileName)
+        source.copyTo(dest, overwrite = true)
+        return dest.absolutePath
     }
 
     private fun isNotificationAccessGranted(): Boolean {

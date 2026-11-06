@@ -101,7 +101,7 @@ class QuotationMessagingService : FirebaseMessagingService() {
             nm.createNotificationChannel(channel)
         }
 
-        val open = Intent(Intent.ACTION_VIEW, Uri.parse("whitesync://quotations/$quotationId")).apply {
+        val open = Intent(Intent.ACTION_VIEW, Uri.parse("whitesync://quotations/${Uri.encode(quotationId)}")).apply {
             setPackage(packageName)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
@@ -122,7 +122,7 @@ class QuotationMessagingService : FirebaseMessagingService() {
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(contentIntent)
             .addAction(0, "View", contentIntent)
-            .setAutoCancel(true)
+            .setAutoCancel(false)
             .build()
         nm.notify(notificationId, notification)
     }

@@ -136,12 +136,16 @@ export const BRAND_LABELS: Record<string, string> = {
 
 export const brandLabel = (brand: string) => BRAND_LABELS[brand] || brand;
 
-/** Alphabetical by label, "Unassigned" always last — same rule as the web dashboard. */
+/** Labour Charges / Commission are shown in their own table, not in the main brand table. */
+export const EXTRA_BRANDS = ['LABOUR CHARGES', 'COMMISSION'];
+export const isExtraBrand = (brand: string) => EXTRA_BRANDS.includes(String(brand || '').toUpperCase());
+
+/** By FY sales, highest first, "Unassigned" always last — same rule as the web dashboard. */
 export function sortSummaryRows(rows: DailySummaryRow[]): DailySummaryRow[] {
     return [...rows].sort((a, b) => {
         if (a.brand === 'Unassigned') return 1;
         if (b.brand === 'Unassigned') return -1;
-        return brandLabel(a.brand).localeCompare(brandLabel(b.brand));
+        return (b.sales_fytd || 0) - (a.sales_fytd || 0);
     });
 }
 

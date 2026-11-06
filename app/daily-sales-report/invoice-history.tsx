@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Modal,
     Platform,
     Pressable,
@@ -35,6 +36,8 @@ import {
     getUsedCustomers,
     getUsedItems,
 } from '@/services/dailySalesReportApi';
+import { StatementDoc, StatementKind, buildStatement, pdfViewerHtml, saveStatementToDownloads, shareStatement } from '@/services/customerStatements';
+import { WebView } from 'react-native-webview';
 
 /**
  * Unlike the Daily Sales Report summary (anchored on "yesterday"), this
@@ -107,6 +110,12 @@ function disPctColor(value: number | null | undefined, listPrice: number | null 
     if (isDisNil(value, listPrice)) return '#7C3AED';
     if (!value) return colors.text;
     return value < 0 ? colors.danger : colors.success;
+}
+
+/** LC (Labour Charges) and COMM invoices carry no purchase cost, so Profit / Margin % is blank for them, as on the ERP page. */
+function isLcOrCommInvoice(invoiceNo: string | undefined) {
+    const s = (invoiceNo || '').toUpperCase();
+    return s.startsWith('LC') || s.startsWith('COMM');
 }
 
 type PickerOption = { label: string; value: string };
@@ -286,39 +295,46 @@ function LinkSearchField({ placeholder, value, onSelect, onClear, search, showCo
 const PAGE_SIZE = 30;
 
 const InvoiceCard = React.memo(function InvoiceCard({ item, revealed, colors, styles }: { item: InvoiceHistoryRow; revealed: boolean; colors: any; styles: any }) {
+    const cancelled = item.payment_status === 'Cancelled';
     const paid = item.payment_status === 'Payment Paid';
+    const statusColor = cancelled ? colors.textSecondary : (paid ? colors.success : colors.danger);
+    const showProfit = revealed && !cancelled && !isLcOrCommInvoice(item.invoice_no);
     return (
-        <View style={[styles.invoiceCard, Shadow.card(useColorScheme() ?? 'light'), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={[styles.invoiceCard, Shadow.card(useColorScheme() ?? 'light'), { backgroundColor: colors.surface, borderColor: colors.border }, cancelled && { opacity: 0.6 }]}>
             <View style={styles.invoiceHead}>
-                <Text style={[styles.invoiceNo, { color: colors.text }]} numberOfLines={1}>{item.invoice_no}</Text>
-                <View style={[styles.statusPill, { backgroundColor: (paid ? colors.success : colors.danger) + '1F' }]}>
-                    <Text style={{ color: paid ? colors.success : colors.danger, fontSize: 10.5, fontWeight: '800' }}>{item.payment_status}</Text>
+                <Text style={[styles.invoiceNo, { color: colors.text }, cancelled && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{item.invoice_no}</Text>
+                <View style={[styles.statusPill, { backgroundColor: statusColor + '1F' }]}>
+                    <Text style={{ color: statusColor, fontSize: 10.5, fontWeight: '800' }}>{item.payment_status}</Text>
                 </View>
             </View>
             <Text style={[styles.invoiceSub, { color: colors.textSecondary }]}>
-                {ddmmyyyy(item.date)} · {brandLabel(item.brand).toUpperCase()} · {item.customer}
+                {ddmmyyyy(item.date)}{cancelled ? '' : ` · ${brandLabel(item.brand).toUpperCase()}`}{item.customer ? ` · ${item.customer}` : ''}
             </Text>
-            {!!item.description && <Text style={[styles.invoiceDesc, { color: colors.text }]} numberOfLines={2}>{item.description}</Text>}
-            <View style={[styles.metricGrid, { borderTopColor: colors.border }]}>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Qty</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.qty)}</Text></View>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Unit Price</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.unit_price)}</Text></View>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Basic Value</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.total_value)}</Text></View>
-            </View>
-            <View style={styles.metricGridNoBorder}>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.invoice_total_value)}</Text></View>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>LP26</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.list_price)}</Text></View>
-                <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>DIS%</Text><Text style={[styles.mValue, { color: disPctColor(item.discount_percentage, item.list_price, colors), fontWeight: '800' }]} numberOfLines={1} adjustsFontSizeToFit>{formatDisPct(item.discount_percentage, item.list_price)}</Text></View>
-            </View>
-            {revealed && (
-                <View style={styles.metricGridNoBorder}>
-                    <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Profit</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.profit)}</Text></View>
-                    <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.margin)}</Text></View>
-                </View>
+            {!cancelled && (
+                <>
+                    {!!item.description && <Text style={[styles.invoiceDesc, { color: colors.text }]} numberOfLines={2}>{item.description}</Text>}
+                    <View style={[styles.metricGrid, { borderTopColor: colors.border }]}>
+                        <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Qty</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.qty)}</Text></View>
+                        <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Unit Price</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.unit_price)}</Text></View>
+                        <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Basic Value</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.total_value)}</Text></View>
+                    </View>
+                    <View style={styles.metricGridNoBorder}>
+                        <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Invoice Total</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.invoice_total_value)}</Text></View>
+                        <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>LP26</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.list_price)}</Text></View>
+                        <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>DIS%</Text><Text style={[styles.mValue, { color: disPctColor(item.discount_percentage, item.list_price, colors), fontWeight: '800' }]} numberOfLines={1} adjustsFontSizeToFit>{formatDisPct(item.discount_percentage, item.list_price)}</Text></View>
+                    </View>
+                    {showProfit && (
+                        <View style={styles.metricGridNoBorder}>
+                            <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Profit</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.profit)}</Text></View>
+                            <View style={styles.mCell}><Text style={[styles.mLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>Margin %</Text><Text style={[styles.mValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatPlain(item.margin)}</Text></View>
+                        </View>
+                    )}
+                    <View style={styles.invoiceFoot}>
+                        <Ionicons name="person-circle-outline" size={13} color={colors.textSecondary} />
+                        <Text style={[styles.invoiceFootText, { color: colors.textSecondary }]}>{item.sales_executive ? item.sales_executive.toUpperCase() : '—'}</Text>
+                    </View>
+                </>
             )}
-            <View style={styles.invoiceFoot}>
-                <Ionicons name="person-circle-outline" size={13} color={colors.textSecondary} />
-                <Text style={[styles.invoiceFootText, { color: colors.textSecondary }]}>{item.sales_executive ? item.sales_executive.toUpperCase() : '—'}</Text>
-            </View>
         </View>
     );
 });
@@ -564,7 +580,7 @@ export default function InvoiceHistoryScreen() {
     const openFyPicker = () => setPicker({ visible: true, title: 'Fiscal Year', options: fiscalYears.map(fy => ({ label: fy.name, value: fy.name })), selectedValue: draftFiscalYear, onSelect: onSelectDraftFy });
     const openExecPicker = () => setPicker({ visible: true, title: 'Sales Executive', options: [{ label: 'All', value: '' }, ...executives.map(e => ({ label: e.name.toUpperCase(), value: e.id }))], selectedValue: draftSalesExecutive, onSelect: setDraftSalesExecutive });
     const openBrandPicker = () => setPicker({ visible: true, title: 'Brand', options: [{ label: 'All', value: '' }, ...brands.map(b => ({ label: brandLabel(b).toUpperCase(), value: b }))], selectedValue: draftBrand, onSelect: setDraftBrand });
-    const openPaymentStatusPicker = () => setPicker({ visible: true, title: 'Payment Status', options: [{ label: 'All', value: '' }, { label: 'Payment Paid', value: 'Payment Paid' }, { label: 'Payment Pending', value: 'Payment Pending' }], selectedValue: draftPaymentStatus, onSelect: setDraftPaymentStatus });
+    const openPaymentStatusPicker = () => setPicker({ visible: true, title: 'Payment Status', options: [{ label: 'All', value: '' }, { label: 'Payment Paid', value: 'Payment Paid' }, { label: 'Payment Pending', value: 'Payment Pending' }, { label: 'Cancelled', value: 'Cancelled' }], selectedValue: draftPaymentStatus, onSelect: setDraftPaymentStatus });
 
     // Display only — matches the ERP dashboard's uppercase Sales Executive
     // rendering. The underlying id/name used for filtering is untouched.
@@ -573,6 +589,40 @@ export default function InvoiceHistoryScreen() {
     const paymentStatusLabelFor = (p: string) => (p ? p : 'All');
 
     const rows = useMemo(() => history?.rows || [], [history]);
+
+    const [statementBusy, setStatementBusy] = useState<StatementKind | null>(null);
+    // Opens the statement in the in-app viewer; Download saves it to Downloads.
+    const [statementDoc, setStatementDoc] = useState<StatementDoc | null>(null);
+    const [statementTitle, setStatementTitle] = useState('');
+    const openStatement = async (kind: StatementKind) => {
+        if (!customer?.name || statementBusy) return;
+        setStatementBusy(kind);
+        const res = await buildStatement(kind, customer.name, fromDate, toDate);
+        setStatementBusy(null);
+        const title = kind === 'outstanding' ? 'Outstanding Bills' : 'Ledger Account';
+        if (!res.ok) {
+            Alert.alert(title, res.error);
+            return;
+        }
+        setStatementTitle(title);
+        setStatementDoc(res.doc);
+    };
+    const saveStatement = async () => {
+        if (!statementDoc) return;
+        const savedTo = (() => { try { return saveStatementToDownloads(statementDoc); } catch { return ''; } })();
+        if (savedTo) {
+            Alert.alert('Saved', `${statementDoc.fileName} was saved to Downloads.`);
+            return;
+        }
+        try {
+            const shared = await shareStatement(statementDoc);
+            if (!shared) Alert.alert('Not available', 'Could not save or share the PDF on this device.');
+        } catch {
+            Alert.alert('Download failed', 'Could not save or share the PDF.');
+        }
+    };
+
+    const outOfRange = !!history?.meta?.fy_out_of_range;
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -654,6 +704,32 @@ export default function InvoiceHistoryScreen() {
                     />
                 </View>
 
+                {outOfRange && (
+                    <View style={[styles.truncBanner, { backgroundColor: colors.danger + '18' }]}>
+                        <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700' }}>
+                            The selected date ({ddmmyyyy(history?.meta?.to_date || toDate)}) falls outside fiscal year {fiscalYear} ({ddmmyyyy(history?.meta?.fy_start || '')} to {ddmmyyyy(history?.meta?.fy_end || '')}). No rows will show until the date is adjusted.
+                        </Text>
+                    </View>
+                )}
+
+                {!!customer?.name && (
+                    <View style={styles.stmtRow}>
+                        {(['outstanding', 'ledger'] as StatementKind[]).map(kind => (
+                            <TouchableOpacity
+                                key={kind}
+                                style={[styles.stmtBtn, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}
+                                onPress={() => openStatement(kind)}
+                                disabled={!!statementBusy}
+                            >
+                                {statementBusy === kind
+                                    ? <ActivityIndicator size="small" color={colors.primary} />
+                                    : <Ionicons name="document-text-outline" size={15} color={colors.primary} />}
+                                <Text style={[styles.stmtBtnText, { color: colors.primary }]}>{kind === 'outstanding' ? 'Outstanding PDF' : 'Ledger PDF'}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
                     {history && <Text style={[styles.countNum, { color: colors.primary }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
@@ -691,6 +767,26 @@ export default function InvoiceHistoryScreen() {
                     </>
                 )}
             </ScrollView>
+
+            <Modal visible={!!statementDoc} animationType="slide" onRequestClose={() => setStatementDoc(null)}>
+                <View style={[styles.container, { backgroundColor: colors.background }]}>
+                    <ScreenHeader
+                        title={statementTitle}
+                        subtitle={customer?.customer_name}
+                        onBack={() => setStatementDoc(null)}
+                        rightIcon="download-outline"
+                        onRightPress={saveStatement}
+                    />
+                    {statementDoc && (
+                        <WebView
+                            originWhitelist={['*']}
+                            source={{ html: pdfViewerHtml(statementDoc.base64) }}
+                            javaScriptEnabled
+                            style={{ flex: 1 }}
+                        />
+                    )}
+                </View>
+            </Modal>
 
             <Modal visible={filtersSheetVisible} transparent animationType="slide" onRequestClose={closeFiltersSheet}>
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -817,6 +913,9 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         countText: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
         countNum: { fontSize: ms(11), fontWeight: '800' },
 
+        stmtRow: { flexDirection: 'row', gap: s(10), paddingHorizontal: s(18), marginTop: vs(12) },
+        stmtBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.md, paddingVertical: vs(10) },
+        stmtBtnText: { fontSize: ms(12.5), fontWeight: '800' },
         truncBanner: { marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12) },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(60), gap: 12 },

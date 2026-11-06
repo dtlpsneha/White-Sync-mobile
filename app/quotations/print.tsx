@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, ScrollView, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { apiPost } from '@/utils/api';
+import { apiGet, apiPost } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
+
+/** ERPNext's own print page is laid out for an A4 sheet, ~794 CSS px wide. */
+const PAGE_WIDTH_PX = 794;
+
+/** Scheme + host of the ERP server, used so the print page's relative links (/files/..., /assets/...) resolve. */
+const ERP_ORIGIN = apiUrl('/').replace(/\/+$/, '');
+
+/**
+ * Wraps ERPNext's print HTML for the phone without changing how it looks:
+ * the stylesheet and logo come from the ERP server (via baseUrl), the page is
+ * laid out at A4 width and shrunk to fit the screen, and only the "Print /
+ * Get PDF" banner is hidden.
+ */
+function wrapPrintHtml(erpHtml: string) {
+    const cleaned = erpHtml.replace(/<meta[^>]*name=["']viewport["'][^>]*>/i, '');
+    const inject =
+        `<meta name="viewport" content="width=${PAGE_WIDTH_PX}, maximum-scale=5.0, user-scalable=yes">` +
+        `<style>.action-banner { display: none !important; } html, body { margin: 0; }</style>`;
+    return /<head[^>]*>/i.test(cleaned)
+        ? cleaned.replace(/<head[^>]*>/i, match => `${match}${inject}`)
+        : `<html><head>${inject}</head><body>${cleaned}</body></html>`;
+}
 
 export default function PrintPreviewScreen() {
     const { id } = useLocalSearchParams();
@@ -18,96 +40,53 @@ export default function PrintPreviewScreen() {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const insets = useSafeAreaInsets();
+    const quotationId = String(id);
 
-    const [htmlContent, setHtmlContent] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [formatsLoading, setFormatsLoading] = useState(true);
-    const [printFormats, setPrintFormats] = useState<string[]>([]);
-    const [selectedFormat, setSelectedFormat] = useState<string>('');
-    const [isDropdownVisible, setIsDropdownVisible] = useState(false);
+    const [erpHtml, setErpHtml] = useState<string | null>(null);
+    const [formatLabel, setFormatLabel] = useState('');
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchPrintFormats();
-    }, []);
+        if (id) loadPreview();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]);
 
-    useEffect(() => {
-        if (selectedFormat && id) {
-            fetchPrintHTML();
-        }
-    }, [selectedFormat, id]);
-
-    const fetchPrintFormats = async () => {
+    /** The value of the Quotation's "Print Format" field in ERP, or '' if it is empty / unreadable. */
+    const fetchQuotationPrintFormat = async (sessionCookies: string | null): Promise<string> => {
         try {
-            setFormatsLoading(true);
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-
-            // Ensure we use the documented base URL for print formats
-            const res = await apiPost(apiUrl('/api/method/get_quotation_html'), { action: 'get_list' }, sessionCookies);
-            const data: any = res.data;
-
-            if (res.ok && data && data.message && Array.isArray(data.message)) {
-                setPrintFormats(data.message);
-                // Try to default to "Proforma Invoice Precitex" if it exists, otherwise use the first one
-                const defaultFormat = data.message.includes('Proforma Invoice Precitex')
-                    ? 'Proforma Invoice Precitex'
-                    : data.message[0];
-                setSelectedFormat(defaultFormat);
-            } else {
-                setError('Failed to load print formats');
-            }
-        } catch (err) {
-            console.error('Fetch Formats Error:', err);
-            setError('Error loading print formats');
-        } finally {
-            setFormatsLoading(false);
+            const res = await apiGet(apiUrl(
+                `/api/method/frappe.client.get_value?doctype=Quotation` +
+                `&filters=${encodeURIComponent(JSON.stringify({ name: quotationId }))}&fieldname=print_format`
+            ), sessionCookies);
+            const value = res.ok ? (res.data as any)?.message?.print_format : '';
+            return typeof value === 'string' ? value : '';
+        } catch {
+            return '';
         }
     };
 
-    const fetchPrintHTML = async () => {
+    const loadPreview = async () => {
         try {
             setLoading(true);
+            setError(null);
             const sessionCookies = await SecureStore.getItemAsync('session_cookies');
+
+            // The format chosen on the quotation in ERP; ERP itself falls back to
+            // "Standard" when that field is empty.
+            const format = (await fetchQuotationPrintFormat(sessionCookies)) || 'Standard';
+            setFormatLabel(format);
 
             const res = await apiPost(apiUrl('/api/method/get_quotation_html'), {
                 action: 'get_preview',
-                doc_name: id,
-                print_format: selectedFormat
+                doc_name: quotationId,
+                print_format: format,
             }, sessionCookies);
-
             const data: any = res.data;
 
             if (res.ok && data && data.message) {
-                // Inject mobile-friendly scaling meta and table styling
-                const injectedHTML = `
-                    <html>
-                        <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-                            <style>
-                                body { 
-                                    margin: 0; 
-                                    padding: 10px; 
-                                    font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                                    overflow-x: auto;
-                                    -webkit-overflow-scrolling: touch;
-                                }
-                                table { 
-                                    max-width: 100% !important; 
-                                    display: block; 
-                                    overflow-x: auto; 
-                                    white-space: nowrap; 
-                                }
-                                img { max-width: 100%; height: auto; }
-                                .print-format { padding: 0 !important; }
-                            </style>
-                        </head>
-                        <body>
-                            ${data.message}
-                        </body>
-                    </html>
-                `;
-                setHtmlContent(injectedHTML);
-            } else if (data.error) {
+                setErpHtml(String(data.message));
+            } else if (data?.error) {
                 setError(data.error);
             } else {
                 setError('Failed to load print preview');
@@ -120,6 +99,8 @@ export default function PrintPreviewScreen() {
         }
     };
 
+    const html = useMemo(() => (erpHtml ? wrapPrintHtml(erpHtml) : ''), [erpHtml]);
+
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
@@ -127,77 +108,19 @@ export default function PrintPreviewScreen() {
                 subtitle={`#${id}`}
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/quotations'))}
                 rightIcon="refresh"
-                onRightPress={fetchPrintHTML}
+                onRightPress={loadPreview}
             />
 
-            {/* Floating Format Selector */}
-            {!formatsLoading && printFormats.length > 0 && (
+            {/* Read-only: the format is the one set on the quotation in ERP. */}
+            {!!formatLabel && (
                 <View style={[styles.floatingSelectorContainer, { top: insets.top + 82 }]}>
-                    <TouchableOpacity
-                        style={[styles.glassSelector, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}
-                        onPress={() => setIsDropdownVisible(true)}
-                    >
+                    <View style={[styles.glassSelector, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <Ionicons name="document-text-outline" size={16} color={colors.primary} />
-                        <Text style={[styles.selectorText, { color: colors.text }]} numberOfLines={1}>
-                            {selectedFormat || 'Select Format'}
-                        </Text>
-                        <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                        <Text style={[styles.selectorText, { color: colors.text }]} numberOfLines={1}>{formatLabel}</Text>
+                    </View>
                 </View>
             )}
 
-            <Modal
-                visible={isDropdownVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setIsDropdownVisible(false)}
-            >
-                <Pressable style={styles.modalOverlay} onPress={() => setIsDropdownVisible(false)}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-                        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                            <Text style={[styles.modalTitle, { color: colors.text }]}>Print Formats</Text>
-                            <TouchableOpacity onPress={() => setIsDropdownVisible(false)}>
-                                <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
-                            {printFormats.map((format) => (
-                                <TouchableOpacity
-                                    key={format}
-                                    style={[
-                                        styles.modalItem,
-                                        selectedFormat === format && { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30', borderWidth: 1 }
-                                    ]}
-                                    onPress={() => {
-                                        setSelectedFormat(format);
-                                        setIsDropdownVisible(false);
-                                    }}
-                                >
-                                    <View style={styles.formatIconLabel}>
-                                        <Ionicons
-                                            name="file-tray-full-outline"
-                                            size={20}
-                                            color={selectedFormat === format ? colors.primary : colors.textSecondary}
-                                        />
-                                        <Text style={[
-                                            styles.modalItemText,
-                                            { color: selectedFormat === format ? colors.primary : colors.text },
-                                            selectedFormat === format && { fontWeight: '700' }
-                                        ]}>
-                                            {format}
-                                        </Text>
-                                    </View>
-                                    {selectedFormat === format && (
-                                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </Pressable>
-            </Modal>
-
-            {/* Preview Area */}
             <View style={styles.previewContainer}>
                 {loading ? (
                     <View style={styles.centerContainer}>
@@ -210,7 +133,7 @@ export default function PrintPreviewScreen() {
                             <Ionicons name="alert-circle" size={40} color={colors.danger} />
                         </View>
                         <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
-                        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={fetchPrintHTML}>
+                        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={loadPreview}>
                             <Text style={styles.retryButtonText}>Try Again</Text>
                         </TouchableOpacity>
                     </View>
@@ -218,12 +141,14 @@ export default function PrintPreviewScreen() {
                     <View style={styles.paperContainer}>
                         <WebView
                             originWhitelist={['*']}
-                            source={{ html: htmlContent || '' }}
+                            source={{ html, baseUrl: ERP_ORIGIN }}
                             style={styles.webview}
-                            scalesPageToFit={true}
+                            javaScriptEnabled
+                            domStorageEnabled
+                            mixedContentMode="always"
+                            scalesPageToFit
                             showsHorizontalScrollIndicator={false}
-                            horizontalScrollingEnabled={true}
-                            bounces={true}
+                            bounces={false}
                         />
                     </View>
                 )}
@@ -270,60 +195,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderRadius: 12,
         overflow: 'hidden',
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
     },
     webview: {
         flex: 1,
         backgroundColor: 'transparent',
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(15, 23, 42, 0.8)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        borderTopLeftRadius: Radius.xl,
-        borderTopRightRadius: Radius.xl,
-        maxHeight: '80%',
-        paddingBottom: 40,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 24,
-        borderBottomWidth: 1,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: '900',
-    },
-    modalList: {
-        paddingHorizontal: 16,
-        paddingTop: 12,
-    },
-    modalItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 18,
-        paddingHorizontal: 20,
-        borderRadius: Radius.md,
-        marginBottom: 8,
-    },
-    formatIconLabel: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        flex: 1,
-    },
-    modalItemText: {
-        fontSize: 16,
-        fontWeight: '600',
     },
     centerContainer: {
         flex: 1,
@@ -363,4 +238,3 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
 });
-
