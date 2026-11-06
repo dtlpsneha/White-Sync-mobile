@@ -42,6 +42,13 @@ const dmy = (iso?: string) => {
 const esc = (v: unknown) =>
     String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** Today's date on the phone (local time), as yyyy-mm-dd. */
+export function localTodayIso() {
+    const d = new Date();
+    const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Financial year start (1 April) for the year containing `toIso`. */
 export function fyStartIso(toIso: string) {
     const d = new Date(`${toIso}T00:00:00`);
@@ -238,7 +245,7 @@ export type BuildResult = { ok: true; doc: StatementDoc } | { ok: false; error: 
 /** Builds the statement PDF and reads it back for the in-app viewer. Dates are yyyy-mm-dd; a blank `fromIso` means FY start. */
 export async function buildStatement(kind: StatementKind, customer: string, fromIso: string, toIso: string): Promise<BuildResult> {
     if (!customer) return { ok: false, error: 'Select a customer in the Customer filter first.' };
-    const to = toIso || new Date().toISOString().slice(0, 10);
+    const to = toIso || localTodayIso();
     const from = fromIso || fyStartIso(to);
     try {
         const built = kind === 'outstanding' ? await buildOutstanding(customer, from, to) : await buildLedger(customer, from, to);

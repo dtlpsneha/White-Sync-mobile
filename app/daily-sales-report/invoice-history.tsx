@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Platform,
     Pressable,
@@ -36,8 +35,6 @@ import {
     getUsedCustomers,
     getUsedItems,
 } from '@/services/dailySalesReportApi';
-import { StatementDoc, StatementKind, buildStatement, pdfViewerHtml, saveStatementToDownloads, shareStatement } from '@/services/customerStatements';
-import { WebView } from 'react-native-webview';
 
 /**
  * Unlike the Daily Sales Report summary (anchored on "yesterday"), this
@@ -590,38 +587,6 @@ export default function InvoiceHistoryScreen() {
 
     const rows = useMemo(() => history?.rows || [], [history]);
 
-    const [statementBusy, setStatementBusy] = useState<StatementKind | null>(null);
-    // Opens the statement in the in-app viewer; Download saves it to Downloads.
-    const [statementDoc, setStatementDoc] = useState<StatementDoc | null>(null);
-    const [statementTitle, setStatementTitle] = useState('');
-    const openStatement = async (kind: StatementKind) => {
-        if (!customer?.name || statementBusy) return;
-        setStatementBusy(kind);
-        const res = await buildStatement(kind, customer.name, fromDate, toDate);
-        setStatementBusy(null);
-        const title = kind === 'outstanding' ? 'Outstanding Bills' : 'Ledger Account';
-        if (!res.ok) {
-            Alert.alert(title, res.error);
-            return;
-        }
-        setStatementTitle(title);
-        setStatementDoc(res.doc);
-    };
-    const saveStatement = async () => {
-        if (!statementDoc) return;
-        const savedTo = (() => { try { return saveStatementToDownloads(statementDoc); } catch { return ''; } })();
-        if (savedTo) {
-            Alert.alert('Saved', `${statementDoc.fileName} was saved to Downloads.`);
-            return;
-        }
-        try {
-            const shared = await shareStatement(statementDoc);
-            if (!shared) Alert.alert('Not available', 'Could not save or share the PDF on this device.');
-        } catch {
-            Alert.alert('Download failed', 'Could not save or share the PDF.');
-        }
-    };
-
     const outOfRange = !!history?.meta?.fy_out_of_range;
 
     return (
@@ -712,24 +677,6 @@ export default function InvoiceHistoryScreen() {
                     </View>
                 )}
 
-                {!!customer?.name && (
-                    <View style={styles.stmtRow}>
-                        {(['outstanding', 'ledger'] as StatementKind[]).map(kind => (
-                            <TouchableOpacity
-                                key={kind}
-                                style={[styles.stmtBtn, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}
-                                onPress={() => openStatement(kind)}
-                                disabled={!!statementBusy}
-                            >
-                                {statementBusy === kind
-                                    ? <ActivityIndicator size="small" color={colors.primary} />
-                                    : <Ionicons name="document-text-outline" size={15} color={colors.primary} />}
-                                <Text style={[styles.stmtBtnText, { color: colors.primary }]}>{kind === 'outstanding' ? 'Outstanding PDF' : 'Ledger PDF'}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
                     {history && <Text style={[styles.countNum, { color: colors.primary }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
@@ -767,26 +714,6 @@ export default function InvoiceHistoryScreen() {
                     </>
                 )}
             </ScrollView>
-
-            <Modal visible={!!statementDoc} animationType="slide" onRequestClose={() => setStatementDoc(null)}>
-                <View style={[styles.container, { backgroundColor: colors.background }]}>
-                    <ScreenHeader
-                        title={statementTitle}
-                        subtitle={customer?.customer_name}
-                        onBack={() => setStatementDoc(null)}
-                        rightIcon="download-outline"
-                        onRightPress={saveStatement}
-                    />
-                    {statementDoc && (
-                        <WebView
-                            originWhitelist={['*']}
-                            source={{ html: pdfViewerHtml(statementDoc.base64) }}
-                            javaScriptEnabled
-                            style={{ flex: 1 }}
-                        />
-                    )}
-                </View>
-            </Modal>
 
             <Modal visible={filtersSheetVisible} transparent animationType="slide" onRequestClose={closeFiltersSheet}>
                 <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -913,9 +840,6 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         countText: { fontSize: ms(11), fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
         countNum: { fontSize: ms(11), fontWeight: '800' },
 
-        stmtRow: { flexDirection: 'row', gap: s(10), paddingHorizontal: s(18), marginTop: vs(12) },
-        stmtBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.md, paddingVertical: vs(10) },
-        stmtBtnText: { fontSize: ms(12.5), fontWeight: '800' },
         truncBanner: { marginHorizontal: s(18), marginTop: vs(10), padding: ms(12), borderRadius: ms(12) },
 
         emptyState: { alignItems: 'center', paddingVertical: vs(60), gap: 12 },
