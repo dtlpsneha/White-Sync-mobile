@@ -29,6 +29,8 @@ import {
     getFiscalYears,
     getOwnRestrictedExecutiveName,
     getSalesExecutives,
+    isExtraBrand,
+    EXTRA_BRANDS,
     sortSummaryRows,
 } from '@/services/dailySalesReportApi';
 
@@ -136,7 +138,15 @@ const TABLE_NUM_COLS: { key: keyof DailySummaryTotals; subhead: string }[] = [
  * and only horizontally (the whole table still scrolls vertically as one
  * unit, as part of the screen's own outer ScrollView).
  */
-function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
+type TablePalette = { sales: string; collection: string; pending: string; frozen: string; total: string; rowA: string; rowB: string };
+
+/** Rose scheme for the Labour & Commission table, matching the ERP page's own second table. */
+const LABOUR_PALETTE: TablePalette = {
+    sales: '#be123c', collection: '#be123c', pending: '#be123c',
+    frozen: '#9f1239', total: '#881337', rowA: '#fff7f8', rowB: '#ffe4e6',
+};
+
+function DailySalesTable({ rows, totals, display, colors, s, vs, ms, palette }: {
     rows: DailySummaryRow[];
     totals: DailySummaryTotals | undefined;
     display: DisplayUnit;
@@ -144,7 +154,15 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
     s: (n: number) => number;
     vs: (n: number) => number;
     ms: (n: number) => number;
+    palette?: TablePalette;
 }) {
+    const salesBg = palette?.sales ?? TABLE_SALES_BG;
+    const collectionBg = palette?.collection ?? TABLE_COLLECTION_BG;
+    const pendingBg = palette?.pending ?? TABLE_PENDING_BG;
+    const totalBg = palette?.total ?? TABLE_TOTAL_BG;
+    const frozenBg = palette?.frozen ?? '#312e81';
+    const rowBgDefault = palette?.rowA ?? colors.surface;
+    const rowAltBg = palette?.rowB ?? colors.surfaceSecondary;
     const FROZEN_WIDTH = s(132);
     const NUM_COL_WIDTH = s(96);
     const HEADER_ROW1_H = vs(32);
@@ -160,7 +178,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
         <View style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: Radius.lg, overflow: 'hidden', marginHorizontal: s(18) }}>
             {/* Frozen "Name of Organisation" column */}
             <View style={{ width: FROZEN_WIDTH, borderRightWidth: 2, borderRightColor: TABLE_GROUP_BORDER }}>
-                <View style={{ height: HEADER_TOTAL_H, backgroundColor: '#312e81', justifyContent: 'center', paddingHorizontal: s(8) }}>
+                <View style={{ height: HEADER_TOTAL_H, backgroundColor: frozenBg, justifyContent: 'center', paddingHorizontal: s(8) }}>
                     <Text style={headerCellStyle}>Name of Organisation</Text>
                 </View>
                 {rows.map((row, idx) => {
@@ -170,7 +188,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                             key={row.brand}
                             style={{
                                 height: BODY_ROW_H, justifyContent: 'center', paddingHorizontal: s(8),
-                                backgroundColor: idx % 2 === 1 ? colors.surfaceSecondary : colors.surface,
+                                backgroundColor: idx % 2 === 1 ? rowAltBg : rowBgDefault,
                             }}
                         >
                             <Text
@@ -182,7 +200,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                         </View>
                     );
                 })}
-                <View style={{ height: BODY_ROW_H, justifyContent: 'center', paddingHorizontal: s(8), backgroundColor: TABLE_TOTAL_BG }}>
+                <View style={{ height: BODY_ROW_H, justifyContent: 'center', paddingHorizontal: s(8), backgroundColor: totalBg }}>
                     <Text style={{ fontSize: ms(11.5), fontWeight: '800', color: '#fff' }}>Total</Text>
                 </View>
             </View>
@@ -193,10 +211,10 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                     <View style={{ flexDirection: 'row' }}>
                         <View style={{ flexDirection: 'column' }}>
                             <View style={{ flexDirection: 'row', height: HEADER_ROW1_H }}>
-                                <View style={{ width: NUM_COL_WIDTH * 3, backgroundColor: TABLE_SALES_BG, justifyContent: 'center' }}>
+                                <View style={{ width: NUM_COL_WIDTH * 3, backgroundColor: salesBg, justifyContent: 'center' }}>
                                     <Text style={headerCellStyle}>Sales (Basic Value)</Text>
                                 </View>
-                                <View style={{ width: NUM_COL_WIDTH * 3, backgroundColor: TABLE_COLLECTION_BG, justifyContent: 'center', borderLeftWidth: 2, borderLeftColor: TABLE_GROUP_BORDER }}>
+                                <View style={{ width: NUM_COL_WIDTH * 3, backgroundColor: collectionBg, justifyContent: 'center', borderLeftWidth: 2, borderLeftColor: TABLE_GROUP_BORDER }}>
                                     <Text style={headerCellStyle}>Collection (With GST)</Text>
                                 </View>
                             </View>
@@ -206,7 +224,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                                         key={col.key}
                                         style={{
                                             width: NUM_COL_WIDTH, justifyContent: 'center', alignItems: 'center',
-                                            backgroundColor: i < 3 ? TABLE_SALES_BG : TABLE_COLLECTION_BG,
+                                            backgroundColor: i < 3 ? salesBg : collectionBg,
                                             borderLeftWidth: i === 3 ? 2 : 0, borderLeftColor: TABLE_GROUP_BORDER,
                                         }}
                                     >
@@ -215,14 +233,14 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                                 ))}
                             </View>
                         </View>
-                        <View style={{ width: NUM_COL_WIDTH, height: HEADER_TOTAL_H, backgroundColor: TABLE_PENDING_BG, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 2, borderLeftColor: TABLE_GROUP_BORDER, paddingHorizontal: s(4) }}>
+                        <View style={{ width: NUM_COL_WIDTH, height: HEADER_TOTAL_H, backgroundColor: pendingBg, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 2, borderLeftColor: TABLE_GROUP_BORDER, paddingHorizontal: s(4) }}>
                             <Text style={[headerCellStyle, { fontSize: ms(9.5) }]}>Payment Pending (With GST)</Text>
                         </View>
                     </View>
 
                     {rows.map((row, idx) => {
                         const isUnassigned = row.brand === 'Unassigned';
-                        const rowBg = idx % 2 === 1 ? colors.surfaceSecondary : colors.surface;
+                        const rowBg = idx % 2 === 1 ? rowAltBg : rowBgDefault;
                         return (
                             <View key={row.brand} style={{ flexDirection: 'row', height: BODY_ROW_H, backgroundColor: rowBg }}>
                                 {TABLE_NUM_COLS.map((col, i) => (
@@ -245,7 +263,7 @@ function DailySalesTable({ rows, totals, display, colors, s, vs, ms }: {
                         );
                     })}
 
-                    <View style={{ flexDirection: 'row', height: BODY_ROW_H, backgroundColor: TABLE_TOTAL_BG }}>
+                    <View style={{ flexDirection: 'row', height: BODY_ROW_H, backgroundColor: totalBg }}>
                         {TABLE_NUM_COLS.map((col, i) => (
                             <View
                                 key={col.key}
@@ -324,7 +342,7 @@ export function DailySalesReportBody() {
     const [fetchError, setFetchError] = useState<string | null>(null);
 
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortMode, setSortMode] = useState<'alpha' | 'pending'>('alpha');
+    const [sortMode, setSortMode] = useState<'sales' | 'pending'>('sales');
 
     const [filtersSheetVisible, setFiltersSheetVisible] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -468,16 +486,34 @@ export function DailySalesReportBody() {
     // rendering. The underlying id/name used for filtering is untouched.
     const execLabel = (id: string) => (executives.find(e => e.id === id)?.name || 'All Executives').toUpperCase();
 
-    const rows = useMemo(() => {
+    const FIELDS: (keyof DailySummaryTotals)[] = ['sales_as_on', 'sales_mtd', 'sales_fytd', 'collection_as_on', 'collection_mtd', 'collection_fytd', 'payment_pending'];
+    const sumRows = (list: DailySummaryRow[]): DailySummaryTotals => {
+        const t: any = {};
+        FIELDS.forEach(f => { t[f] = list.reduce((acc, r) => acc + (r[f] || 0), 0); });
+        return t as DailySummaryTotals;
+    };
+
+    // Labour Charges and Commission have their own table (as on the ERP page);
+    // the main table and its Total cover every other brand only.
+    const mainRows = useMemo(() => {
         if (!summary) return [];
-        let list = sortSummaryRows(summary.rows);
+        let list = sortSummaryRows(summary.rows).filter(r => !isExtraBrand(r.brand));
         if (sortMode === 'pending') list = [...list].sort((a, b) => b.payment_pending - a.payment_pending);
         const q = searchQuery.trim().toLowerCase();
         if (q) list = list.filter(r => brandLabel(r.brand).toLowerCase().includes(q));
         return list;
     }, [summary, sortMode, searchQuery]);
 
-    const totals = summary?.totals;
+    const mainTotals = useMemo(() => sumRows(summary ? summary.rows.filter(r => !isExtraBrand(r.brand)) : []), [summary]);
+
+    // Always both rows, zeros when the response doesn't include one.
+    const extraRows = useMemo(() => EXTRA_BRANDS.map(name => {
+        const found = summary?.rows.find(r => String(r.brand || '').toUpperCase() === name);
+        return found || ({ brand: name, sales_as_on: 0, sales_mtd: 0, sales_fytd: 0, collection_as_on: 0, collection_mtd: 0, collection_fytd: 0, payment_pending: 0 } as DailySummaryRow);
+    }), [summary]);
+    const extraTotals = useMemo(() => sumRows(extraRows), [extraRows]);
+
+    const outOfRange = !!summary?.meta?.fy_out_of_range;
 
     return (
         <View>
@@ -528,6 +564,14 @@ export function DailySalesReportBody() {
                 </View>
             ) : (
                 <>
+                    {outOfRange && (
+                        <View style={[styles.warnBox, { backgroundColor: colors.danger + '18', borderColor: colors.danger }]}>
+                            <Text style={{ color: colors.danger, fontSize: ms(12), fontWeight: '700' }}>
+                                The selected date ({ddmmyy(summary?.meta?.as_on || date)}) falls outside fiscal year {fiscalYear} ({ddmmyy(summary?.meta?.fy_start || '')} to {ddmmyy(summary?.meta?.fy_end || '')}). All figures are zero until the date is adjusted.
+                            </Text>
+                        </View>
+                    )}
+
                     <View style={styles.searchRow}>
                         <View style={[styles.searchBox, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                             <Ionicons name="search" size={16} color={colors.textSecondary} />
@@ -541,19 +585,26 @@ export function DailySalesReportBody() {
                         </View>
                         <TouchableOpacity
                             style={[styles.sortBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                            onPress={() => setSortMode(m => (m === 'alpha' ? 'pending' : 'alpha'))}
+                            onPress={() => setSortMode(m => (m === 'sales' ? 'pending' : 'sales'))}
                         >
                             <Ionicons name="swap-vertical-outline" size={17} color={colors.text} />
                         </TouchableOpacity>
                     </View>
 
-                    {rows.length === 0 ? (
+                    {mainRows.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Ionicons name="search-outline" size={40} color={colors.textSecondary} />
                             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No brands match &ldquo;{searchQuery}&rdquo;</Text>
                         </View>
                     ) : (
-                        <DailySalesTable rows={rows} totals={totals} display={display} colors={colors} s={s} vs={vs} ms={ms} />
+                        <DailySalesTable rows={mainRows} totals={mainTotals} display={display} colors={colors} s={s} vs={vs} ms={ms} />
+                    )}
+
+                    {!searchQuery.trim() && (
+                        <>
+                            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Labour &amp; Commission</Text>
+                            <DailySalesTable rows={extraRows} totals={extraTotals} display={display} colors={colors} s={s} vs={vs} ms={ms} palette={LABOUR_PALETTE} />
+                        </>
                     )}
                 </>
             )}
@@ -688,6 +739,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         searchInput: { flex: 1, fontSize: ms(14), fontWeight: '500', paddingVertical: vs(8) },
         sortBtn: { width: ms(44), height: ms(44), borderWidth: 1, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center' },
 
+        warnBox: { marginHorizontal: s(18), marginTop: vs(14), padding: ms(12), borderRadius: ms(12), borderWidth: 1 },
         emptyState: { alignItems: 'center', paddingVertical: vs(50), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
 
