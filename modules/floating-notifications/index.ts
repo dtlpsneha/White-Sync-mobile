@@ -16,6 +16,7 @@ interface FloatingNotificationsNativeModule {
     getBlockedPackages(): string[];
     setBlockedPackages(packages: string[]): void;
     getKnownApps(): KnownApp[];
+    saveToDownloads(path: string, fileName: string): string;
 }
 
 // Android-only native module; absent in Expo Go and on iOS/web, where every
@@ -78,6 +79,10 @@ export const FloatingNotifications = {
     },
     getKnownApps(): KnownApp[] {
         return getNative()?.getKnownApps() ?? [];
+    },
+    /** Copies a local file into the phone's Downloads folder. Returns the saved location, or '' if unavailable. */
+    saveToDownloads(path: string, fileName: string): string {
+        return getNative()?.saveToDownloads(path, fileName) ?? '';
     },
     isAvailable(): boolean {
         return getNative() !== null;
