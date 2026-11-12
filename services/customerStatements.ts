@@ -22,7 +22,6 @@ const COMPANY = {
     contact: 'Contact : 0422-2470625,0422-2470280',
 };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const PAID_RECEIPT_STATUS = ['Matched', 'Document Created'];
 
 export type StatementKind = 'outstanding' | 'ledger';
 export type StatementResult = { ok: true } | { ok: false; error: string };
@@ -74,23 +73,6 @@ async function getList(doctype: string, params: {
     return res.data?.data || [];
 }
 
-function esiList(customer: string, fields: string[], extra: any[], orderBy: string) {
-    return getList('External Sales Invoice', {
-        fields,
-        filters: [['status', '!=', 'Cancelled'], ...extra],
-        orFilters: [['customer', '=', customer], ['buyer_name', '=', customer]],
-        orderBy,
-    });
-}
-
-function receiptList(customer: string, fields: string[], extra: any[], orderBy: string) {
-    return getList('External Payment Receipt', {
-        fields,
-        filters: [['customer', '=', customer], ['status', 'in', PAID_RECEIPT_STATUS], ...extra],
-        orderBy,
-    });
-}
-
 /** Customer name + first linked postal address. Falls back to the id on any failure. */
 async function customerInfo(customer: string): Promise<{ name: string; address: string[] }> {
     const info = { name: customer, address: [] as string[] };
@@ -132,6 +114,8 @@ const STYLE = `
   .b { font-weight: bold; }
   .i { font-style: italic; }
   .tot td { border-top: 1px solid #000; font-weight: bold; }
+  .red { color: #C80000; }
+  .green { color: #008000; }
 `;
 
 function header(party: string, title: string, address: string[], range: string, subtitle?: string) {
@@ -151,90 +135,116 @@ function header(party: string, title: string, address: string[], range: string, 
 
 const page = (body: string) => `<html><head><meta charset="utf-8"/><style>${STYLE}</style></head><body>${body}</body></html>`;
 
+/** Tally data saved in ERP as a Note: "Tally Customer Bills" or "Tally Customer Ledgers". */
+type TallyRecord = Record<string, any>;
+async function tallyNote(title: string): Promise<TallyRecord> {
+    try {
+        const rows = await getList('Note', { fields: ['content'], filters: [['title', '=', title]], limit: 1 });
+        return rows[0]?.content ? JSON.parse(rows[0].content) : {};
+    } catch {
+        return {};
+    }
+}
+
+const normKey = (v: string) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const pick = (all: TallyRecord, customer: string, name: string) => all[normKey(customer)] || all[normKey(name)];
+const ymd = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 async function buildOutstanding(customer: string, fromIso: string, toIso: string): Promise<{ html: string; file: string } | string> {
-    const [info, bills, receipts] = await Promise.all([
-        customerInfo(customer),
-        esiList(customer, ['name', 'invoice_number', 'invoice_date', 'invoice_total', 'sales_invoice_linked'],
-            [['invoice_date', 'between', [fromIso, toIso]]], 'invoice_date asc, name asc'),
-        receiptList(customer, ['sales_invoice', 'amount'], [['date', '<=', toIso]], 'date asc, name asc'),
-    ]);
+    const [info, bills] = await Promise.all([customerInfo(customer), tallyNote('Tally Customer Bills')]);
+    const rec = pick(bills, customer, info.name);
+    if (!rec) return 'No Tally pending bills found for this customer.';
 
-    const paidBy: Record<string, number> = {};
-    receipts.forEach((r: any) => { if (r.sales_invoice) paidBy[r.sales_invoice] = (paidBy[r.sales_invoice] || 0) + Number(r.amount || 0); });
-
-    const end = new Date(`${toIso}T00:00:00`).getTime();
-    let totOpen = 0, totPend = 0;
     const rows: string[] = [];
-    bills.forEach((b: any) => {
-        const total = Number(b.invoice_total || 0);
-        const paid = b.sales_invoice_linked ? (paidBy[b.sales_invoice_linked] || 0) : 0;
-        const pend = Math.round((total - paid) * 100) / 100;
-        if (pend <= 0.005) return;
-        const late = Math.floor((end - new Date(`${b.invoice_date}T00:00:00`).getTime()) / 86400000);
-        totOpen += total; totPend += pend;
-        rows.push(`<tr><td class="b">${dmy(b.invoice_date)}</td><td>${esc(b.invoice_number || b.name)}</td>` +
-            `<td class="r">${inr(total)} Dr</td><td class="r b">${inr(pend)} Dr</td><td>${dmy(b.invoice_date)}</td>` +
-            `<td class="r i">${late > 0 ? late : ''}</td></tr>`);
+    let opTot = 0, pendTot = 0;
+    (rec.bills || []).forEach((b: any[]) => {
+        // b = [date yyyy-mm-dd, ref, opening amount, pending amount, overdue days, due on]
+        if (Math.abs(b[3]) < 1) return;
+        opTot += b[2]; pendTot += b[3];
+        rows.push(`<tr><td class="b">${dmy(b[0])}</td><td>${esc(b[1])}</td><td class="r">${inr(b[2])} Dr</td>` +
+            `<td class="r b">${inr(b[3])} Dr</td><td class="r i">${b[4] ? esc(b[4]) : ''}</td></tr>`);
     });
-    if (!rows.length) return 'No pending bills for this customer in the selected period.';
+    if (rows.length) {
+        rows.push(`<tr class="tot"><td></td><td>Sub Total</td><td class="r">${inr(opTot)} Dr</td><td class="r">${inr(pendTot)} Dr</td><td></td></tr>`);
+    }
+    const diff = round2(Number(rec.diff || 0));
+    const net = round2(pendTot + diff);
+    if (diff <= -1) {
+        rows.push(`<tr><td></td><td class="i">On Account (NOT ADJUSTED)</td><td></td><td class="r">${inr(-diff)} Cr</td><td></td></tr>`);
+    } else if (diff >= 1) {
+        rows.push(`<tr><td></td><td class="i">Balance not in bills</td><td class="r">${inr(diff)} Dr</td><td class="r">${inr(diff)} Dr</td><td></td></tr>`);
+    }
+    if (!rows.length) return 'No pending bills for this customer.';
+    const netText = net >= 0 ? `${inr(net)} Dr` : `${inr(-net)} Cr`;
+    rows.push(`<tr class="tot"><td></td><td>Net Balance (TO BE RECEIVED)</td><td></td>` +
+        `<td class="r ${net >= 0 ? 'red' : 'green'}">${netText}</td><td></td></tr>`);
 
     const html = page(
         header(info.name, 'Bill-wise Details', [], `${dmy(fromIso)} to ${dmy(toIso)}`, 'Pending Bills') +
-        `<table><thead><tr><th>Date</th><th>Ref. No.</th><th class="r">Opening Amount</th><th class="r">Pending Amount</th><th>Due on</th><th class="r">Overdue by days</th></tr></thead>
-         <tbody>${rows.join('')}
-         <tr class="tot"><td></td><td></td><td class="r">${inr(totOpen)} Dr</td><td class="r">${inr(totPend)} Dr</td><td></td><td></td></tr></tbody></table>`
+        `<table><thead><tr><th>Date</th><th>Ref. No.</th><th class="r">Opening Amount</th><th class="r">Pending Amount</th><th class="r">Overdue by days</th></tr></thead>
+         <tbody>${rows.join('')}</tbody></table>`
     );
     return { html, file: `Outstanding_${info.name.replace(/[^A-Za-z0-9]+/g, '_')}_${toIso}` };
 }
 
 async function buildLedger(customer: string, fromIso: string, toIso: string): Promise<{ html: string; file: string } | string> {
-    const [info, openBills, openReceipts, bills, receipts] = await Promise.all([
+    const [info, ledgers, bills] = await Promise.all([
         customerInfo(customer),
-        esiList(customer, ['invoice_number', 'invoice_date', 'invoice_total'], [['invoice_date', '<', fromIso]], 'invoice_date asc'),
-        receiptList(customer, ['amount', 'date'], [['date', '<', fromIso]], 'date asc'),
-        esiList(customer, ['name', 'invoice_number', 'invoice_date', 'invoice_total', 'sales_invoice_linked'],
-            [['invoice_date', 'between', [fromIso, toIso]]], 'invoice_date asc, name asc'),
-        receiptList(customer, ['voucher_no', 'date', 'amount', 'received_in', 'reference'],
-            [['date', 'between', [fromIso, toIso]]], 'date asc, name asc'),
+        tallyNote('Tally Customer Ledgers'),
+        tallyNote('Tally Customer Bills'),
     ]);
+    const rec = pick(ledgers, customer, info.name);
+    if (!rec) return 'No Tally ledger found for this customer.';
 
-    let openDr = 0, openCr = 0;
-    openBills.forEach((b: any) => { openDr += Number(b.invoice_total || 0); });
-    openReceipts.forEach((r: any) => { openCr += Number(r.amount || 0); });
+    const fromD = fromIso.replace(/-/g, '');
+    const toD = toIso.replace(/-/g, '');
+    // Balance brought forward: Tally opening plus every entry before the period.
+    // Tally signs: negative = Dr, positive = Cr.
+    let bf: number = rec.open || 0;
+    (rec.lines || []).forEach((l: any[]) => { if (l[0] < fromD) bf += l[3]; });
+    // Bills below Re 1 are hidden in the outstanding statement, so they are left out of the balance too.
+    const brec = pick(bills, customer, info.name);
+    let hidden = 0;
+    if (brec) (brec.bills || []).forEach((bl: any[]) => { if (Math.abs(bl[3]) < 1) hidden += bl[3]; });
+    bf = round2(bf + hidden);
 
-    type Row = { date: string; side: string; part: string; vtype: string; vno: string; dr: number; cr: number };
-    const rows: Row[] = [];
-    const openNet = Math.round((openDr - openCr) * 100) / 100;
-    if (Math.abs(openNet) > 0.005) {
-        rows.push({ date: '', side: openNet > 0 ? 'Dr' : 'Cr', part: 'Opening Balance', vtype: '', vno: '', dr: openNet > 0 ? openNet : 0, cr: openNet < 0 ? -openNet : 0 });
+    // lines: [yyyymmdd, vch type, vch no, amount, particulars]
+    const inRange = (rec.lines || []).filter((l: any[]) => l[0] >= fromD && l[0] <= toD && Math.abs(l[3]) >= 1);
+    if (!inRange.length && Math.abs(bf) < 0.005) return 'No ledger entries for this customer in the selected period.';
+
+    const money = (x: number) => inr(Math.abs(x));
+    let dr = 0, cr = 0;
+    const addAmt = (x: number) => { if (x < 0) dr += -x; else cr += x; };
+    const body: string[] = [];
+
+    if (Math.abs(bf) >= 1) {
+        body.push(`<tr class="b"><td></td><td class="b">Opening Balance</td><td></td><td></td>` +
+            `<td class="r">${bf < 0 ? money(bf) : ''}</td><td class="r">${bf > 0 ? money(bf) : ''}</td></tr>`);
+        addAmt(bf);
     }
+    inRange.forEach((l: any[]) => {
+        const x = round2(l[3]);
+        body.push(`<tr><td>${dmy(ymd(l[0]))}</td><td>${esc(l[4])}</td><td>${esc(l[1])}</td><td class="r">${esc(l[2])}</td>` +
+            `<td class="r">${x < 0 ? money(x) : ''}</td><td class="r">${x > 0 ? money(x) : ''}</td></tr>`);
+        addAmt(x);
+    });
 
-    const entries: { date: string; dr: number; cr: number; part: string; vtype: string; vno: string; ord: number }[] = [];
-    bills.forEach((b: any) => entries.push({ date: b.invoice_date, dr: Number(b.invoice_total || 0), cr: 0, part: 'Sales', vtype: 'GST Sales', vno: b.invoice_number || b.name, ord: 0 }));
-    receipts.forEach((r: any) => entries.push({ date: r.date, dr: 0, cr: Number(r.amount || 0), part: r.received_in || 'Bank', vtype: 'Receipt', vno: r.voucher_no || r.reference || '', ord: 1 }));
-    entries.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.ord - b.ord));
-    entries.forEach(e => rows.push({ date: dmy(e.date), side: e.dr > 0 ? 'Dr' : 'Cr', part: e.part, vtype: e.vtype, vno: e.vno, dr: e.dr, cr: e.cr }));
-
-    if (!rows.length) return 'No ledger entries for this customer in the selected period.';
-
-    let cumDr = 0, cumCr = 0;
-    rows.forEach(r => { cumDr += r.dr; cumCr += r.cr; });
-    const diff = Math.abs(cumDr - cumCr);
-    const side = cumCr > cumDr ? 'Cr' : 'Dr';
-    const grand = Math.max(cumDr, cumCr);
-
-    const body = rows.map(r =>
-        `<tr><td>${esc(r.date)}</td><td class="b">${r.side}&nbsp;&nbsp;${esc(r.part)}</td><td class="b">${esc(r.vtype)}</td>` +
-        `<td class="r">${esc(r.vno)}</td><td class="r">${r.dr ? inr(r.dr) : ''}</td><td class="r">${r.cr ? inr(r.cr) : ''}</td></tr>`
-    ).join('');
+    const totDr = round2(dr), totCr = round2(cr);
+    const diff = round2(totDr - totCr);
+    body.push(`<tr class="tot"><td></td><td></td><td></td><td></td><td class="r">${inr(totDr)}</td><td class="r">${inr(totCr)}</td></tr>`);
+    if (Math.abs(diff) >= 0.005) {
+        // Dr total above Cr total: the customer owes money, so the closing sits on the Cr side in red.
+        body.push(`<tr><td></td><td class="b">Closing Balance</td><td></td><td></td>` +
+            `<td class="r green b">${diff < 0 ? inr(-diff) : ''}</td><td class="r red b">${diff > 0 ? inr(diff) : ''}</td></tr>`);
+        const grand = Math.max(totDr, totCr);
+        body.push(`<tr class="tot"><td></td><td></td><td></td><td></td><td class="r">${inr(grand)}</td><td class="r">${inr(grand)}</td></tr>`);
+    }
 
     const html = page(
         header(info.name, 'Ledger Account', info.address, `${dmy(fromIso)} to ${dmy(toIso)}`) +
         `<table><thead><tr><th>Date</th><th>Particulars</th><th>Vch Type</th><th class="r">Vch No.</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead>
-         <tbody>${body}
-         <tr class="tot"><td></td><td></td><td></td><td></td><td class="r">${inr(cumDr)}</td><td class="r">${inr(cumCr)}</td></tr>
-         <tr><td></td><td class="b">${side}&nbsp;&nbsp;Closing Balance</td><td></td><td></td><td class="r">${side === 'Cr' ? inr(diff) : ''}</td><td class="r">${side === 'Dr' ? inr(diff) : ''}</td></tr>
-         <tr class="tot"><td></td><td></td><td></td><td></td><td class="r">${inr(grand)}</td><td class="r">${inr(grand)}</td></tr></tbody></table>`
+         <tbody>${body.join('')}</tbody></table>`
     );
     return { html, file: `Ledger_${info.name.replace(/[^A-Za-z0-9]+/g, '_')}_${toIso}` };
 }
