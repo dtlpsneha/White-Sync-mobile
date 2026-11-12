@@ -7,11 +7,13 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
-import { Customer, searchCustomers } from '@/services/frappeSearch';
+import { Customer } from '@/services/frappeSearch';
+import { getUsedCustomers } from '@/services/dailySalesReportApi';
 import {
     StatementDoc,
     StatementKind,
     buildStatement,
+    localTodayIso,
     pdfViewerHtml,
     saveStatementToDownloads,
     shareStatement,
@@ -33,29 +35,41 @@ export default function CustomerStatementScreen() {
     const { s, vs, ms } = useResponsive();
 
     const [query, setQuery] = useState('');
+    const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [results, setResults] = useState<Customer[]>([]);
-    const [searching, setSearching] = useState(false);
+    const [loadingList, setLoadingList] = useState(false);
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [building, setBuilding] = useState(false);
     const [doc, setDoc] = useState<StatementDoc | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Customer search, only while no customer has been picked yet.
+    // Customers with sales invoices from 1 January 2024 onwards (the same names the
+    // Sales Invoice History filter uses).
     useEffect(() => {
-        const q = query.trim();
-        if (!q || customer) {
+        let cancelled = false;
+        (async () => {
+            setLoadingList(true);
+            const used = await getUsedCustomers({ fromDate: '2024-01-01', toDate: localTodayIso() });
+            if (cancelled) return;
+            const names = used.ok ? used.data : [];
+            const list = names
+                .map(n => ({ name: n, customer_name: n } as Customer))
+                .sort((x, y) => x.name.localeCompare(y.name));
+            setAllCustomers(list);
+            setLoadingList(false);
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Search runs on the list above, so it never shows customers without 2024+ invoices.
+    useEffect(() => {
+        if (customer) {
             setResults([]);
-            setSearching(false);
             return;
         }
-        setSearching(true);
-        const handle = setTimeout(async () => {
-            const res = await searchCustomers(q);
-            setResults(res.ok ? res.data : []);
-            setSearching(false);
-        }, 300);
-        return () => clearTimeout(handle);
-    }, [query, customer]);
+        const q = query.trim().toLowerCase();
+        setResults(q ? allCustomers.filter(c => `${c.customer_name} ${c.name}`.toLowerCase().includes(q)) : allCustomers);
+    }, [query, customer, allCustomers]);
 
     const pickCustomer = async (c: Customer) => {
         setCustomer(c);
@@ -160,7 +174,7 @@ export default function CustomerStatementScreen() {
                             onChangeText={setQuery}
                             autoFocus
                         />
-                        {searching && <ActivityIndicator size="small" color={colors.primary} />}
+                        {loadingList && <ActivityIndicator size="small" color={colors.primary} />}
                     </View>
 
                     {results.map(c => (
@@ -177,9 +191,6 @@ export default function CustomerStatementScreen() {
                         </TouchableOpacity>
                     ))}
 
-                    {!searching && query.trim().length > 0 && results.length === 0 && (
-                        <Text style={[styles.hint, { color: colors.textSecondary }]}>No customers match “{query.trim()}”</Text>
-                    )}
                 </ScrollView>
             )}
         </View>
