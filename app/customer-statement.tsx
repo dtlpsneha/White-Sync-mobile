@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -12,8 +13,10 @@ import { getUsedCustomers } from '@/services/dailySalesReportApi';
 import {
     StatementDoc,
     StatementKind,
-    buildStatement,
+    StatementJob,
     localTodayIso,
+    prepareStatement,
+    writeStatementPdf,
     pdfViewerHtml,
     saveStatementToDownloads,
     shareStatement,
@@ -33,6 +36,7 @@ export default function CustomerStatementScreen() {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const { s, vs, ms } = useResponsive();
+    const insets = useSafeAreaInsets();
 
     const [query, setQuery] = useState('');
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
@@ -40,6 +44,7 @@ export default function CustomerStatementScreen() {
     const [loadingList, setLoadingList] = useState(false);
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [building, setBuilding] = useState(false);
+    const [job, setJob] = useState<{ job: StatementJob; done: (json: string) => void } | null>(null);
     const [doc, setDoc] = useState<StatementDoc | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -52,8 +57,16 @@ export default function CustomerStatementScreen() {
             const used = await getUsedCustomers({ fromDate: '2024-01-01', toDate: localTodayIso() });
             if (cancelled) return;
             const names = used.ok ? used.data : [];
-            const list = names
-                .map(n => ({ name: n, customer_name: n } as Customer))
+            // Records whose names match once punctuation is removed (e.g. "PLANT - 5" and "PLANT � 5")
+            // are one customer in the list. Each entry keeps all of its records; the statement uses
+            // the first one that ERP can resolve.
+            const groups = new Map<string, string[]>();
+            names.forEach(n => {
+                const key = n.toLowerCase().replace(/[^a-z0-9]/g, '');
+                groups.set(key, [...(groups.get(key) || []), n]);
+            });
+            const list = Array.from(groups.values())
+                .map(ids => ({ name: ids[0], customer_name: ids[0], ids } as Customer & { ids: string[] }))
                 .sort((x, y) => x.name.localeCompare(y.name));
             setAllCustomers(list);
             setLoadingList(false);
@@ -71,6 +84,12 @@ export default function CustomerStatementScreen() {
         setResults(q ? allCustomers.filter(c => `${c.customer_name} ${c.name}`.toLowerCase().includes(q)) : allCustomers);
     }, [query, customer, allCustomers]);
 
+    // Runs ERP's PDF code in a hidden WebView; resolves with the JSON the page posts back.
+    const runJob = (j: StatementJob) => new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => { setJob(null); reject(new Error('timed out')); }, 60000);
+        setJob({ job: j, done: (json: string) => { clearTimeout(timer); setJob(null); resolve(json); } });
+    });
+
     const pickCustomer = async (c: Customer) => {
         setCustomer(c);
         setQuery(c.customer_name || c.name);
@@ -79,10 +98,25 @@ export default function CustomerStatementScreen() {
         setError(null);
         setBuilding(true);
         // Blank dates: the statement runs from the fiscal year start to today.
-        const res = await buildStatement(kind, c.name, '', '');
+        // Try each record of this customer until one gives a statement.
+        const ids = (c as Customer & { ids?: string[] }).ids || [c.name];
+        let last: { ok: false; error: string } | null = null;
+        for (const id of ids) {
+            try {
+                const prep = await prepareStatement(kind, id, '', '');
+                if (!prep.ok) { last = prep; continue; }
+                const parsed = JSON.parse(await runJob(prep.job));
+                if (parsed.error) { last = { ok: false, error: parsed.error }; continue; }
+                const saved = await writeStatementPdf(prep.job.fileName, parsed.data);
+                setBuilding(false);
+                setDoc(saved);
+                return;
+            } catch {
+                last = { ok: false, error: 'Could not build the statement.' };
+            }
+        }
         setBuilding(false);
-        if (res.ok) setDoc(res.doc);
-        else setError(res.error);
+        setError(last ? last.error : 'Could not build the statement.');
     };
 
     const chooseAnotherCustomer = () => {
@@ -142,6 +176,16 @@ export default function CustomerStatementScreen() {
                 ) : undefined}
             />
 
+            {job && (
+                <WebView
+                    originWhitelist={['*']}
+                    source={{ html: job.job.html }}
+                    javaScriptEnabled
+                    onMessage={e => job.done(e.nativeEvent.data)}
+                    style={{ width: 1, height: 1, opacity: 0 }}
+                />
+            )}
+
             {doc ? (
                 <WebView
                     originWhitelist={['*']}
@@ -163,7 +207,7 @@ export default function CustomerStatementScreen() {
                     </TouchableOpacity>
                 </View>
             ) : (
-                <ScrollView contentContainerStyle={{ padding: s(16), gap: vs(10) }} keyboardShouldPersistTaps="handled">
+                <ScrollView contentContainerStyle={{ padding: s(16), gap: vs(10), paddingBottom: 120 + insets.bottom }} keyboardShouldPersistTaps="handled">
                     <View style={[styles.searchBox, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <Ionicons name="search" size={16} color={colors.textSecondary} />
                         <TextInput
@@ -184,8 +228,7 @@ export default function CustomerStatementScreen() {
                             onPress={() => pickCustomer(c)}
                         >
                             <View style={{ flex: 1 }}>
-                                <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>{c.customer_name || c.name}</Text>
-                                <Text style={[styles.rowSub, { color: colors.textSecondary }]} numberOfLines={1}>{c.name}</Text>
+                                <Text style={[styles.rowTitle, { color: colors.text }]}>{c.customer_name || c.name}</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                         </TouchableOpacity>

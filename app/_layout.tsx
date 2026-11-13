@@ -10,6 +10,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { NotificationPopup } from '@/components/NotificationPopup';
 import { NotificationModal } from '@/components/NotificationModal';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Must be imported at module scope so the background task is defined before
 // the runtime tries to execute it (even when the app is not fully mounted).
 import '../services/BackgroundNotificationHandler';
@@ -25,11 +26,13 @@ try { registerBackgroundNotificationTask(); } catch (e) { console.warn('[Layout]
 
 function RootLayoutContent() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   usePushNotifications();
 
   return (
     <NavigationProvider value={theme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={{ flex: 1 }}>
+      {/* Keeps every page's last items clear of the phone's bottom bar (the gap is the page background colour). */}
+      <View style={{ flex: 1, paddingBottom: insets.bottom + 48, backgroundColor: Colors[theme].background }}>
         {/* Without an explicit contentStyle, the native stack's own screen
           * container defaults to white while a screen transitions/mounts —
           * briefly visible as a white flash on back navigation, especially

@@ -205,7 +205,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
             flex: 1,
         },
         modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-        modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '88%', paddingTop: 8 },
+        modalSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '88%', paddingTop: 8, paddingBottom: 64 },
         modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9' },
         modalTitle: { fontSize: ms(18), fontWeight: '900' },
         modalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
