@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { FloatingNotifications } from '@/modules/floating-notifications';
@@ -31,6 +32,7 @@ const toIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSta
 /** Tally bank-book receipts for one day, as on the ERP Daily Sales Report "Payment Details" tab. */
 export default function PaymentDetailsScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
 
@@ -140,7 +142,7 @@ export default function PaymentDetailsScreen() {
                 }
             />
 
-            <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
+            <ScrollView contentContainerStyle={[styles.pad, { paddingBottom: 120 + insets.bottom }]} keyboardShouldPersistTaps="handled">
                 <TouchableOpacity style={[styles.dateBox, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={openPicker}>
                     <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
                     <Text style={[styles.dateText, { color: colors.text }]}>{dmy(dateIso.replace(/-/g, ''))}</Text>

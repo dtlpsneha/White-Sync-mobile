@@ -1,4 +1,5 @@
 import MaintenanceList from '@/components/MaintenanceList';
+import { CustomerVisit, loadVisits, syncPendingVisits } from '@/services/visitExtras';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -128,6 +129,13 @@ export default function MaintenanceScreen() {
         }, [router])
     );
 
+    const [savedVisits, setSavedVisits] = useState<CustomerVisit[]>([]);
+    useFocusEffect(
+        useCallback(() => {
+            syncPendingVisits().then(loadVisits).then(setSavedVisits);
+        }, [])
+    );
+
     const onRefresh = () => {
         setRefreshing(true);
         fetchMaintenanceRecords();
@@ -162,7 +170,7 @@ export default function MaintenanceScreen() {
 
             <ScreenHeader
                 title="Customer Visit"
-                subtitle="Relationship Management"
+                subtitle="Saved on this phone"
                 onBack={() => router.replace('/home')}
             />
 
@@ -170,50 +178,33 @@ export default function MaintenanceScreen() {
                 style={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollInner}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-                }
             >
-                <View style={styles.statGrid}>
-                    {stats.map((stat) => (
-                        <View
-                            key={stat.label}
-                            style={[styles.statTile, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}
-                        >
-                            <View style={[styles.statAccent, { backgroundColor: stat.color }]} />
-                            <View style={styles.statTop}>
-                                <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1}>{stat.label}</Text>
-                                <Ionicons name={stat.icon as any} size={ms(20)} color={stat.color} />
+                {savedVisits.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No visits saved yet. Tap + to add a visit.</Text>
+                ) : savedVisits.map(v => (
+                    <View key={v.id} style={[styles.visitCard, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <View style={styles.visitHead}>
+                            <Text style={[styles.visitTitle, { color: colors.text }]}>{v.date_of_visit}</Text>
+                            <View style={[styles.doneBadge, { backgroundColor: (v.erp_name ? colors.success : colors.danger) + '1F' }]}>
+                                <Text style={[styles.doneText, { color: v.erp_name ? colors.success : colors.danger }]}>{v.erp_name ? 'Synced' : 'Not synced'}</Text>
                             </View>
-                            <Text style={[styles.statValue, { color: stat.color }]} numberOfLines={1} adjustsFontSizeToFit>{stat.value}</Text>
-                            <Text style={[styles.statNote, { color: stat.color }]} numberOfLines={1}>{stat.note}</Text>
                         </View>
-                    ))}
-                </View>
-
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <View style={[styles.sectionAccent, { backgroundColor: colors.primary }]} />
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Activities</Text>
+                        <Text style={[styles.visitSub, { color: colors.textSecondary }]}>Executive: {v.executive || '-'}</Text>
+                        <Text style={[styles.visitSub, { color: colors.textSecondary }]}>
+                            Customers: {v.customer_planned.length ? v.customer_planned.join(', ') : '-'}
+                        </Text>
+                        {v.along_with.length > 0 && (
+                            <Text style={[styles.visitSub, { color: colors.textSecondary }]}>Along with: {v.along_with.join(', ')}</Text>
+                        )}
+                        <TouchableOpacity
+                            style={[styles.reportBtn, { backgroundColor: colors.primary }]}
+                            onPress={() => router.push({ pathname: '/maintenance/completion-report', params: { id: v.id } } as any)}
+                        >
+                            <Ionicons name="document-text-outline" size={16} color="#FFF" />
+                            <Text style={styles.reportBtnText}>{v.completion ? 'Open visit record' : 'Completion Report'}</Text>
+                        </TouchableOpacity>
                     </View>
-
-                    {loading && !refreshing ? (
-                        <View style={styles.loadingBox}>
-                            <ActivityIndicator size="large" color={colors.primary} />
-                            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading visits...</Text>
-                        </View>
-                    ) : error ? (
-                        <View style={styles.errorBox}>
-                            <Ionicons name="alert-circle" size={40} color={colors.danger} />
-                            <Text style={styles.errorText}>{error}</Text>
-                            <TouchableOpacity style={styles.retryBtn} onPress={onRefresh}>
-                                <Text style={styles.retryText}>Try Again</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <MaintenanceList records={records} loading={false} />
-                    )}
-                </View>
+                ))}
             </ScrollView>
 
             <TouchableOpacity
@@ -233,7 +224,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
     return StyleSheet.create({
         container: { flex: 1 },
         scrollContent: { flex: 1 },
-        scrollInner: { paddingTop: vs(8), paddingBottom: vs(120) },
+        scrollInner: { paddingTop: vs(8), paddingBottom: vs(120), paddingHorizontal: s(16) },
         fab: {
             position: 'absolute',
             bottom: vs(40),
@@ -271,7 +262,16 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         errorBox: { padding: ms(32), alignItems: 'center', gap: 14, backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: Radius.lg },
         errorText: { fontSize: ms(13), color: '#EF4444', textAlign: 'center', fontWeight: '500' },
         retryBtn: { paddingHorizontal: s(22), paddingVertical: vs(11), backgroundColor: '#EF4444', borderRadius: Radius.md },
-        retryText: { color: '#FFF', fontWeight: '700' }
+        retryText: { color: '#FFF', fontWeight: '700' },
+        visitCard: { borderWidth: 1, borderRadius: Radius.lg, padding: 14, gap: 6, marginBottom: 12 },
+        visitHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        visitTitle: { fontSize: 15, fontWeight: '800' },
+        visitSub: { fontSize: 12, fontWeight: '600' },
+        doneBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+        doneText: { fontSize: 11, fontWeight: '800' },
+        emptyText: { fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 40 },
+        reportBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, paddingVertical: 10, marginTop: 8 },
+        reportBtnText: { color: '#FFF', fontWeight: '800', fontSize: 13 },
     });
 }
 

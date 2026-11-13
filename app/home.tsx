@@ -15,7 +15,7 @@ import Animated, {
     useSharedValue,
     withTiming
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiPost } from '../utils/api';
 import { apiUrl } from '@/constants/config';
 
@@ -169,6 +169,7 @@ export default function HomeScreen() {
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
     const { s, vs, ms, width } = useResponsive();
+    const insets = useSafeAreaInsets();
     const styles = getStyles(theme, { s, vs, ms, width });
 
     const hour = new Date().getHours();
@@ -442,7 +443,7 @@ export default function HomeScreen() {
                 ref={scrollRef}
                 onContentSizeChange={pinToTopWhileSettling}
                 style={styles.scrollContent}
-                contentContainerStyle={{ paddingBottom: 120 }}
+                contentContainerStyle={{ paddingBottom: 170 + insets.bottom }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />}>
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {permissionDenied ? (

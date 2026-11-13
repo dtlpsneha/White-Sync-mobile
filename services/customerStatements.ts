@@ -9,12 +9,12 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
-import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { apiUrl } from '@/constants/config';
 import { apiGet } from '@/utils/api';
 import { FloatingNotifications } from '@/modules/floating-notifications';
+import { ERP_PDF_CORE } from '@/services/erpPdfCore';
 
 const COMPANY = {
     name: 'White & Co',
@@ -100,42 +100,6 @@ async function customerInfo(customer: string): Promise<{ name: string; address: 
     return info;
 }
 
-const STYLE = `
-  @page { margin: 14mm; }
-  body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #000; }
-  .c { text-align: center; }
-  .co { font-size: 14px; font-weight: bold; }
-  .party { font-size: 12px; font-weight: bold; margin-top: 8px; }
-  .gap { height: 8px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th { text-align: left; font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 3px 4px; }
-  td { padding: 2.5px 4px; vertical-align: top; }
-  .r { text-align: right; }
-  .b { font-weight: bold; }
-  .i { font-style: italic; }
-  .tot td { border-top: 1px solid #000; font-weight: bold; }
-  .red { color: #C80000; }
-  .green { color: #008000; }
-`;
-
-function header(party: string, title: string, address: string[], range: string, subtitle?: string) {
-    return `
-    <div class="c">
-      <div class="co">${esc(COMPANY.name)}</div>
-      ${COMPANY.lines.map(l => `<div>${esc(l)}</div>`).join('')}
-      <div style="text-decoration:underline">${esc(COMPANY.contact)}</div>
-      <div class="party">${esc(party.toUpperCase())}</div>
-      <div>${esc(title)}</div>
-      ${address.map(l => `<div>${esc(l)}</div>`).join('')}
-      <div class="gap"></div>
-      <div>${esc(range)}</div>
-      ${subtitle ? `<div class="b">${esc(subtitle)}</div>` : ''}
-    </div>`;
-}
-
-const page = (body: string) => `<html><head><meta charset="utf-8"/><style>${STYLE}</style></head><body>${body}</body></html>`;
-
-/** Tally data saved in ERP as a Note: "Tally Customer Bills" or "Tally Customer Ledgers". */
 type TallyRecord = Record<string, any>;
 async function tallyNote(title: string): Promise<TallyRecord> {
     try {
@@ -151,129 +115,68 @@ const pick = (all: TallyRecord, customer: string, name: string) => all[normKey(c
 const ymd = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-async function buildOutstanding(customer: string, fromIso: string, toIso: string): Promise<{ html: string; file: string } | string> {
-    const [info, bills] = await Promise.all([customerInfo(customer), tallyNote('Tally Customer Bills')]);
-    const rec = pick(bills, customer, info.name);
-    if (!rec) return 'No Tally pending bills found for this customer.';
-
-    const rows: string[] = [];
-    let opTot = 0, pendTot = 0;
-    (rec.bills || []).forEach((b: any[]) => {
-        // b = [date yyyy-mm-dd, ref, opening amount, pending amount, overdue days, due on]
-        if (Math.abs(b[3]) < 1) return;
-        opTot += b[2]; pendTot += b[3];
-        rows.push(`<tr><td class="b">${dmy(b[0])}</td><td>${esc(b[1])}</td><td class="r">${inr(b[2])} Dr</td>` +
-            `<td class="r b">${inr(b[3])} Dr</td><td class="r i">${b[4] ? esc(b[4]) : ''}</td></tr>`);
-    });
-    if (rows.length) {
-        rows.push(`<tr class="tot"><td></td><td>Sub Total</td><td class="r">${inr(opTot)} Dr</td><td class="r">${inr(pendTot)} Dr</td><td></td></tr>`);
-    }
-    const diff = round2(Number(rec.diff || 0));
-    const net = round2(pendTot + diff);
-    if (diff <= -1) {
-        rows.push(`<tr><td></td><td class="i">On Account (NOT ADJUSTED)</td><td></td><td class="r">${inr(-diff)} Cr</td><td></td></tr>`);
-    } else if (diff >= 1) {
-        rows.push(`<tr><td></td><td class="i">Balance not in bills</td><td class="r">${inr(diff)} Dr</td><td class="r">${inr(diff)} Dr</td><td></td></tr>`);
-    }
-    if (!rows.length) return 'No pending bills for this customer.';
-    const netText = net >= 0 ? `${inr(net)} Dr` : `${inr(-net)} Cr`;
-    rows.push(`<tr class="tot"><td></td><td>Net Balance (TO BE RECEIVED)</td><td></td>` +
-        `<td class="r ${net >= 0 ? 'red' : 'green'}">${netText}</td><td></td></tr>`);
-
-    const html = page(
-        header(info.name, 'Bill-wise Details', [], `${dmy(fromIso)} to ${dmy(toIso)}`, 'Pending Bills') +
-        `<table><thead><tr><th>Date</th><th>Ref. No.</th><th class="r">Opening Amount</th><th class="r">Pending Amount</th><th class="r">Overdue by days</th></tr></thead>
-         <tbody>${rows.join('')}</tbody></table>`
-    );
-    return { html, file: `Outstanding_${info.name.replace(/[^A-Za-z0-9]+/g, '_')}_${toIso}` };
-}
-
-async function buildLedger(customer: string, fromIso: string, toIso: string): Promise<{ html: string; file: string } | string> {
-    const [info, ledgers, bills] = await Promise.all([
-        customerInfo(customer),
-        tallyNote('Tally Customer Ledgers'),
-        tallyNote('Tally Customer Bills'),
-    ]);
-    const rec = pick(ledgers, customer, info.name);
-    if (!rec) return 'No Tally ledger found for this customer.';
-
-    const fromD = fromIso.replace(/-/g, '');
-    const toD = toIso.replace(/-/g, '');
-    // Balance brought forward: Tally opening plus every entry before the period.
-    // Tally signs: negative = Dr, positive = Cr.
-    let bf: number = rec.open || 0;
-    (rec.lines || []).forEach((l: any[]) => { if (l[0] < fromD) bf += l[3]; });
-    // Bills below Re 1 are hidden in the outstanding statement, so they are left out of the balance too.
-    const brec = pick(bills, customer, info.name);
-    let hidden = 0;
-    if (brec) (brec.bills || []).forEach((bl: any[]) => { if (Math.abs(bl[3]) < 1) hidden += bl[3]; });
-    bf = round2(bf + hidden);
-
-    // lines: [yyyymmdd, vch type, vch no, amount, particulars]
-    const inRange = (rec.lines || []).filter((l: any[]) => l[0] >= fromD && l[0] <= toD && Math.abs(l[3]) >= 1);
-    if (!inRange.length && Math.abs(bf) < 0.005) return 'No ledger entries for this customer in the selected period.';
-
-    const money = (x: number) => inr(Math.abs(x));
-    let dr = 0, cr = 0;
-    const addAmt = (x: number) => { if (x < 0) dr += -x; else cr += x; };
-    const body: string[] = [];
-
-    if (Math.abs(bf) >= 1) {
-        body.push(`<tr class="b"><td></td><td class="b">Opening Balance</td><td></td><td></td>` +
-            `<td class="r">${bf < 0 ? money(bf) : ''}</td><td class="r">${bf > 0 ? money(bf) : ''}</td></tr>`);
-        addAmt(bf);
-    }
-    inRange.forEach((l: any[]) => {
-        const x = round2(l[3]);
-        body.push(`<tr><td>${dmy(ymd(l[0]))}</td><td>${esc(l[4])}</td><td>${esc(l[1])}</td><td class="r">${esc(l[2])}</td>` +
-            `<td class="r">${x < 0 ? money(x) : ''}</td><td class="r">${x > 0 ? money(x) : ''}</td></tr>`);
-        addAmt(x);
-    });
-
-    const totDr = round2(dr), totCr = round2(cr);
-    const diff = round2(totDr - totCr);
-    body.push(`<tr class="tot"><td></td><td></td><td></td><td></td><td class="r">${inr(totDr)}</td><td class="r">${inr(totCr)}</td></tr>`);
-    if (Math.abs(diff) >= 0.005) {
-        // Dr total above Cr total: the customer owes money, so the closing sits on the Cr side in red.
-        body.push(`<tr><td></td><td class="b">Closing Balance</td><td></td><td></td>` +
-            `<td class="r green b">${diff < 0 ? inr(-diff) : ''}</td><td class="r red b">${diff > 0 ? inr(diff) : ''}</td></tr>`);
-        const grand = Math.max(totDr, totCr);
-        body.push(`<tr class="tot"><td></td><td></td><td></td><td></td><td class="r">${inr(grand)}</td><td class="r">${inr(grand)}</td></tr>`);
-    }
-
-    const html = page(
-        header(info.name, 'Ledger Account', info.address, `${dmy(fromIso)} to ${dmy(toIso)}`) +
-        `<table><thead><tr><th>Date</th><th>Particulars</th><th>Vch Type</th><th class="r">Vch No.</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead>
-         <tbody>${body.join('')}</tbody></table>`
-    );
-    return { html, file: `Ledger_${info.name.replace(/[^A-Za-z0-9]+/g, '_')}_${toIso}` };
-}
-
 export type StatementDoc = { fileName: string; uri: string; base64: string };
 export type BuildResult = { ok: true; doc: StatementDoc } | { ok: false; error: string };
 
 /** Builds the statement PDF and reads it back for the in-app viewer. Dates are yyyy-mm-dd; a blank `fromIso` means FY start. */
-export async function buildStatement(kind: StatementKind, customer: string, fromIso: string, toIso: string): Promise<BuildResult> {
+export type StatementJob = { fileName: string; html: string };
+export type PrepareResult = { ok: true; job: StatementJob } | { ok: false; error: string };
+
+/** Builds the page that runs ERP's own PDF code for one customer; the screen runs it in a hidden WebView. */
+export async function prepareStatement(kind: StatementKind, customer: string, fromIso: string, toIso: string): Promise<PrepareResult> {
     if (!customer) return { ok: false, error: 'Select a customer in the Customer filter first.' };
     const to = toIso || localTodayIso();
     const from = fromIso || fyStartIso(to);
     try {
-        const built = kind === 'outstanding' ? await buildOutstanding(customer, from, to) : await buildLedger(customer, from, to);
-        if (typeof built === 'string') return { ok: false, error: built };
-        // Name the file the way ERP does (e.g. Outstanding_<customer>_<date>.pdf) rather than expo-print's random id.
-        const printed = await Print.printToFileAsync({ html: built.html });
-        const fileName = `${built.file}.pdf`;
-        const uri = `${FileSystem.cacheDirectory}${fileName}`;
-        await FileSystem.deleteAsync(uri, { idempotent: true });
-        await FileSystem.moveAsync({ from: printed.uri, to: uri });
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        return { ok: true, doc: { fileName, uri, base64 } };
-    } catch (e: any) {
-        return { ok: false, error: 'Could not build the PDF. You may not have permission to read the invoices or receipts for this customer.' };
+        const info = await customerInfo(customer);
+        const [ledgers, bills] = await Promise.all([tallyNote('Tally Customer Ledgers'), tallyNote('Tally Customer Bills')]);
+        const keys = [normKey(customer), normKey(info.name)];
+        const subset = (all: TallyRecord): TallyRecord =>
+            Object.fromEntries(keys.filter(k => all[k]).map(k => [k, all[k]]));
+        const payload = {
+            kind,
+            customer,
+            info,
+            all: kind === 'outstanding' ? subset(bills) : subset(ledgers),
+            bills: subset(bills),
+            from,
+            to,
+        };
+        const prefix = kind === 'outstanding' ? 'Outstanding' : 'Ledger';
+        const fileName = `${prefix}_${String(info.name).replace(/[^A-Za-z0-9]+/g, '_')}_${to}.pdf`;
+        return { ok: true, job: { fileName, html: jobHtml(payload) } };
+    } catch {
+        return { ok: false, error: 'Could not read the Tally data for this customer.' };
     }
 }
 
-/** Saves the PDF into the phone's Downloads folder. Returns the saved location, or '' if it could not be saved. */
+function jobHtml(payload: object) {
+    const data = JSON.stringify(payload).replace(/</g, '\u003c');
+    return `<!doctype html><html><head><meta charset="utf-8"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head><body><script>${ERP_PDF_CORE}
+(function () {
+  var p = ${data};
+  var out;
+  try {
+    out = p.kind === 'outstanding'
+      ? erpOutstanding(p.customer, p.info, p.all, p.from, p.to)
+      : erpLedger(p.customer, p.info, p.all, p.bills, p.from, p.to);
+  } catch (e) { out = { error: String((e && e.message) || e) }; }
+  window.ReactNativeWebView.postMessage(JSON.stringify(out || { error: 'Could not build the statement.' }));
+})();
+</script></body></html>`;
+}
+
+/** Saves the PDF the page produced (a data URI) into the cache, ready for the viewer, share and download. */
+export async function writeStatementPdf(fileName: string, dataUri: string): Promise<StatementDoc> {
+    const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+    const uri = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
+    return { fileName, uri, base64 };
+}
+
 export function saveStatementToDownloads(doc: StatementDoc): string {
     return FloatingNotifications.saveToDownloads(doc.uri.replace(/^file:\/\//, ''), doc.fileName);
 }

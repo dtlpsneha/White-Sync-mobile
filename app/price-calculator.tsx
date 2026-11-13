@@ -520,6 +520,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         borderTopLeftRadius: Radius.xl,
         borderTopRightRadius: Radius.xl,
+        paddingBottom: 64,
         padding: 20,
     },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },

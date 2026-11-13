@@ -743,7 +743,7 @@ function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) =>
         emptyState: { alignItems: 'center', paddingVertical: vs(50), gap: 12 },
         emptyText: { fontSize: ms(13), fontWeight: '600' },
 
-        sheet: { borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) },
+        sheet: { borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingHorizontal: s(22), paddingTop: vs(10), paddingBottom: vs(28) + 64 },
         handle: { width: 40, height: 4, borderRadius: 999, alignSelf: 'center', marginBottom: vs(18) },
         sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: vs(16) },
         sheetTitle: { fontSize: ms(20), fontWeight: '800' },

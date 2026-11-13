@@ -184,6 +184,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: Radius.xl,
         borderTopRightRadius: Radius.xl,
         maxHeight: '75%',
+        paddingBottom: 64,
     },
     header: {
         flexDirection: 'row',
