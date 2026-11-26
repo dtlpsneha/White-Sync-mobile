@@ -1,131 +1,134 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
-import { StatusBar } from 'expo-status-bar';
-import Animated, { FadeInUp, FadeInDown, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Gradients, Radius, Shadow } from '@/constants/theme';
-import { useResponsive } from '@/hooks/useResponsive';
-import { apiPost } from '@/utils/api';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
+import { apiGet } from '@/utils/api';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
+import { pdfViewerHtml, saveStatementToDownloads } from '@/services/customerStatements';
 
 const IMAGE_HOST = API_BASE_URL;
 
-interface SalesOrderDetails {
+type OrderItem = { item_code: string; item_name?: string; brand?: string; qty: number; rate: number; amount: number; uom?: string };
+type OrderTax = { description: string; rate: number; tax_amount: number };
+type OrderDoc = {
     name: string;
     customer: string;
-    status: string;
-    transaction_date: string;
-    grand_total: number;
+    customer_name?: string;
+    status?: string;
     workflow_state?: string;
-    items: Array<{
-        item_code: string;
-        item_name?: string;
-        delivery_date: string;
-        qty: number;
-        rate: number;
-        amount: number;
-    }>;
+    docstatus?: number;
+    transaction_date: string;
+    items: OrderItem[];
+    taxes?: OrderTax[];
+    total?: number;
+    net_total?: number;
+    total_taxes_and_charges?: number;
+    grand_total: number;
     attach?: string | null;
-}
+};
+type Attached = { uri: string; fileName: string; isPdf: boolean; base64: string };
+
+const money = (n: number | undefined | null) =>
+    `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const dmy = (iso: string) => {
+    const [y, m, d] = (iso || '').split('-');
+    return y && m && d ? `${d}-${m}-${y}` : iso || '';
+};
 
 export default function SalesOrderDetailScreen() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
-    const colorScheme = useColorScheme();
-    const theme = colorScheme ?? 'light';
+    const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
-    const { s, vs, ms } = useResponsive();
     const insets = useSafeAreaInsets();
-    const localStyles = useMemo(() => getLocalStyles(theme, insets.top), [theme, insets.top]);
-    
-    const [order, setOrder] = useState<SalesOrderDetails | null>(null);
+
+    const [order, setOrder] = useState<OrderDoc | null>(null);
     const [loading, setLoading] = useState(true);
+    const [busy, setBusy] = useState(false);
+    const [viewer, setViewer] = useState<Attached | null>(null);
 
-    const scrollY = useSharedValue(0);
-    const scrollHandler = useAnimatedScrollHandler((event) => {
-        scrollY.value = event.contentOffset.y;
-    });
-
-    const normalizedId = Array.isArray(id) ? id[0] : id;
+    const orderId = Array.isArray(id) ? id[0] : id;
 
     useEffect(() => {
-        if (normalizedId) {
-            fetchSalesOrderDetails(normalizedId);
-        }
-    }, [normalizedId]);
+        if (orderId) load(orderId);
+    }, [orderId]);
 
-    const fetchSalesOrderDetails = async (currentId: string) => {
+    const load = async (name: string) => {
+        setLoading(true);
         try {
-            setLoading(true);
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiPost(apiUrl('/api/method/get_sales_order_resource'), { name: currentId }, sessionCookies);
-            const data: any = res.data;
-
-            if (res.ok && data && data.message && data.message.success && Array.isArray(data.message.data)) {
-                setOrder(data.message.data[0]);
-            }
-        } catch (error) {
-            console.error('Error fetching sales order details:', error);
+            const cookies = await SecureStore.getItemAsync('session_cookies');
+            const res = await apiGet(apiUrl(`/api/resource/Sales Order/${encodeURIComponent(name)}`), cookies);
+            const doc: any = (res.data as any)?.data;
+            setOrder(res.ok && doc ? doc : null);
+        } catch {
+            setOrder(null);
         } finally {
             setLoading(false);
         }
     };
 
-    const getStatusColor = (status: string) => {
-        const lower = (status || '').toLowerCase();
-        if (lower.includes('approved') || lower.includes('completed')) return colors.success;
-        if (lower.includes('draft')) return '#64748B';
-        if (lower.includes('cancel')) return colors.danger;
+    const statusText = (o: OrderDoc) => o.workflow_state || o.status || (o.docstatus === 0 ? 'Draft' : o.docstatus === 1 ? 'Submitted' : 'Cancelled');
+
+    const statusColor = (s: string) => {
+        const l = (s || '').toLowerCase();
+        if (l.includes('approved') || l.includes('complete') || l.includes('submitted') || l.includes('deliver')) return colors.success;
+        if (l.includes('cancel')) return colors.danger;
+        if (l.includes('draft')) return colors.textSecondary;
         return colors.primary;
     };
 
-    const viewPdf = async (url: string) => {
+    // Downloads the attachment into the app's cache (with the login cookie) so it can be viewed, saved or shared.
+    const fetchAttachment = async (url: string): Promise<Attached> => {
+        const cookies = await SecureStore.getItemAsync('session_cookies');
+        const full = url.startsWith('http') ? url : `${IMAGE_HOST}${url}`;
+        const fileName = url.split('/').pop() || 'attachment';
+        const uri = `${(FileSystem as any).cacheDirectory}${fileName}`;
+        const dl = await (FileSystem as any).downloadAsync(full, uri, { headers: { Cookie: cookies || '' } });
+        if (dl.status !== 200) throw new Error('download');
+        const isPdf = fileName.toLowerCase().endsWith('.pdf');
+        const base64 = isPdf ? await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 }) : '';
+        return { uri, fileName, isPdf, base64 };
+    };
+
+    const runWithAttachment = async (action: (a: Attached) => Promise<void> | void) => {
+        if (!order?.attach) return;
+        setBusy(true);
         try {
-            const fileName = url.split('/').pop() || 'document.pdf';
-            const fileUri = `${(FileSystem as any).cacheDirectory}${fileName}`;
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-
-            setLoading(true);
-            const downloadRes = await (FileSystem as any).downloadAsync(
-                url.startsWith('http') ? url : `${IMAGE_HOST}${url}`,
-                fileUri,
-                {
-                    headers: {
-                        'Cookie': sessionCookies || ''
-                    }
-                }
-            );
-
-            if (downloadRes.status === 200) {
-                await Sharing.shareAsync(downloadRes.uri);
-            } else {
-                Alert.alert('Error', 'Failed to download PDF.');
-            }
-        } catch (e) {
-            console.error('PDF View Error:', e);
-            Alert.alert('Error', 'An error occurred while opening the PDF.');
+            const a = await fetchAttachment(order.attach);
+            await action(a);
+        } catch {
+            Alert.alert('Error', 'Could not open the attachment.');
         } finally {
-            setLoading(false);
+            setBusy(false);
         }
     };
 
-    const headerTranslateY = useAnimatedStyle(() => {
-        return {
-            transform: [{ translateY: interpolate(scrollY.value, [0, 200], [0, -210], Extrapolation.CLAMP) }],
-            opacity: interpolate(scrollY.value, [200, 250], [1, 0], Extrapolation.CLAMP)
-        };
-    });
+    const viewAttachment = () => runWithAttachment(a => setViewer(a));
+
+    const downloadAttachment = () =>
+        runWithAttachment(a => {
+            const saved = (() => { try { return saveStatementToDownloads({ fileName: a.fileName, uri: a.uri, base64: a.base64 }); } catch { return ''; } })();
+            if (saved) Alert.alert('Saved', `${a.fileName} was saved to Downloads.`);
+            else Alert.alert('Not saved', 'Could not save the file to Downloads.');
+        });
+
+    const shareAttachment = () =>
+        runWithAttachment(async a => {
+            if (!(await Sharing.isAvailableAsync())) { Alert.alert('Not available', 'Sharing is not available on this device.'); return; }
+            await Sharing.shareAsync(a.uri, { mimeType: a.isPdf ? 'application/pdf' : undefined, dialogTitle: a.fileName });
+        });
 
     if (loading) {
         return (
-            <View style={styles.center}>
+            <View style={[styles.center, { backgroundColor: colors.background }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
             </View>
         );
@@ -133,215 +136,172 @@ export default function SalesOrderDetailScreen() {
 
     if (!order) {
         return (
-            <View style={styles.center}>
-                <Text style={{ color: colors.textSecondary }}>Sales Order not found</Text>
+            <View style={[styles.center, { backgroundColor: colors.background }]}>
+                <Text style={{ color: colors.textSecondary }}>Customer Purchase Order not found</Text>
+                <TouchableOpacity onPress={() => router.back()} style={[styles.btn, { backgroundColor: colors.primary, marginTop: 14 }]}>
+                    <Text style={styles.btnText}>Back</Text>
+                </TouchableOpacity>
             </View>
         );
     }
 
-    const currentStatus = order.workflow_state || order.status;
-    const statusColor = getStatusColor(currentStatus);
+    const status = statusText(order);
+    const sColor = statusColor(status);
+    const isDraft = (order.docstatus ?? 0) === 0 && !status.toLowerCase().includes('cancel');
+    const taxes = (order.taxes || []).filter(t => Number(t.tax_amount || 0) !== 0 || Number(t.rate || 0) !== 0);
+    const taxTotal = Number(order.total_taxes_and_charges || 0);
+    const attach = order.attach || '';
+    const attachIsPdf = attach.toLowerCase().endsWith('.pdf');
 
     return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-            <StatusBar style="light" />
-
-            {/* Back Button — absolute, overlaid on header */}
-            <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/sales-orders')} style={localStyles.backButtonCircle}>
-                <Ionicons name="arrow-back" size={24} color="#FFF" />
-            </TouchableOpacity>
-
-            {currentStatus.toLowerCase().includes('draft') && (
-                <TouchableOpacity onPress={() => router.push(`/sales-orders/create?edit_id=${order.name}`)} style={localStyles.editButtonCircle}>
-                    <Ionicons name="create-outline" size={24} color="#FFF" />
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Top bar */}
+            <View style={[styles.topBar, { paddingTop: insets.top + 8, backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+                <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace('/sales-orders'))} style={styles.iconBtn} hitSlop={8}>
+                    <Ionicons name="arrow-back" size={22} color={colors.text} />
                 </TouchableOpacity>
-            )}
+                <Text style={[styles.topTitle, { color: colors.text }]} numberOfLines={1}>{order.name}</Text>
+                {isDraft ? (
+                    <TouchableOpacity onPress={() => router.push(`/sales-orders/create?edit_id=${order.name}` as any)} style={styles.iconBtn} hitSlop={8}>
+                        <Ionicons name="create-outline" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                ) : <View style={styles.iconBtn} />}
+            </View>
 
-            <Animated.ScrollView
-                onScroll={scrollHandler}
-                scrollEventThrottle={16}
-                contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Header block — scrolls with content */}
-                <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={localStyles.headerBlock}>
-                    <View style={localStyles.headerContent}>
-                        <View style={localStyles.statusPill}>
-                            <Ionicons name="checkmark-circle" size={12} color="#FFF" style={{ marginRight: 4 }} />
-                            <Text style={localStyles.statusPillText}>{currentStatus}</Text>
+            <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 + insets.bottom }}>
+                {/* Customer and status */}
+                <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.rowBetween}>
+                        <View style={[styles.pill, { backgroundColor: sColor + '18' }]}>
+                            <View style={[styles.dot, { backgroundColor: sColor }]} />
+                            <Text style={[styles.pillText, { color: sColor }]}>{status}</Text>
                         </View>
-                        <Text style={localStyles.customerName}>{order.customer}</Text>
-                        <Text style={localStyles.orderId}>{order.name}</Text>
+                        <Text style={[styles.muted, { color: colors.textSecondary }]}>{dmy(order.transaction_date)}</Text>
                     </View>
-                </LinearGradient>
-
-                {/* Overlapping body */}
-                <View style={[localStyles.contentContainer, { marginTop: -50 }]}>
-                    {/* Info Cards */}
-                    <View style={localStyles.infoRow}>
-                        <Animated.View entering={FadeInDown.delay(100).springify()} style={localStyles.infoCard}>
-                            <Ionicons name="calendar-outline" size={16} color={statusColor} />
-                            <Text style={localStyles.infoLabel}>DATE</Text>
-                            <Text style={localStyles.infoValue}>{order.transaction_date}</Text>
-                        </Animated.View>
-                        <Animated.View entering={FadeInDown.delay(200).springify()} style={localStyles.infoCard}>
-                            <Ionicons name="cash-outline" size={16} color={statusColor} />
-                            <Text style={localStyles.infoLabel}>TOTAL VALUE</Text>
-                            <Text style={localStyles.infoValue}>₹{order.grand_total.toLocaleString()}</Text>
-                        </Animated.View>
-                    </View>
-
-                    {/* Items Section */}
-                    <Animated.View entering={FadeInUp.delay(300).springify()} style={localStyles.sectionCard}>
-                        <View style={localStyles.sectionHeader}>
-                            <View style={[localStyles.iconContainer, { backgroundColor: colors.primarySoft }]}>
-                                <Ionicons name="cube" size={18} color={colors.primary} />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={localStyles.sectionTitleText}>Order Items</Text>
-                                <Text style={localStyles.sectionSubtitleText}>Detailed breakdown of products</Text>
-                            </View>
-                            <View style={localStyles.itemCountBadge}>
-                                <Text style={localStyles.itemCountText}>{order.items.length}</Text>
-                            </View>
-                        </View>
-                        {order.items.map((item, index) => (
-                            <View key={index} style={localStyles.itemBox}>
-                                <View style={localStyles.itemHeader}>
-                                    <View style={localStyles.itemBadge}>
-                                        <Text style={localStyles.itemBadgeText}>{String(index + 1).padStart(2, '0')}</Text>
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={localStyles.itemName}>{item.item_name || item.item_code}</Text>
-                                        <Text style={localStyles.itemCode}>{item.item_code}</Text>
-                                    </View>
-                                </View>
-                                <View style={localStyles.itemFooter}>
-                                    <View style={localStyles.footerColumn}>
-                                        <Text style={localStyles.footerLabel}>QUANTITY</Text>
-                                        <Text style={localStyles.footerValue}>{item.qty} Nos</Text>
-                                    </View>
-                                    <View style={localStyles.dividerLine} />
-                                    <View style={localStyles.footerColumn}>
-                                        <Text style={localStyles.footerLabel}>RATE</Text>
-                                        <Text style={localStyles.footerValue}>₹{item.rate.toLocaleString()}</Text>
-                                    </View>
-                                    <View style={localStyles.dividerLine} />
-                                    <View style={localStyles.footerColumn}>
-                                        <Text style={localStyles.footerLabel}>TOTAL</Text>
-                                        <Text style={[localStyles.footerValue, { color: statusColor }]}>₹{item.amount.toLocaleString()}</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        ))}
-                    </Animated.View>
-
-                    {/* Attachments Section */}
-                    {order.attach || (order as any).attach_image ? (
-                        <Animated.View entering={FadeInUp.delay(350).springify()} style={localStyles.sectionCard}>
-                            <View style={localStyles.sectionHeader}>
-                                <View style={[localStyles.iconContainer, { backgroundColor: colors.primarySoft }]}>
-                                    <Ionicons name="attach-outline" size={18} color={colors.primary} />
-                                </View>
-                                <View>
-                                    <Text style={localStyles.sectionTitleText}>Attachments</Text>
-                                    <Text style={localStyles.sectionSubtitleText}>Documents &amp; files</Text>
-                                </View>
-                            </View>
-                            {((order.attach || (order as any).attach_image) || '').toLowerCase().endsWith('.pdf') ? (
-                                <TouchableOpacity
-                                    style={localStyles.pdfContainer}
-                                    onPress={() => viewPdf(order.attach || (order as any).attach_image || '')}
-                                >
-                                    <Ionicons name="document-text" size={40} color={colors.primary} />
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={localStyles.pdfTitle}>PDF Document</Text>
-                                        <Text style={localStyles.pdfSub}>{ (order.attach || (order as any).attach_image || '').split('/').pop() }</Text>
-                                    </View>
-                                    <Ionicons name="eye-outline" size={24} color={colors.textSecondary} />
-                                </TouchableOpacity>
-                            ) : (
-                                <View style={localStyles.imageContainer}>
-                                    <Image
-                                        source={{ uri: (order.attach || (order as any).attach_image || '').startsWith('http') ? (order.attach || (order as any).attach_image || '') : `${IMAGE_HOST}${(order.attach || (order as any).attach_image || '')}` }}
-                                        style={localStyles.attachedImage}
-                                    />
-                                </View>
-                            )}
-                        </Animated.View>
-                    ) : null}
-
-                    {/* Grand Total */}
-                    <Animated.View entering={FadeInUp.delay(400).springify()} style={localStyles.grandTotalCard}>
-                        <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                        <View style={localStyles.grandTotalContent}>
-                            <View>
-                                <Text style={localStyles.grandTotalLabel}>GRAND TOTAL</Text>
-                                <Text style={localStyles.grandTotalValue}>₹{order.grand_total.toLocaleString()}</Text>
-                            </View>
-                            <Ionicons name="receipt" size={50} color="rgba(255,255,255,0.3)" />
-                        </View>
-                    </Animated.View>
+                    <Text style={[styles.customer, { color: colors.text }]}>{order.customer_name || order.customer}</Text>
+                    <Text style={[styles.muted, { color: colors.textSecondary }]}>{order.customer}</Text>
                 </View>
-            </Animated.ScrollView>
+
+                {/* Items */}
+                <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.rowBetween}>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Items</Text>
+                        <Text style={[styles.muted, { color: colors.textSecondary }]}>{order.items.length} line{order.items.length === 1 ? '' : 's'}</Text>
+                    </View>
+                    {order.items.map((it, i) => (
+                        <View key={`${it.item_code}-${i}`} style={[styles.itemRow, { borderTopColor: colors.border }]}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.itemName, { color: colors.text }]}>{it.item_name || it.item_code}</Text>
+                                <Text style={[styles.muted, { color: colors.textSecondary }]}>
+                                    {[it.brand, it.item_name && it.item_name !== it.item_code ? it.item_code : ''].filter(Boolean).join(' · ')}
+                                </Text>
+                                <Text style={[styles.muted, { color: colors.textSecondary, marginTop: 4 }]}>
+                                    {it.qty} {it.uom || 'Nos'} × {money(it.rate)}
+                                </Text>
+                            </View>
+                            <Text style={[styles.itemAmount, { color: colors.text }]}>{money(it.amount)}</Text>
+                        </View>
+                    ))}
+                </View>
+
+                {/* Totals and taxes */}
+                <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Summary</Text>
+                    <View style={styles.totalLine}>
+                        <Text style={[styles.muted, { color: colors.textSecondary }]}>Net total</Text>
+                        <Text style={[styles.totalValue, { color: colors.text }]}>{money(order.net_total ?? order.total)}</Text>
+                    </View>
+                    {taxes.length > 0 ? (
+                        taxes.map((t, i) => (
+                            <View key={`${t.description}-${i}`} style={styles.totalLine}>
+                                <Text style={[styles.muted, { color: colors.textSecondary, flex: 1 }]} numberOfLines={1}>
+                                    {t.description}{Number(t.rate) ? ` @ ${t.rate}%` : ''}
+                                </Text>
+                                <Text style={[styles.totalValue, { color: colors.text }]}>{money(t.tax_amount)}</Text>
+                            </View>
+                        ))
+                    ) : taxTotal !== 0 ? (
+                        <View style={styles.totalLine}>
+                            <Text style={[styles.muted, { color: colors.textSecondary }]}>Taxes</Text>
+                            <Text style={[styles.totalValue, { color: colors.text }]}>{money(taxTotal)}</Text>
+                        </View>
+                    ) : null}
+                    <View style={[styles.grandRow, { borderTopColor: colors.border }]}>
+                        <Text style={[styles.grandLabel, { color: colors.text }]}>Grand total</Text>
+                        <Text style={[styles.grandValue, { color: colors.primary }]}>{money(order.grand_total)}</Text>
+                    </View>
+                </View>
+
+                {/* Attachment: tap to view, then download or share */}
+                {attach ? (
+                    <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Attachment</Text>
+                        <TouchableOpacity style={[styles.fileRow, { borderColor: colors.border }]} onPress={viewAttachment} disabled={busy}>
+                            <Ionicons name={attachIsPdf ? 'document-text' : 'image'} size={26} color={colors.primary} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{attach.split('/').pop()}</Text>
+                                <Text style={[styles.muted, { color: colors.textSecondary }]}>{attachIsPdf ? 'PDF' : 'Image'} · Tap to view</Text>
+                            </View>
+                            {busy ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="eye-outline" size={20} color={colors.textSecondary} />}
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
+            </ScrollView>
+
+            {/* Viewer for the attachment */}
+            <Modal visible={!!viewer} animationType="slide" onRequestClose={() => setViewer(null)}>
+                <View style={[styles.container, { backgroundColor: '#111827' }]}>
+                    <View style={[styles.viewerBar, { paddingTop: insets.top + 8 }]}>
+                        <TouchableOpacity onPress={() => setViewer(null)} style={styles.iconBtn} hitSlop={8}>
+                            <Ionicons name="close" size={24} color="#FFF" />
+                        </TouchableOpacity>
+                        <Text style={styles.viewerTitle} numberOfLines={1}>{viewer?.fileName}</Text>
+                        <TouchableOpacity onPress={downloadAttachment} style={styles.iconBtn} hitSlop={8}>
+                            <Ionicons name="download-outline" size={22} color="#FFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={shareAttachment} style={styles.iconBtn} hitSlop={8}>
+                            <Ionicons name="share-social-outline" size={22} color="#FFF" />
+                        </TouchableOpacity>
+                    </View>
+                    {viewer?.isPdf ? (
+                        <WebView originWhitelist={['*']} source={{ html: pdfViewerHtml(viewer.base64) }} javaScriptEnabled style={{ flex: 1 }} />
+                    ) : viewer ? (
+                        <Image source={{ uri: viewer.uri }} style={{ flex: 1 }} resizeMode="contain" />
+                    ) : null}
+                </View>
+            </Modal>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
+    container: { flex: 1 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+    topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingBottom: 10, borderBottomWidth: 1 },
+    topTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '800', marginHorizontal: 8 },
+    iconBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+    viewerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 10, backgroundColor: '#111827' },
+    viewerTitle: { flex: 1, color: '#FFF', fontSize: 14, fontWeight: '700', marginHorizontal: 6 },
+    card: { borderRadius: Radius.lg, borderWidth: 1, padding: 16, gap: 8 },
+    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+    dot: { width: 7, height: 7, borderRadius: 4 },
+    pillText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
+    customer: { fontSize: 18, fontWeight: '900', marginTop: 6 },
+    muted: { fontSize: 12, fontWeight: '600' },
+    sectionTitle: { fontSize: 15, fontWeight: '900' },
+    itemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingTop: 12, borderTopWidth: 1 },
+    itemName: { fontSize: 14, fontWeight: '800' },
+    itemAmount: { fontSize: 14, fontWeight: '900' },
+    totalLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 2 },
+    totalValue: { fontSize: 14, fontWeight: '800' },
+    grandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, marginTop: 8, paddingTop: 12 },
+    grandLabel: { fontSize: 15, fontWeight: '900' },
+    grandValue: { fontSize: 20, fontWeight: '900' },
+    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: Radius.md, padding: 12 },
+    actionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+    actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.md, paddingVertical: 10 },
+    actionText: { fontSize: 14, fontWeight: '800' },
+    btn: { paddingHorizontal: 22, paddingVertical: 10, borderRadius: Radius.md },
+    btnText: { color: '#FFF', fontWeight: '800' },
 });
-
-const getLocalStyles = (theme: 'light' | 'dark', topInset: number) => {
-    const c = Colors[theme];
-
-    return StyleSheet.create({
-        backButtonCircle: { position: 'absolute', top: topInset + 10, left: 20, zIndex: 11, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-        editButtonCircle: { position: 'absolute', top: topInset + 10, right: 20, zIndex: 11, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-        headerBlock: { paddingTop: topInset + 70, paddingBottom: 70, borderBottomLeftRadius: Radius.xl, borderBottomRightRadius: Radius.xl, paddingHorizontal: 24, zIndex: 5 },
-        headerContent: { marginTop: 10 },
-        statusPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, marginBottom: 16, alignSelf: 'flex-start' },
-        statusPillText: { color: '#FFF', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
-        customerName: { fontSize: 26, fontWeight: '900', color: '#FFF', marginBottom: 8, letterSpacing: -0.5 },
-        orderId: { fontSize: 15, color: 'rgba(255,255,255,0.8)', fontWeight: '800' },
-        contentContainer: { paddingHorizontal: 20, zIndex: 10 },
-        infoRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-        infoCard: { flex: 1, backgroundColor: c.surface, borderRadius: Radius.lg, padding: 16, borderWidth: 1, borderColor: c.border, ...Shadow.card(theme) },
-        infoLabel: { fontSize: 10, fontWeight: '800', color: c.textSecondary, marginTop: 8 },
-        infoValue: { fontSize: 15, fontWeight: '900', color: c.text, marginTop: 2 },
-        sectionCard: { backgroundColor: c.surface, borderRadius: Radius.lg, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: c.border, ...Shadow.card(theme) },
-        sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
-        iconContainer: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-        sectionTitleText: { fontSize: 18, fontWeight: '900', color: c.text },
-        sectionSubtitleText: { fontSize: 12, color: c.textSecondary, fontWeight: '600' },
-        itemCountBadge: { backgroundColor: c.surfaceSecondary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginLeft: 'auto' },
-        itemCountText: { fontSize: 12, fontWeight: '800', color: c.textSecondary },
-        itemBox: { backgroundColor: c.surfaceSecondary, borderRadius: Radius.md, overflow: 'hidden', marginBottom: 16 },
-        itemHeader: { flexDirection: 'row', gap: 12, alignItems: 'center', padding: 16 },
-        itemBadge: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.border },
-        itemBadgeText: { fontSize: 12, fontWeight: '900', color: c.textSecondary },
-        itemName: { fontSize: 16, fontWeight: '900', color: c.text, marginBottom: 2 },
-        itemCode: { fontSize: 12, color: c.textSecondary, fontWeight: '700', textTransform: 'uppercase' as const, letterSpacing: 0.5 },
-        itemFooter: { flexDirection: 'row', backgroundColor: c.primarySoft, padding: 12 },
-        footerColumn: { flex: 1, alignItems: 'center' },
-        footerLabel: { fontSize: 9, fontWeight: '800', color: c.textSecondary, marginBottom: 4 },
-        footerValue: { fontSize: 14, fontWeight: '900', color: c.text },
-        dividerLine: { width: 1, height: 20, backgroundColor: c.border, alignSelf: 'center' },
-        imageContainer: { borderRadius: Radius.md, overflow: 'hidden', height: 250, backgroundColor: c.surfaceSecondary },
-        attachedImage: { width: '100%', height: '100%', resizeMode: 'contain' },
-        grandTotalCard: { height: 120, borderRadius: Radius.lg, overflow: 'hidden', marginBottom: 20, ...Shadow.raised(theme) },
-        grandTotalContent: { flex: 1, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        grandTotalLabel: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', marginBottom: 4 },
-        grandTotalValue: { fontSize: 36, fontWeight: '900', color: '#FFF' },
-        pdfContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceSecondary, padding: 16, borderRadius: Radius.md, borderWidth: 1, borderColor: c.border },
-        pdfTitle: { fontSize: 16, fontWeight: '800', color: c.text },
-        pdfSub: { fontSize: 12, color: c.textSecondary, fontWeight: '600' },
-        backButton: { position: 'absolute', top: 50, left: 20, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-        editButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-        statusPill_legacy: { backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 12 },
-        statusText: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase' as const },
-        sectionTitle: { fontSize: 18, fontWeight: '900', color: c.text, marginBottom: 16 },
-        itemSubLabel: { fontSize: 10, fontWeight: '700', color: c.textSecondary },
-        itemSubValue: { fontSize: 14, fontWeight: '800', color: c.text },
-    });
-};
