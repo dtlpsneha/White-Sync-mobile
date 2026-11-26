@@ -27,10 +27,12 @@ export type StockData = {
 
 const session = () => SecureStore.getItemAsync('session_cookies');
 
-async function listDocs(doctype: string, fields: string[], filters: any[] = []): Promise<any[]> {
+/** `parent` is needed to read a child table (e.g. List Price History) on its own; ERP refuses it otherwise. */
+async function listDocs(doctype: string, fields: string[], filters: any[] = [], parent = ''): Promise<any[]> {
     const qs =
         `fields=${encodeURIComponent(JSON.stringify(fields))}` +
         (filters.length ? `&filters=${encodeURIComponent(JSON.stringify(filters))}` : '') +
+        (parent ? `&parent=${encodeURIComponent(parent)}` : '') +
         `&limit_page_length=0`;
     const res = await apiGet(apiUrl(`/api/resource/${encodeURIComponent(doctype)}?${qs}`), await session());
     if (!res.ok) throw new Error(`Server error (${res.status})`);
@@ -71,7 +73,7 @@ export async function loadStockData(): Promise<StockData> {
     const fyRows = await listDocs('Fiscal Year', ['name'], [['year_start_date', '<=', today], ['year_end_date', '>=', today]]).catch(() => []);
     const listPriceFy: string = fyRows[0]?.name || '';
     const priceRows = listPriceFy
-        ? await listDocs('List Price History', ['parent', 'price'], [['parentfield', '=', 'list_price_history'], ['fiscal_year', '=', listPriceFy]]).catch(() => [])
+        ? await listDocs('List Price History', ['parent', 'price'], [['parentfield', '=', 'list_price_history'], ['fiscal_year', '=', listPriceFy]], 'Item').catch(() => [])
         : [];
     const listPrice: Record<string, number> = {};
     priceRows.forEach((r: any) => { listPrice[r.parent] = Number(r.price || 0); });
