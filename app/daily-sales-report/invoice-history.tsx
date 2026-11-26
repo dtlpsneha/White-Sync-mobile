@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -603,10 +603,17 @@ export default function InvoiceHistoryScreen() {
     const paymentStatusLabelFor = (p: string) => (p ? p : 'All');
 
     // With an item picked, cancelled invoices are left out of the list.
-    const rows = useMemo(() => {
+    // Opened from Quick Navigation as SERVICE INVOICES (?service=1): only the LC service invoices are listed.
+    const params = useLocalSearchParams<{ service?: string }>();
+    const serviceMode = params.service === '1';
+    const allRows = useMemo(() => {
         const all = history?.rows || [];
         return item ? all.filter(r => r.payment_status !== 'Cancelled') : all;
     }, [history, item]);
+    // LC and COMM invoices are left out of the main list; the service view lists only the LC invoices.
+    const rows = useMemo(() => serviceMode
+        ? allRows.filter(r => String(r.invoice_no || '').toUpperCase().startsWith('LC'))
+        : allRows.filter(r => !isLcOrCommInvoice(r.invoice_no)), [allRows, serviceMode]);
 
     const outOfRange = !!history?.meta?.fy_out_of_range;
 
@@ -615,7 +622,7 @@ export default function InvoiceHistoryScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             <ScreenHeader
-                title="Sales Invoice History (Detailed)"
+                title={serviceMode ? 'Service Invoices' : 'Sales Invoice History (Detailed)'}
                 onBack={() => router.canGoBack() ? router.back() : router.replace('/home')}
                 rightIcon={profitRevealed ? 'eye-off-outline' : 'eye-outline'}
                 onRightPress={() => setProfitRevealed(v => !v)}
@@ -700,7 +707,7 @@ export default function InvoiceHistoryScreen() {
 
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
-                    {history && <Text style={[styles.countNum, { color: colors.primary }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
+                    {history && <Text style={[styles.countNum, { color: colors.primary }]}>{rows.length}{history.truncated ? '+' : ''} rows</Text>}
                 </View>
 
                 {history?.truncated && (

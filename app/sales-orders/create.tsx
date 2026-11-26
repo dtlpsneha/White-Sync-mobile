@@ -213,7 +213,7 @@ export default function CreateSalesOrderScreen() {
         setIsSearchingItem(true);
         try {
             const cookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet(likeSearchUrl('Item', 'item_code', query, ['name', 'item_name', 'standard_rate']), cookies);
+            const res = await apiGet(likeSearchUrl('Item', 'item_code', query, ['name', 'item_name', 'standard_rate'], [['disabled', '=', 0]]), cookies);
             if (res.ok) setItemResults(res.data?.message || []);
         } catch (e) {
             console.error(e);
