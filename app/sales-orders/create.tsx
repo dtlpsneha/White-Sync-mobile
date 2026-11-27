@@ -42,6 +42,7 @@ export default function CreateSalesOrderScreen() {
     const [orderDate, setOrderDate] = useState(todayIso());
     const [showDate, setShowDate] = useState(false);
     const [instructions, setInstructions] = useState('');
+    const [poNo, setPoNo] = useState('');
     const [brands, setBrands] = useState<string[]>([]);
     const [lines, setLines] = useState<Line[]>([{ key: 1, item: null, query: '', results: [], qty: '' }]);
     const [nextKey, setNextKey] = useState(2);
@@ -85,6 +86,7 @@ export default function CreateSalesOrderScreen() {
                 setOrderDate(doc.transaction_date || todayIso());
                 setBrand(doc.items?.[0]?.brand || '');
                 setInstructions(doc.special_instructions || '');
+                setPoNo(doc.po_no || '');
                 setExistingAttach(doc.attach || '');
                 const loaded: Line[] = (doc.items || []).map((it: any, i: number) => ({
                     key: i + 1,
@@ -184,6 +186,8 @@ export default function CreateSalesOrderScreen() {
                 company: 'White & Co.',
                 // The Sales Order's own Special Instructions field.
                 special_instructions: instructions.trim(),
+                // The customer's PO number: how My Orders finds this order's invoice from Tally.
+                po_no: poNo.trim(),
                 items,
             };
             // A order with no items still saves: zero totals, as the ERP quotation needs.
@@ -275,9 +279,20 @@ export default function CreateSalesOrderScreen() {
                         </View>
                     </View>
 
-                    {/* 3. Date */}
+                    {/* 3. Customer PO number and date */}
                     <View style={card}>
-                        <Text style={label}>3. Date</Text>
+                        <Text style={label}>3. Customer PO No & date</Text>
+                        <TextInput
+                            style={field}
+                            placeholder="Customer's PO number (as on their PO)"
+                            placeholderTextColor={colors.textSecondary}
+                            value={poNo}
+                            onChangeText={setPoNo}
+                            autoCapitalize="characters"
+                        />
+                        <Text style={[styles.hint, { color: colors.textSecondary, marginTop: -4 }]}>
+                            Used to track this order to its invoice in My Orders.
+                        </Text>
                         <Pressable style={[styles.dateBox, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={() => setShowDate(true)}>
                             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
                             <Text style={[styles.dateText, { color: colors.text }]}>{dmy(orderDate)}</Text>

@@ -91,6 +91,71 @@ export interface TeamFile {
 
 export interface TeamFiles { files: TeamFile[]; counts: Record<string, number>; next_before?: string | null }
 
+// ─────────────────────────── My Orders ───────────────────────────
+
+export type OrderStatus = 'so_pending' | 'invoice_pending' | 'invoice_generated' | 'delivery_pending' | 'dispatched';
+
+/** One order or invoice, and where it stands (SmartOps app/web/my_orders.py). */
+export interface OrderRow {
+    kind: 'order' | 'invoice';
+    name: string;
+    /** What people call it: the Tally invoice no., or the Sales Order name. */
+    number: string;
+    customer: string;
+    customer_name: string;
+    date?: string | null;
+    amount: number;
+    status: OrderStatus;
+    status_label: string;
+    po_no: string;
+    /** An invoice's Sales Order, when the customer's PO number matched one. */
+    order: string;
+    lr_count: number;
+    /** Paid / Unpaid / Overdue, as ERPNext has it. */
+    paid: string;
+}
+
+export interface MyOrders {
+    rows: OrderRow[];
+    counts: Record<string, number>;
+    statuses: { key: OrderStatus; label: string }[];
+    scope: 'mine' | 'all';
+    can_see_all: boolean;
+    since: string;
+}
+
+/** One LR filed for an invoice in Team Chat. */
+export interface LrEntry {
+    lr_no: string;
+    transporter: string;
+    lr_date?: string | null;
+    invoices: string[];
+    filename?: string | null;
+    mime?: string | null;
+    file_url: string;
+    job_id: string;
+    filed_by?: string | null;
+    filed_at: string;
+}
+
+export interface InvoiceDetail { row: OrderRow; lrs: LrEntry[] }
+
+export const ORDER_COLORS: Record<OrderStatus, string> = {
+    so_pending: '#64748B',
+    invoice_pending: '#F59E0B',
+    invoice_generated: '#2563EB',
+    delivery_pending: '#8B5CF6',
+    dispatched: '#16A34A',
+};
+
+export const ORDER_ICONS: Record<OrderStatus, string> = {
+    so_pending: 'create-outline',
+    invoice_pending: 'hourglass-outline',
+    invoice_generated: 'receipt-outline',
+    delivery_pending: 'cube-outline',
+    dispatched: 'car-outline',
+};
+
 /** A voice note: the recording (play it via `team.voiceSource`), what it says in English
  * (also the post's text), and the words as spoken. `text` is null when it could not be
  * written out -- the recording still plays. */
@@ -322,6 +387,19 @@ export const team = {
         ].filter(Boolean).join('&');
         return get<TeamFiles>(`/bff/v1/team/files${qs ? `?${qs}` : ''}`);
     },
+    /** My Orders: orders and invoices of my customers (or everybody's, for the desk). */
+    myOrders: (p: { status?: OrderStatus | null; q?: string; scope?: 'mine' | 'all' | null } = {}) => {
+        const qs = [
+            p.status ? `status=${p.status}` : '',
+            p.q?.trim() ? `q=${encodeURIComponent(p.q.trim())}` : '',
+            p.scope ? `scope=${p.scope}` : '',
+        ].filter(Boolean).join('&');
+        return get<MyOrders>(`/bff/v1/my-orders${qs ? `?${qs}` : ''}`);
+    },
+    invoice: (name: string) => get<InvoiceDetail>(`/bff/v1/my-orders/invoices/${encodeURIComponent(name)}`),
+    /** "Ready to dispatch" (Delivery Pending), or back. */
+    readyToDispatch: (name: string, ready: boolean) =>
+        post<InvoiceDetail>(`/bff/v1/my-orders/invoices/${encodeURIComponent(name)}/ready`, { ready }),
     /** File (or re-file) a file already in the chat. */
     fileAttachment: (jobId: string, replyId: string | null | undefined, filing: Filing) =>
         post<JobDetail>('/bff/v1/team/files', { job_id: jobId, reply_id: replyId ?? null, ...filing }),

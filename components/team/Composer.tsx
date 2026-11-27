@@ -13,7 +13,7 @@
  * fields. A file is not sent until it has a type -- unless SmartOps is too old to ask.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
@@ -39,11 +39,14 @@ export interface ComposerChip {
     color?: string;
 }
 
-export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
+export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWith, onStarted }: {
     onSend: (text: string, file: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) => Promise<boolean>;
     placeholder: string;
     chips?: ComposerChip[];
     chipsTitle?: string;
+    /** Open the attach sheet at once, already filled in (My Orders' "Add LR"). */
+    startWith?: Filing | null;
+    onStarted?: () => void;
 }) {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
@@ -53,6 +56,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
     const [types, setTypes] = useState<DocType[]>([]);
     const [supported, setSupported] = useState(true);
     const [asking, setAsking] = useState(false);
+    const [preset, setPreset] = useState<Filing | null>(null);
     const [sending, setSending] = useState(false);
 
     /** The attach sheet: what it is first, then the file (camera, gallery or PDF). */
@@ -66,6 +70,20 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
         setAsking(true);
     };
     const dropFile = () => { setFile(null); setFiling(null); };
+
+    // "Add LR" from My Orders: once per request, open the sheet with it filled in.
+    const started = useRef<string | null>(null);
+    useEffect(() => {
+        if (!startWith) return;
+        const key = JSON.stringify(startWith);
+        if (started.current === key) return;
+        started.current = key;
+        setPreset(startWith);
+        openAttach();
+        onStarted?.();
+        // openAttach and onStarted change every render; startWith is what asks.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [startWith]);
     const typeLabel = filing ? types.find(t => t.key === filing.doc_type)?.label ?? filing.doc_type : null;
 
     const canSend = !sending && (!!text.trim() || !!file);
@@ -243,10 +261,10 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
             </View>
             )}
             {asking && (
-                <FileTypeSheet withFile types={types} initial={filing} file={file} onFile={setFile}
+                <FileTypeSheet withFile types={types} initial={filing ?? preset} file={file} onFile={setFile}
                     preview={!supported}
-                    onClose={() => { setAsking(false); if (!filing) setFile(null); }}
-                    onSave={f => { setFiling(f); setAsking(false); }} />
+                    onClose={() => { setAsking(false); setPreset(null); if (!filing) setFile(null); }}
+                    onSave={f => { setFiling(f); setPreset(null); setAsking(false); }} />
             )}
         </View>
     );
