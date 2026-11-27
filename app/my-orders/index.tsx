@@ -4,8 +4,8 @@
  *   Sales Order Pending → Invoice Pending → Invoice Generated → Delivery Pending → Dispatched
  *
  * Worked out by SmartOps from ERPNext (app/web/my_orders.py). A salesperson sees their own
- * customers; the desk and managers see everyone's, or "Mine". Tap an invoice to see its LRs,
- * mark it ready to dispatch, or add an LR.
+ * customers; the desk and managers see everyone's, and can pick one salesperson's -- or the
+ * customers with none. Tap an invoice to see its LRs, mark it ready to dispatch, or add an LR.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +16,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { dmy, inr } from '@/components/orders/format';
+import { PickerSheet } from '@/components/team/PickerSheet';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -28,7 +29,8 @@ export default function MyOrdersScreen() {
     const colors = Colors[theme];
 
     const [status, setStatus] = useState<OrderStatus | null>(null);
-    const [scope, setScope] = useState<'mine' | 'all' | null>(null);
+    const [salesperson, setSalesperson] = useState<string | null>(null);
+    const [picking, setPicking] = useState(false);
     const [query, setQuery] = useState('');
     const [data, setData] = useState<MyOrders | null>(null);
     const [loading, setLoading] = useState(true);
@@ -36,9 +38,9 @@ export default function MyOrdersScreen() {
     const [error, setError] = useState<string | null>(null);
     const asked = useRef(0);
 
-    const load = useCallback(async (s: OrderStatus | null, sc: 'mine' | 'all' | null, q: string) => {
+    const load = useCallback(async (s: OrderStatus | null, sp: string | null, q: string) => {
         const mine = ++asked.current;
-        const r = await team.myOrders({ status: s, scope: sc, q });
+        const r = await team.myOrders({ status: s, salesperson: sp, q });
         if (mine !== asked.current) return;
         setLoading(false);
         setRefreshing(false);
@@ -48,12 +50,17 @@ export default function MyOrdersScreen() {
     }, []);
 
     useEffect(() => {
-        const h = setTimeout(() => load(status, scope, query), query ? 350 : 0);
+        const h = setTimeout(() => load(status, salesperson, query), query ? 350 : 0);
         return () => clearTimeout(h);
-    }, [status, scope, query, load]);
+    }, [status, salesperson, query, load]);
 
     // Back from an invoice (ready to dispatch, an LR added): show it.
-    useFocusEffect(useCallback(() => { load(status, scope, query); }, [status, scope, query, load]));
+    useFocusEffect(useCallback(() => { load(status, salesperson, query); }, [status, salesperson, query, load]));
+
+    const people = data?.salespeople ?? [];
+    const everyone = people.reduce((n, p) => n + p.count, 0);
+    const picked = people.find(p => p.key === salesperson);
+    const whose = !data ? '' : !data.can_see_all ? 'my customers' : picked ? picked.label : 'all salespeople';
 
     const chips: { key: OrderStatus | null; label: string }[] = [
         { key: null, label: 'All' },
@@ -64,7 +71,7 @@ export default function MyOrdersScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
                 title="My Orders"
-                subtitle={data ? `${data.counts.all ?? 0} since ${dmy(data.since)} · ${data.scope === 'mine' ? 'my customers' : 'all customers'}` : 'Orders and invoices'}
+                subtitle={data ? `${data.counts.all ?? 0} since ${dmy(data.since)} · ${whose}` : 'Orders and invoices'}
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
             />
 
@@ -81,11 +88,17 @@ export default function MyOrdersScreen() {
                             </TouchableOpacity>
                         )}
                     </View>
-                    {data?.can_see_all && (
-                        <TouchableOpacity onPress={() => { setLoading(true); setScope(data.scope === 'mine' ? 'all' : 'mine'); }}
-                            style={[styles.scope, { borderColor: colors.primary, backgroundColor: colors.surface }]}>
-                            <Ionicons name={data.scope === 'mine' ? 'person' : 'people'} size={16} color={colors.primary} />
-                            <Text style={[styles.scopeText, { color: colors.primary }]}>{data.scope === 'mine' ? 'Mine' : 'All'}</Text>
+                    {data?.can_see_all && people.length > 0 && (
+                        <TouchableOpacity onPress={() => setPicking(true)}
+                            style={[styles.scope, {
+                                borderColor: colors.primary,
+                                backgroundColor: salesperson ? colors.primary : colors.surface,
+                            }]}>
+                            <Ionicons name={salesperson ? 'person' : 'people'} size={16} color={salesperson ? '#FFF' : colors.primary} />
+                            <Text style={[styles.scopeText, { color: salesperson ? '#FFF' : colors.primary }]} numberOfLines={1}>
+                                {picked ? picked.label : 'All'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={14} color={salesperson ? '#FFF' : colors.primary} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -111,7 +124,7 @@ export default function MyOrdersScreen() {
                 <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: colors.danger }]}>
                     <Ionicons name="alert-circle-outline" size={22} color={colors.danger} />
                     <Text style={[styles.noticeText, { color: colors.text }]}>{error}</Text>
-                    <TouchableOpacity onPress={() => { setLoading(true); load(status, scope, query); }}>
+                    <TouchableOpacity onPress={() => { setLoading(true); load(status, salesperson, query); }}>
                         <Text style={{ color: colors.primary, fontWeight: '800' }}>Retry</Text>
                     </TouchableOpacity>
                 </View>
@@ -123,7 +136,7 @@ export default function MyOrdersScreen() {
                     keyExtractor={r => `${r.kind}-${r.name}`}
                     contentContainerStyle={styles.list}
                     refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.primary}
-                        onRefresh={() => { setRefreshing(true); load(status, scope, query); }} />}
+                        onRefresh={() => { setRefreshing(true); load(status, salesperson, query); }} />}
                     ListEmptyComponent={
                         <View style={styles.empty}>
                             <Ionicons name="cart-outline" size={44} color={colors.textSecondary} />
@@ -132,17 +145,29 @@ export default function MyOrdersScreen() {
                             </Text>
                         </View>
                     }
-                    renderItem={({ item }) => <Row row={item} colors={colors}
+                    renderItem={({ item }) => <Row row={item} colors={colors} showSeller={!!data?.can_see_all && !salesperson}
                         onPress={() => router.push(item.kind === 'invoice'
                             ? { pathname: '/my-orders/[name]', params: { name: item.name } }
                             : { pathname: '/sales-orders/[id]', params: { id: item.name } } as any)} />}
                 />
             )}
+
+            <PickerSheet
+                visible={picking}
+                title="Whose orders"
+                selected={salesperson ?? '*'}
+                options={[
+                    { value: '*', label: 'All salespeople', hint: `${everyone}` },
+                    ...people.map(p => ({ value: p.key, label: p.label, hint: `${p.count}` })),
+                ]}
+                onPick={v => { setLoading(true); setSalesperson(v === '*' ? null : v); setPicking(false); }}
+                onClose={() => setPicking(false)}
+            />
         </View>
     );
 }
 
-function Row({ row, colors, onPress }: { row: OrderRow; colors: typeof Colors.light; onPress: () => void }) {
+function Row({ row, colors, onPress, showSeller }: { row: OrderRow; colors: typeof Colors.light; onPress: () => void; showSeller?: boolean }) {
     const tint = ORDER_COLORS[row.status];
     const sub = [row.kind === 'invoice' ? `Invoice ${row.number}` : `Order ${row.number}`,
         row.po_no ? `PO ${row.po_no}` : '', dmy(row.date)].filter(Boolean).join(' · ');
@@ -155,6 +180,11 @@ function Row({ row, colors, onPress }: { row: OrderRow; colors: typeof Colors.li
             <View style={{ flex: 1, gap: 2 }}>
                 <Text style={[styles.customer, { color: colors.text }]} numberOfLines={1}>{row.customer_name}</Text>
                 <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>{sub}</Text>
+                {showSeller && (
+                    <Text style={[styles.meta, { color: colors.primary }]} numberOfLines={1}>
+                        {row.salesperson || 'No salesperson'}
+                    </Text>
+                )}
                 <View style={styles.tags}>
                     <View style={[styles.tag, { backgroundColor: `${tint}1A` }]}>
                         <Text style={[styles.tagText, { color: tint }]}>{row.status_label}</Text>
@@ -183,7 +213,7 @@ const styles = StyleSheet.create({
     searchRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
     search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 14, height: 44 },
     searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
-    scope: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, height: 44 },
+    scope: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, height: 44, maxWidth: 150 },
     scopeText: { fontSize: 13, fontWeight: '800' },
     chips: { gap: 8, paddingBottom: 4 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 7 },

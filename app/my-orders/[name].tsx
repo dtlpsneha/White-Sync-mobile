@@ -90,6 +90,7 @@ export default function InvoiceScreen() {
                             ['Invoice date', dmy(row.date)], ['Amount', inr(row.amount)],
                             ['Customer PO', row.po_no], ['Sales Order', row.order],
                             ['Payment', row.paid], ['Sales Invoice', row.sales_invoice || 'not made yet'],
+                            ['Salesperson', row.salesperson || ''],
                         ]} />
                     </View>
 

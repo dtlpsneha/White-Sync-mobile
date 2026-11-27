@@ -116,7 +116,12 @@ export interface OrderRow {
     /** The Sales Invoice made from Tally's invoice, once there is one. `name` is the
      * External Sales Invoice. Absent from an older SmartOps. */
     sales_invoice?: string;
+    /** The customer's salesperson, by name; "" when none is set. */
+    salesperson?: string;
 }
+
+/** A salesperson the desk can narrow My Orders to; key "none" is customers with none. */
+export interface SalespersonPick { key: string; label: string; count: number }
 
 export interface MyOrders {
     rows: OrderRow[];
@@ -125,6 +130,9 @@ export interface MyOrders {
     scope: 'mine' | 'all';
     can_see_all: boolean;
     since: string;
+    /** For the desk and managers: whose orders to show. Empty for a salesperson. */
+    salespeople?: SalespersonPick[];
+    salesperson?: string | null;
 }
 
 /** One LR filed for an invoice in Team Chat. */
@@ -391,11 +399,11 @@ export const team = {
         return get<TeamFiles>(`/bff/v1/team/files${qs ? `?${qs}` : ''}`);
     },
     /** My Orders: orders and invoices of my customers (or everybody's, for the desk). */
-    myOrders: (p: { status?: OrderStatus | null; q?: string; scope?: 'mine' | 'all' | null } = {}) => {
+    myOrders: (p: { status?: OrderStatus | null; q?: string; salesperson?: string | null } = {}) => {
         const qs = [
             p.status ? `status=${p.status}` : '',
             p.q?.trim() ? `q=${encodeURIComponent(p.q.trim())}` : '',
-            p.scope ? `scope=${p.scope}` : '',
+            p.salesperson ? `salesperson=${encodeURIComponent(p.salesperson)}` : '',
         ].filter(Boolean).join('&');
         return get<MyOrders>(`/bff/v1/my-orders${qs ? `?${qs}` : ''}`);
     },
