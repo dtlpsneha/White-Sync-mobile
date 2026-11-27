@@ -49,9 +49,10 @@ export default function TeamScreen() {
     const { ms } = useResponsive();
 
     // My Orders' "Add LR": open the attach sheet with this invoice picked.
-    const { lr } = useLocalSearchParams<{ lr?: string }>();
+    const { lr, lrNumber } = useLocalSearchParams<{ lr?: string; lrNumber?: string }>();
     const startWith = useMemo<Filing | null>(
-        () => (lr ? { doc_type: 'dispatch_lr', details: { invoices: String(lr) } } : null), [lr]);
+        () => (lr ? { doc_type: 'dispatch_lr', details: { invoices: String(lr), invoice_numbers: String(lrNumber || '') } } : null),
+        [lr, lrNumber]);
     const [tab, setTab] = useState<Tab>('chat');
     const [chat, setChat] = useState<Job[]>([]);          // newest first
     const [older, setOlder] = useState<string | null>(null);
@@ -239,7 +240,7 @@ export default function TeamScreen() {
                     <Composer
                         onSend={post}
                         startWith={startWith}
-                        onStarted={() => router.setParams({ lr: undefined } as any)}
+                        onStarted={() => router.setParams({ lr: undefined, lrNumber: undefined } as any)}
                         placeholder="Name, then what's needed…"
                         chips={chips}
                         chipsTitle="To:"

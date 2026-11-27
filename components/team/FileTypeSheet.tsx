@@ -174,7 +174,8 @@ function FieldInput({ field, values, set, colors }: {
         return (
             <View style={styles.field}>
                 {title}
-                <InvoicePicker value={value} onChange={v => set(field.key, v)} colors={colors} input={input} />
+                <InvoicePicker value={value} labels={values.invoice_numbers} onChange={v => set(field.key, v)}
+                    colors={colors} input={input} />
             </View>
         );
     }
@@ -266,15 +267,19 @@ function PartyPicker({ kind, value, onPick, colors, input }: {
     );
 }
 
-/** The Sales Invoices an LR carried goods for: several can be picked, from ERPNext. Kept as
- * "INV-1, INV-2" -- SmartOps checks each is a submitted invoice and takes the customer from it. */
-function InvoicePicker({ value, onChange, colors, input }: {
-    value: string; onChange: (v: string) => void; colors: typeof Colors.light; input: any[];
+/** Tally's invoices an LR carried goods for: several can be picked, from ERPNext. Kept as
+ * ERPNext names "a1b2c3, d4e5f6" -- SmartOps checks each and takes the customer from them.
+ * `labels`: Tally's numbers for invoices that came already picked (My Orders' "Add LR"). */
+function InvoicePicker({ value, labels, onChange, colors, input }: {
+    value: string; labels?: string; onChange: (v: string) => void; colors: typeof Colors.light; input: any[];
 }) {
     const picked = value.split(',').map(s => s.trim()).filter(Boolean);
     const [query, setQuery] = useState('');
     const [found, setFound] = useState<SalesInvoiceHit[]>([]);
-    const [shown, setShown] = useState<Record<string, SalesInvoiceHit>>({});
+    const [shown, setShown] = useState<Record<string, SalesInvoiceHit>>(() => {
+        const numbers = (labels || '').split(',').map(s => s.trim());
+        return Object.fromEntries(picked.map((name, i) => [name, { name, voucher_number: numbers[i] || '', customer: '' }]));
+    });
     const [searching, setSearching] = useState(false);
 
     useEffect(() => {
@@ -305,7 +310,7 @@ function InvoicePicker({ value, onChange, colors, input }: {
                     <View key={name} style={[styles.picked, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}>
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.pickedText, { color: colors.primary }]} numberOfLines={1}>
-                                {hit?.voucher_number ? `${hit.voucher_number} · ${name}` : name}
+                                {hit?.voucher_number || name}
                             </Text>
                             {!!hit?.customer && <Text style={[styles.hint, { color: colors.textSecondary }]} numberOfLines={1}>{hit.customer}</Text>}
                         </View>
@@ -317,20 +322,20 @@ function InvoicePicker({ value, onChange, colors, input }: {
             })}
             <View style={styles.row}>
                 <TextInput style={[...input, { flex: 1 }]} value={query} onChangeText={setQuery}
-                    placeholder={picked.length ? 'Add another invoice' : 'Invoice no., Tally no. or customer'}
+                    placeholder={picked.length ? 'Add another invoice' : 'Tally invoice no. or customer'}
                     placeholderTextColor={colors.placeholder} autoCapitalize="characters" />
                 {searching && <ActivityIndicator color={colors.primary} style={{ marginLeft: 8 }} />}
             </View>
             {query.trim().length >= 2 && found.filter(f => !picked.includes(f.name)).map(f => (
                 <TouchableOpacity key={f.name} onPress={() => add(f)} style={[styles.result, { borderBottomColor: colors.border }]}>
-                    <Text style={[styles.resultText, { color: colors.text }]}>
-                        {f.voucher_number ? `${f.voucher_number} · ` : ''}{f.name}
+                    <Text style={[styles.resultText, { color: colors.text }]}>{f.voucher_number || f.name}</Text>
+                    <Text style={[styles.hint, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {[f.customer, f.date ? f.date.split('-').reverse().join('-') : '', f.sales_invoice ? '' : 'no Sales Invoice yet'].filter(Boolean).join(' · ')}
                     </Text>
-                    <Text style={[styles.hint, { color: colors.textSecondary }]} numberOfLines={1}>{f.customer}</Text>
                 </TouchableOpacity>
             ))}
             {query.trim().length >= 2 && !searching && found.length === 0 && (
-                <Text style={[styles.hint, { color: colors.textSecondary }]}>No submitted invoice matches “{query.trim()}”.</Text>
+                <Text style={[styles.hint, { color: colors.textSecondary }]}>No invoice from Tally matches “{query.trim()}”.</Text>
             )}
         </View>
     );

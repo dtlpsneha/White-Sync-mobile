@@ -216,7 +216,8 @@ export function filedLine(a: Attachment): string | null {
     const d = a.doc_details || {};
     const party = d.customer || d.supplier;
     const ref = d.po_no || d.invoice_no || d.quotation_no || d.utr || d.lr_no || d.dc_no;
-    return [a.doc_type_label || a.doc_type, party, ref, d.description].filter(Boolean).join(' · ');
+    const invoices = d.invoice_numbers ? `Inv ${d.invoice_numbers}` : '';
+    return [a.doc_type_label || a.doc_type, party, ref, invoices, d.description].filter(Boolean).join(' · ');
 }
 
 function FiledAs({ a, colors }: { a: Attachment; colors: ThemeColors }) {

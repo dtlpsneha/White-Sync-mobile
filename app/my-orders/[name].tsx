@@ -89,7 +89,7 @@ export default function InvoiceScreen() {
                         <Facts colors={colors} facts={[
                             ['Invoice date', dmy(row.date)], ['Amount', inr(row.amount)],
                             ['Customer PO', row.po_no], ['Sales Order', row.order],
-                            ['Payment', row.paid], ['ERPNext', row.name],
+                            ['Payment', row.paid], ['Sales Invoice', row.sales_invoice || 'not made yet'],
                         ]} />
                     </View>
 
@@ -110,7 +110,7 @@ export default function InvoiceScreen() {
                                 <Text style={[styles.actionText, { color: colors.textSecondary }]}>Not ready yet</Text>
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity onPress={() => router.push({ pathname: '/team', params: { lr: row.name } } as any)}
+                        <TouchableOpacity onPress={() => router.push({ pathname: '/team', params: { lr: row.name, lrNumber: row.number } } as any)}
                             style={[styles.action, { backgroundColor: ORDER_COLORS.dispatched }]}>
                             <Ionicons name="car" size={18} color="#FFF" />
                             <Text style={styles.actionText}>Add LR</Text>

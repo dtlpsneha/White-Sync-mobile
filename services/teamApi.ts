@@ -111,8 +111,11 @@ export interface OrderRow {
     /** An invoice's Sales Order, when the customer's PO number matched one. */
     order: string;
     lr_count: number;
-    /** Paid / Unpaid / Overdue, as ERPNext has it. */
+    /** Paid / Unpaid / Overdue, from its Sales Invoice. */
     paid: string;
+    /** The Sales Invoice made from Tally's invoice, once there is one. `name` is the
+     * External Sales Invoice. Absent from an older SmartOps. */
+    sales_invoice?: string;
 }
 
 export interface MyOrders {
@@ -464,7 +467,7 @@ const PREVIEW_TYPES: DocType[] = [
         { key: 'utr', label: 'UTR / Cheque no', type: 'text', required: false },
         { key: 'payment_date', label: 'Payment date', type: 'date', required: false }] },
     { key: 'dispatch_lr', label: 'Dispatch / LR', icon: 'car-outline', fields: [
-        { key: 'invoices', label: 'Sales Invoices', type: 'invoices', required: true },
+        { key: 'invoices', label: 'Invoices', type: 'invoices', required: true },
         { key: 'transporter', label: 'Transporter', type: 'text', required: false },
         { key: 'lr_no', label: 'LR no', type: 'text', required: false },
         { key: 'lr_date', label: 'LR date', type: 'date', required: false }] },
