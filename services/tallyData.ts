@@ -20,14 +20,19 @@ export type StockData = {
     binsByItem: Record<string, StockBin[]>;
     tally: Record<string, number>;
     lots: Record<string, { lots: [string, string, string, number, number][]; cv?: number }>;
+    /** List price of each item for the current fiscal year (ERP Item > List Price History). */
+    listPrice: Record<string, number>;
+    listPriceFy: string;
 };
 
 const session = () => SecureStore.getItemAsync('session_cookies');
 
-async function listDocs(doctype: string, fields: string[], filters: any[] = []): Promise<any[]> {
+/** `parent` is needed to read a child table (e.g. List Price History) on its own; ERP refuses it otherwise. */
+async function listDocs(doctype: string, fields: string[], filters: any[] = [], parent = ''): Promise<any[]> {
     const qs =
         `fields=${encodeURIComponent(JSON.stringify(fields))}` +
         (filters.length ? `&filters=${encodeURIComponent(JSON.stringify(filters))}` : '') +
+        (parent ? `&parent=${encodeURIComponent(parent)}` : '') +
         `&limit_page_length=0`;
     const res = await apiGet(apiUrl(`/api/resource/${encodeURIComponent(doctype)}?${qs}`), await session());
     if (!res.ok) throw new Error(`Server error (${res.status})`);
@@ -51,7 +56,8 @@ export const stockBrandOf = (it: { brand?: string | null }): string | null => {
 
 export async function loadStockData(): Promise<StockData> {
     const [items, bins, snapshot, lots] = await Promise.all([
-        listDocs('Item', ['item_code', 'item_name', 'brand', 'stock_uom']),
+        // Enabled items only, as the ERP stock tab shows them.
+        listDocs('Item', ['item_code', 'item_name', 'brand', 'stock_uom'], [['disabled', '=', 0]]),
         listDocs('Bin', ['item_code', 'warehouse', 'actual_qty', 'reserved_qty', 'projected_qty']),
         noteJson('Tally Stock Snapshot'),
         noteJson('Tally Stock Lots'),
@@ -62,7 +68,16 @@ export async function loadStockData(): Promise<StockData> {
     });
     // Only items that exist in Tally and belong to one of the stock-tab brands
     const shown = (items as StockItem[]).filter(it => Object.prototype.hasOwnProperty.call(snapshot, it.item_code) && stockBrandOf(it));
-    return { items: shown, binsByItem, tally: snapshot, lots };
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const fyRows = await listDocs('Fiscal Year', ['name'], [['year_start_date', '<=', today], ['year_end_date', '>=', today]]).catch(() => []);
+    const listPriceFy: string = fyRows[0]?.name || '';
+    const priceRows = listPriceFy
+        ? await listDocs('List Price History', ['parent', 'price'], [['parentfield', '=', 'list_price_history'], ['fiscal_year', '=', listPriceFy]], 'Item').catch(() => [])
+        : [];
+    const listPrice: Record<string, number> = {};
+    priceRows.forEach((r: any) => { listPrice[r.parent] = Number(r.price || 0); });
+    return { items: shown, binsByItem, tally: snapshot, lots, listPrice, listPriceFy };
 }
 
 /** Tally quantity for an item, across all warehouses. */

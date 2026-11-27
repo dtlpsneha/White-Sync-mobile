@@ -119,6 +119,7 @@ export default function QuotationRequestScreen() {
                         customerLabel: customer.customer_name || customer.name,
                         lines: lineList,
                         brand,
+                        sourceLabel: source === 'direct' ? 'Direct Supplier' : 'From White & Co',
                         specialInstructions: specialInstructions.trim() || undefined,
                     });
                     mailNote = 'Emailed to hos@whitenco.net.';
@@ -246,7 +247,7 @@ export default function QuotationRequestScreen() {
                             </TouchableOpacity>
                             <Text style={label}>Special Instructions</Text>
                             <TextInput
-                                style={[field, { minHeight: 80, textAlignVertical: 'top' }]}
+                                style={[field, { minHeight: 220, textAlignVertical: 'top' }]}
                                 placeholder="Optional"
                                 placeholderTextColor={colors.textSecondary}
                                 value={specialInstructions}

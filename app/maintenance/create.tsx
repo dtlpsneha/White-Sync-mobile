@@ -110,8 +110,19 @@ export default function CustomerVisitScreen() {
                 <View style={styles.chipRow}>
                     {ALONG_WITH_OPTIONS.map(o => {
                         const on = alongWith.includes(o);
+                        const alone = alongWith.includes('Alone');
+                        // "Alone" stands on its own: picking it clears the rest and disables them.
+                        const blocked = alone && o !== 'Alone';
                         return (
-                            <TouchableOpacity key={o} style={chip(on)} onPress={() => setAlongWith(prev => (on ? prev.filter(x => x !== o) : [...prev, o]))}>
+                            <TouchableOpacity
+                                key={o}
+                                style={[chip(on), blocked && { opacity: 0.35 }]}
+                                disabled={blocked}
+                                onPress={() => setAlongWith(prev => {
+                                    if (o === 'Alone') return on ? [] : ['Alone'];
+                                    return on ? prev.filter(x => x !== o) : [...prev.filter(x => x !== 'Alone'), o];
+                                })}
+                            >
                                 <Text style={chipText(on)}>{o}</Text>
                             </TouchableOpacity>
                         );

@@ -144,17 +144,19 @@ export function apiPatch<T = any>(url: string, body: unknown, cookies?: string |
 }
 
 /** Upload a file using FormData. */
-export function uploadFile<T = any>(url: string, file: any, cookies?: string | null) {
+export function uploadFile<T = any>(url: string, file: any, cookies?: string | null, fields?: Record<string, string>) {
     const formData = new FormData();
 
     // Frappe/ERPNext file upload API expects 'file' and optionally 'doctype', 'docname', 'fieldname'
     if (file?.uri) {
         formData.append('file', {
             uri: file.uri,
-            name: file.uri.split('/').pop(),
+            name: file.name || file.uri.split('/').pop(),
             type: file.type || 'image/jpeg',
         } as any);
     }
+    // Extra form fields, e.g. doctype/docname to attach the file to a document
+    Object.entries(fields || {}).forEach(([k, v]) => formData.append(k, v));
 
     return request<T>({
         method: 'POST',

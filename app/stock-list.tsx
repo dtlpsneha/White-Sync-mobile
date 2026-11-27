@@ -124,6 +124,9 @@ export default function StockListScreen() {
                     <Text style={[styles.code, { color: colors.textSecondary }]}>{item.item_code}</Text>
                     <Text style={[styles.name, { color: colors.text }]}>{item.item_name}</Text>
                     <Text style={[styles.sub, { color: colors.textSecondary }]}>{brand} · UOM {item.stock_uom}</Text>
+                    <View style={styles.listPriceBox}>
+                        <Text style={styles.listPriceText}>List price {data.listPriceFy}: {data.listPrice[item.item_code] != null ? money(data.listPrice[item.item_code]) : 'not set'}</Text>
+                    </View>
 
                     <View style={[styles.table, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <Row label="Warehouse" value="Tally Stock List" header colors={colors} />
@@ -273,6 +276,8 @@ const styles = StyleSheet.create({
     itemName: { fontSize: 14, fontWeight: '700' },
     itemQty: { fontSize: 14, fontWeight: '800' },
     sub: { fontSize: 12, fontWeight: '500' },
+    listPriceBox: { alignSelf: 'flex-start', backgroundColor: '#fde68a', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 2, marginTop: 6 },
+    listPriceText: { color: '#78350f', fontWeight: '700', fontSize: 12.5 },
     totalBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: Radius.md, padding: 14, marginTop: 6 },
     code: { fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
     name: { fontSize: 22, fontWeight: '800' },

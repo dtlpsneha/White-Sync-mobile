@@ -131,69 +131,52 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
 
     const renderItem = ({ item, index }: { item: SalesOrder; index: number }) => {
         const statusConfig = getStatusColors(item.workflow_state || item.status);
-        const formattedAmount = Number(item.grand_total).toLocaleString('en-IN', {
+        const amount = Number(item.grand_total).toLocaleString('en-IN', {
             style: 'currency',
             currency: 'INR',
             maximumFractionDigits: 0
         }).replace('INR', '₹');
+        // The list call returns the date as `date`; the detail call uses `transaction_date`.
+        const rawDate = (item as any).date || item.transaction_date || '';
+        const [y, m, d] = rawDate.split('-');
+        const dateText = y && m && d ? `${d}-${m}-${y}` : rawDate;
+        const hasFile = !!(item.attach || (item as any).attach_image);
 
         return (
             <Animated.View entering={FadeInDown.delay(100 + (index % 5) * 50).springify()}>
-                <TouchableOpacity 
-                    style={styles.card} 
+                <TouchableOpacity
+                    style={[styles.card, { flexDirection: 'column', padding: 16 }]}
                     activeOpacity={0.7}
                     onPress={() => router.push(`/sales-orders/${item.name}` as any)}
                 >
-                    <View style={[styles.statusAccent, { backgroundColor: statusConfig.text }]} />
-                    <View style={styles.cardContent}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.idBadge}>
-                                <Text style={styles.idText}>#{item.name}</Text>
-                            </View>
-                            <View style={[styles.statusPill, { backgroundColor: statusConfig.bg + '10', borderColor: statusConfig.border }]}>
-                                <View style={[styles.statusDot, { backgroundColor: statusConfig.text }]} />
-                                <Text style={[styles.statusText, { color: statusConfig.text }]}>
-                                    {item.workflow_state || item.status}
-                                </Text>
-                            </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>{item.name}</Text>
+                        <View style={[styles.statusPill, { backgroundColor: statusConfig.bg + '10', borderColor: statusConfig.border }]}>
+                            <View style={[styles.statusDot, { backgroundColor: statusConfig.text }]} />
+                            <Text style={[styles.statusText, { color: statusConfig.text }]}>
+                                {item.workflow_state || item.status}
+                            </Text>
                         </View>
+                    </View>
 
-                        <View style={styles.cardBody}>
-                            <View style={styles.customerRow}>
-                                {item.attach || (item as any).attach_image ? (
-                                    <View style={styles.thumbnailContainer}>
-                                        {(item.attach || (item as any).attach_image || '').toLowerCase().endsWith('.pdf') ? (
-                                            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.primary + '10' }}>
-                                                <Ionicons name="document-text" size={24} color={colors.primary} />
-                                            </View>
-                                        ) : (
-                                            <Image 
-                                                source={{ uri: (item.attach || (item as any).attach_image || '').startsWith('http') ? (item.attach || (item as any).attach_image || '') : `${IMAGE_HOST}${(item.attach || (item as any).attach_image || '')}` }} 
-                                                style={styles.thumbnail} 
-                                            />
-                                        )}
-                                    </View>
-                                ) : (
-                                    <View style={styles.iconContainer}>
-                                        <Ionicons name="cart" size={16} color={colors.primary} />
-                                    </View>
-                                )}
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.customerName} numberOfLines={1}>{item.customer}</Text>
-                                    <View style={styles.dateRow}>
-                                        <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} />
-                                        <Text style={styles.dateText}>{item.transaction_date}</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        </View>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text, marginTop: 10 }} numberOfLines={2}>
+                        {item.customer}
+                    </Text>
 
-                        <View style={styles.cardFooter}>
-                            <View style={styles.amountContainer}>
-                                <Text style={styles.amountLabel}>Total Value</Text>
-                                <Text style={[styles.amountText, { color: statusConfig.text }]}>{formattedAmount}</Text>
-                            </View>
-                        </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                        <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>{dateText || 'No date'}</Text>
+                        {hasFile && (
+                            <>
+                                <Ionicons name="attach" size={13} color={colors.textSecondary} />
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>Attached</Text>
+                            </>
+                        )}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
+                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary, letterSpacing: 0.5 }}>TOTAL VALUE</Text>
+                        <Text style={{ fontSize: 18, fontWeight: '900', color: statusConfig.text }}>{amount}</Text>
                     </View>
                 </TouchableOpacity>
             </Animated.View>

@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -374,7 +374,11 @@ export default function InvoiceHistoryScreen() {
     const [fromDate, setFromDate] = useState(today().slice(0, 8) + '01');
     const [toDate, setToDate] = useState(today());
     const [salesExecutive, setSalesExecutive] = useState('');
-    const [brand, setBrand] = useState('');
+    // Opened from Quick Navigation as SERVICE INVOICES (?service=1): only the LC service invoices are listed,
+    // and the brand starts as LABOUR CHARGES.
+    const params = useLocalSearchParams<{ service?: string }>();
+    const serviceMode = params.service === '1';
+    const [brand, setBrand] = useState(serviceMode ? 'LABOUR CHARGES' : '');
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [item, setItem] = useState<Item | null>(null);
     const [paymentStatus, setPaymentStatus] = useState('');
@@ -593,7 +597,8 @@ export default function InvoiceHistoryScreen() {
 
     const openFyPicker = () => setPicker({ visible: true, title: 'Fiscal Year', options: fiscalYears.map(fy => ({ label: fy.name, value: fy.name })), selectedValue: draftFiscalYear, onSelect: onSelectDraftFy });
     const openExecPicker = () => setPicker({ visible: true, title: 'Sales Executive', options: [{ label: 'All', value: '' }, ...executives.map(e => ({ label: e.name.toUpperCase(), value: e.id }))], selectedValue: draftSalesExecutive, onSelect: setDraftSalesExecutive });
-    const openBrandPicker = () => setPicker({ visible: true, title: 'Brand', options: [{ label: 'All', value: '' }, ...brands.map(b => ({ label: brandLabel(b).toUpperCase(), value: b }))], selectedValue: draftBrand, onSelect: setDraftBrand });
+    // Service Invoices is always LABOUR CHARGES: the brand list is not opened there.
+    const openBrandPicker = () => serviceMode ? undefined : setPicker({ visible: true, title: 'Brand', options: [{ label: 'All', value: '' }, ...brands.map(b => ({ label: brandLabel(b).toUpperCase(), value: b }))], selectedValue: draftBrand, onSelect: setDraftBrand });
     const openPaymentStatusPicker = () => setPicker({ visible: true, title: 'Payment Status', options: [{ label: 'All', value: '' }, { label: 'Payment Paid', value: 'Payment Paid' }, { label: 'Payment Pending', value: 'Payment Pending' }, { label: 'Payment Pending - (60-90 days)', value: 'Payment Pending - (60-90 days)' }, { label: 'Payment Pending - (beyond 90)', value: 'Payment Pending - (beyond 90)' }, { label: 'Cancelled', value: 'Cancelled' }], selectedValue: draftPaymentStatus, onSelect: setDraftPaymentStatus });
 
     // Display only — matches the ERP dashboard's uppercase Sales Executive
@@ -603,10 +608,14 @@ export default function InvoiceHistoryScreen() {
     const paymentStatusLabelFor = (p: string) => (p ? p : 'All');
 
     // With an item picked, cancelled invoices are left out of the list.
-    const rows = useMemo(() => {
+    const allRows = useMemo(() => {
         const all = history?.rows || [];
         return item ? all.filter(r => r.payment_status !== 'Cancelled') : all;
     }, [history, item]);
+    // LC and COMM invoices are left out of the main list; the service view lists only the LC invoices.
+    const rows = useMemo(() => serviceMode
+        ? allRows.filter(r => String(r.invoice_no || '').toUpperCase().startsWith('LC'))
+        : allRows.filter(r => !isLcOrCommInvoice(r.invoice_no)), [allRows, serviceMode]);
 
     const outOfRange = !!history?.meta?.fy_out_of_range;
 
@@ -615,7 +624,7 @@ export default function InvoiceHistoryScreen() {
             <Stack.Screen options={{ headerShown: false }} />
 
             <ScreenHeader
-                title="Sales Invoice History (Detailed)"
+                title={serviceMode ? 'Service Invoices' : 'Sales Invoice History (Detailed)'}
                 onBack={() => router.canGoBack() ? router.back() : router.replace('/home')}
                 rightIcon={profitRevealed ? 'eye-off-outline' : 'eye-outline'}
                 onRightPress={() => setProfitRevealed(v => !v)}
@@ -700,7 +709,7 @@ export default function InvoiceHistoryScreen() {
 
                 <View style={styles.countRow}>
                     <Text style={[styles.countText, { color: colors.textSecondary }]}>Line Items</Text>
-                    {history && <Text style={[styles.countNum, { color: colors.primary }]}>{history.total_count}{history.truncated ? '+' : ''} rows</Text>}
+                    {history && <Text style={[styles.countNum, { color: colors.primary }]}>{rows.length}{history.truncated ? '+' : ''} rows</Text>}
                 </View>
 
                 {history?.truncated && (
@@ -751,8 +760,8 @@ export default function InvoiceHistoryScreen() {
 
                         <View style={styles.fieldGrid}>
                             <FieldBlock label="Fiscal Year" value={draftFiscalYear || '—'} onPress={openFyPicker} colors={colors} styles={styles} />
-                            <FieldBlock label="From Date" value={draftFromDate} onPress={() => { setShowToPicker(false); setShowFromPicker(v => !v); }} colors={colors} styles={styles} />
-                            <FieldBlock label="To Date" value={draftToDate} onPress={() => { setShowFromPicker(false); setShowToPicker(v => !v); }} colors={colors} styles={styles} />
+                            <FieldBlock label="From Date" value={ddmmyyyy(draftFromDate)} onPress={() => { setShowToPicker(false); setShowFromPicker(v => !v); }} colors={colors} styles={styles} />
+                            <FieldBlock label="To Date" value={ddmmyyyy(draftToDate)} onPress={() => { setShowFromPicker(false); setShowToPicker(v => !v); }} colors={colors} styles={styles} />
                             {ownExecutiveName ? (
                                 <View style={styles.fieldBlock}>
                                     <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Sales Executive</Text>

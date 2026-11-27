@@ -522,6 +522,7 @@ export default function HomeScreen() {
                                 { label: 'QUOTATION CREATED', sub: 'Create & track quotations', icon: 'document-text', from: '#FBBF24', to: '#F97316', route: '/quotations', mode: 'replace' as const },
                                 { label: 'CUSTOMER PURCHASE ORDER', sub: 'Orders from customers', icon: 'cart', from: '#2DD4BF', to: '#0D9488', route: '/sales-orders', mode: 'replace' as const },
                                 { label: 'SALES INVOICE HISTORY (DETAILED)', sub: 'Line-item invoice detail', icon: 'receipt', from: '#38BDF8', to: '#0284C7', route: '/daily-sales-report/invoice-history', mode: 'push' as const },
+                                { label: 'SERVICE INVOICES', sub: 'LC service invoices', icon: 'construct', from: '#F472B6', to: '#BE185D', route: '/daily-sales-report/invoice-history?service=1', mode: 'push' as const },
                                 { label: 'DAILY SALES INVOICE (CUMULATIVE)', sub: 'Brand-wise daily totals', icon: 'bar-chart', from: '#FB7185', to: '#E11D48', route: '/daily-sales-report', mode: 'push' as const },
                                 { label: 'HABASIT CALCULATOR', sub: 'Belt price estimate', icon: 'calculator', from: '#34D399', to: '#059669', route: '/price-calculator', mode: 'push' as const },
                             ]).map((item, i) => (

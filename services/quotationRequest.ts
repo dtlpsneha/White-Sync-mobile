@@ -130,6 +130,8 @@ export async function emailQuotationToSales(p: {
     senderName: string;
     typeLabel: string;
     brand: string;
+    /** "From White & Co" or "Direct Supplier", shown in the subject. */
+    sourceLabel: string;
     customerLabel: string;
     lines: { item: RequestItem; qty: number }[];
     specialInstructions?: string;
@@ -159,7 +161,7 @@ export async function emailQuotationToSales(p: {
         recipients: HOS_EMAIL,
         sender: p.senderEmail,
         sender_full_name: p.senderName || p.senderEmail,
-        subject: `${brandLabel(p.brand)} ${p.typeLabel} Request ${p.requestNo} on ${date} from ${p.senderName || p.senderEmail}`,
+        subject: `${brandLabel(p.brand)} ${p.typeLabel} Request ${p.requestNo} (${p.sourceLabel}) on ${date} from ${p.senderName || p.senderEmail}`,
         content,
         communication_medium: 'Email',
         send_email: 1,

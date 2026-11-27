@@ -1,610 +1,426 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, FlatList, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { useResponsive } from '@/hooks/useResponsive';
-import { apiGet, apiPost, uploadFile } from '@/utils/api';
-import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { API_BASE_URL, apiUrl } from '@/constants/config';
+import { apiGet, apiPost, apiPut, uploadFile } from '@/utils/api';
+import { apiUrl } from '@/constants/config';
+import { searchItemsByBrand, RequestItem } from '@/services/quotationRequest';
+import { Customer, searchCustomers } from '@/services/frappeSearch';
 
-const IMAGE_HOST = API_BASE_URL;
+type Attachment = { uri: string; name: string; type: string };
+type Line = { key: number; item: RequestItem | null; query: string; results: RequestItem[]; qty: string };
 
-interface FormItem {
-    item_code: string;
-    item_name: string;
-    qty: number;
-    rate: number;
-    amount: number;
-    warehouse: string;
-}
+const todayIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const dmy = (iso: string) => {
+    const [y, m, d] = iso.split('-');
+    return y && m && d ? `${d}-${m}-${y}` : iso;
+};
 
+/** Customer Purchase Order: customer, attachments, date, then items (one brand for all items, item, quantity). Saved to ERP. */
 export default function CreateSalesOrderScreen() {
-    const { quotation_id, customer: initCustomer, items: initItems, edit_id } = useLocalSearchParams();
+    const { edit_id } = useLocalSearchParams<{ edit_id?: string }>();
     const router = useRouter();
-    const colorScheme = useColorScheme();
-    const theme = colorScheme ?? 'light';
+    const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
-    const { s, vs, ms } = useResponsive();
     const insets = useSafeAreaInsets();
-    const styles = useMemo(() => getStyles(theme), [theme]);
 
-    const [form, setForm] = useState({
-        customer: (initCustomer as string) || '',
-        customer_name: (initCustomer as string) || '', // Display name
-        transaction_date: new Date().toISOString().split('T')[0],
-        delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default 7 days from now
-        items: [] as FormItem[],
-        attach: ''
-    });
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [customerQuery, setCustomerQuery] = useState('');
+    const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const [existingAttach, setExistingAttach] = useState('');
+    const [orderDate, setOrderDate] = useState(todayIso());
+    const [showDate, setShowDate] = useState(false);
+    const [brands, setBrands] = useState<string[]>([]);
+    const [lines, setLines] = useState<Line[]>([{ key: 1, item: null, query: '', results: [], qty: '' }]);
+    const [nextKey, setNextKey] = useState(2);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [brand, setBrand] = useState('');
+    const [brandOpen, setBrandOpen] = useState(false);
 
-    const [isSaving, setIsSaving] = useState(false);
-    const [isLoadingData, setIsLoadingData] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-    const [itemResults, setItemResults] = useState<any[]>([]);
-    const [isSearchingItem, setIsSearchingItem] = useState(false);
-    const [warehouseResults, setWarehouseResults] = useState<any[]>([]);
-    const [isSearchingWarehouse, setIsSearchingWarehouse] = useState(false);
-    const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
-    const [activeWarehouseIndex, setActiveWarehouseIndex] = useState<number | null>(null);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-
-    const onDateChange = (event: any, selectedDate?: Date) => {
-        setShowDatePicker(false);
-        if (selectedDate) {
-            const formatted = selectedDate.toISOString().split('T')[0];
-            setForm(p => ({ ...p, delivery_date: formatted }));
-        }
-    };
-
-    const formatDateDisplay = (dateStr: string) => {
-        if (!dateStr) return '';
-        try {
-            const [y, m, d] = dateStr.split('-');
-            return `${d}-${m}-${y}`;
-        } catch (e) {
-            return dateStr;
-        }
-    };
-
+    // Brands for the item lines
     useEffect(() => {
-        if (edit_id) {
-            fetchExistingOrder(edit_id as string);
-        }
+        (async () => {
+            const cookies = await SecureStore.getItemAsync('session_cookies');
+            const res = await apiGet(apiUrl('/api/resource/Brand?fields=%5B%22name%22%5D&order_by=name%20asc&limit_page_length=0'), cookies);
+            if (res.ok) setBrands(((res.data as any)?.data || []).map((b: any) => b.name));
+        })();
+    }, []);
+
+    // Customer search (enabled customers only)
+    useEffect(() => {
+        const q = customerQuery.trim();
+        if (q.length < 2 || customer) { setCustomerResults([]); return; }
+        const h = setTimeout(async () => {
+            const r = await searchCustomers(q);
+            setCustomerResults(r.ok ? r.data : []);
+        }, 300);
+        return () => clearTimeout(h);
+    }, [customerQuery, customer]);
+
+    // Editing an existing order: load its customer, date, items and attachment
+    useEffect(() => {
+        if (!edit_id) return;
+        (async () => {
+            setLoading(true);
+            try {
+                const cookies = await SecureStore.getItemAsync('session_cookies');
+                const res = await apiGet(apiUrl(`/api/resource/Sales Order/${encodeURIComponent(edit_id)}`), cookies);
+                const doc: any = (res.data as any)?.data;
+                if (!res.ok || !doc) { Alert.alert('Error', 'Could not load the order.'); return; }
+                setCustomer({ name: doc.customer, customer_name: doc.customer_name || doc.customer } as Customer);
+                setCustomerQuery(doc.customer_name || doc.customer);
+                setOrderDate(doc.transaction_date || todayIso());
+                setBrand(doc.items?.[0]?.brand || '');
+                setExistingAttach(doc.attach || '');
+                const loaded: Line[] = (doc.items || []).map((it: any, i: number) => ({
+                    key: i + 1,
+                    item: { item_code: it.item_code, item_name: it.item_name || it.item_code, stock_uom: it.uom || '' },
+                    query: '',
+                    results: [],
+                    qty: String(it.qty || ''),
+                }));
+                setLines(loaded.length ? loaded : [{ key: 1, item: null, query: '', results: [], qty: '' }]);
+                setNextKey(loaded.length + 1);
+            } finally {
+                setLoading(false);
+            }
+        })();
     }, [edit_id]);
 
-    const fetchExistingOrder = async (id: string) => {
-        try {
-            setIsLoadingData(true);
-            const cookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet(apiUrl(`/api/resource/Sales Order/${encodeURIComponent(id)}`), cookies);
-            
-            if (res.ok && res.data?.data) {
-                const doc = res.data.data;
-                setForm({
-                    customer: doc.customer || '',
-                    customer_name: doc.customer_name || doc.customer || '',
-                    transaction_date: doc.transaction_date || new Date().toISOString().split('T')[0],
-                    delivery_date: doc.delivery_date || new Date().toISOString().split('T')[0],
-                    items: (doc.items || []).map((it: any) => ({
-                        item_code: it.item_code,
-                        item_name: it.item_name || it.item_code,
-                        qty: it.qty || 1,
-                        rate: it.rate || 0,
-                        amount: it.amount || 0,
-                        warehouse: it.warehouse || ''
-                    })),
-                    attach: doc.attach || doc.attach_image || ''
-                });
-            } else {
-                Alert.alert('Error', 'Failed to fetch Sales Order details.');
-            }
-        } catch (e) {
-            console.error(e);
-            Alert.alert('Error', 'An error occurred while fetching data.');
-        } finally {
-            setIsLoadingData(false);
+    // ---- attachments: pick any number of images or PDFs
+    const addFiles = (files: Attachment[]) => {
+        if (!files.length) return;
+        setAttachments(prev => [...prev, ...files]);
+    };
+
+    const pickImages = async () => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsMultipleSelection: true,
+            quality: 0.8,
+        });
+        if (!result.canceled) {
+            addFiles(result.assets.map(a => ({
+                uri: a.uri,
+                name: a.fileName || a.uri.split('/').pop() || 'image.jpg',
+                type: a.mimeType || 'image/jpeg',
+            })));
         }
     };
 
-    const pickAttachment = async () => {
-        try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images', 'videos'],
-                allowsEditing: true,
-                quality: 0.7,
-            });
-
-            if (!result.canceled) {
-                uploadAttachment(result.assets[0].uri);
-            }
-        } catch (e) {
-            console.error(e);
+    const pickPdfs = async () => {
+        const { getDocumentAsync } = await import('expo-document-picker');
+        const result = await getDocumentAsync({ type: ['application/pdf', 'image/*'], multiple: true, copyToCacheDirectory: true });
+        if (!result.canceled) {
+            addFiles(result.assets.map(a => ({ uri: a.uri, name: a.name, type: a.mimeType || 'application/pdf' })));
         }
     };
 
-    const pickDocument = async () => {
-        try {
-            const { getDocumentAsync } = await import('expo-document-picker');
-            const result = await getDocumentAsync({
-                type: ['application/pdf', 'image/*'],
-                copyToCacheDirectory: true
-            });
-
-            if (!result.canceled) {
-                uploadAttachment(result.assets[0].uri);
-            }
-        } catch (e) {
-            console.error(e);
-        }
+    const removeAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
     };
 
-    const uploadAttachment = async (uri: string) => {
-        try {
-            setIsSaving(true);
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const uploadRes: any = await uploadFile(
-                apiUrl('/api/method/upload_file'),
-                { uri },
-                sessionCookies
-            );
+    // ---- item lines
+    const patchLine = (key: number, patch: Partial<Line>) =>
+        setLines(ls => ls.map(l => (l.key === key ? { ...l, ...patch } : l)));
 
-            if (uploadRes.ok && uploadRes.data?.message?.file_url) {
-                setForm(prev => ({ ...prev, attach: uploadRes.data.message.file_url }));
-            } else {
-                Alert.alert('Upload Failed', 'Could not upload file.');
-            }
-        } catch (error) {
-            console.error('Upload Error:', error);
-            Alert.alert('Error', 'An error occurred during upload.');
-        } finally {
-            setIsSaving(false);
-        }
+    const addLine = () => {
+        setLines(ls => [...ls, { key: nextKey, item: null, query: '', results: [], qty: '' }]);
+        setNextKey(k => k + 1);
     };
 
-    const calculateTotal = () => {
-        return form.items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-    };
+    const removeLine = (key: number) => setLines(ls => (ls.length > 1 ? ls.filter(l => l.key !== key) : ls));
 
-    /**
-     * Build a frappe.client.get_list URL for a "field LIKE %query%" lookup.
-     *
-     * The filter JSON and the query string are both encoded properly here.
-     * These lookups used to interpolate the raw search text straight into the
-     * URL, so a quote character produced malformed filter JSON and `%` or `_`
-     * silently acted as SQL wildcards.
-     */
-    const likeSearchUrl = (doctype: string, field: string, query: string, fields: string[], extra: any[] = []) => {
-        const escaped = query.trim().replace(/[\\%_]/g, c => `\\${c}`);
-        const filters = JSON.stringify([[field, 'like', `%${escaped}%`], ...extra]);
+    // Item search for each line, limited to the order's brand
+    useEffect(() => {
+        lines.forEach(l => {
+            const q = l.query.trim();
+            if (!brand || l.item || q.length < 2) return;
+            const h = setTimeout(async () => {
+                const results = await searchItemsByBrand(brand, q);
+                setLines(ls => ls.map(x => (x.key === l.key && x.query.trim() === q ? { ...x, results } : x)));
+            }, 300);
+            return () => clearTimeout(h);
+        });
+        // The search re-runs when the brand, a query or a chosen item changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [brand, lines.map(l => `${l.key}|${l.query}|${l.item?.item_code || ''}`).join(',')]);
 
-        return apiUrl(
-            `/api/method/frappe.client.get_list?doctype=${encodeURIComponent(doctype)}` +
-            `&filters=${encodeURIComponent(filters)}` +
-            `&fields=${encodeURIComponent(JSON.stringify(fields))}`
-        );
-    };
-
-    const fetchCustomers = async (query: string) => {
-        if (query.length < 2) return;
-        setIsSearching(true);
-        try {
-            const cookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet(likeSearchUrl('Customer', 'customer_name', query, ['name', 'customer_name'], [['disabled', '=', 0]]), cookies);
-            if (res.ok) setSearchResults(res.data?.message || []);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsSearching(false);
-        }
-    };
-
-    const fetchItems = async (query: string) => {
-        if (query.length < 2) return;
-        setIsSearchingItem(true);
-        try {
-            const cookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet(likeSearchUrl('Item', 'item_code', query, ['name', 'item_name', 'standard_rate']), cookies);
-            if (res.ok) setItemResults(res.data?.message || []);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsSearchingItem(false);
-        }
-    };
-
-    const fetchWarehouses = async (query: string) => {
-        if (query.length < 2) return;
-        setIsSearchingWarehouse(true);
-        try {
-            const cookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiGet(likeSearchUrl('Warehouse', 'name', query, ['name']), cookies);
-            if (res.ok) setWarehouseResults(res.data?.message || []);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsSearchingWarehouse(false);
-        }
-    };
-
-    const addItemRow = () => {
-        setForm(prev => ({
-            ...prev,
-            items: [...prev.items, { item_code: '', item_name: '', qty: 1, rate: 0, amount: 0, warehouse: '' }]
-        }));
-    };
-
-    const removeItemRow = (index: number) => {
-        const newItems = [...form.items];
-        newItems.splice(index, 1);
-        setForm(prev => ({ ...prev, items: newItems }));
-    };
-
-    const updateItem = (index: number, key: keyof FormItem, value: any) => {
-        const newItems = [...form.items];
-        const it = { ...newItems[index], [key]: value };
-        
-        if (key === 'qty' || key === 'rate') {
-            it.amount = Number(it.qty) * Number(it.rate);
-        }
-        
-        newItems[index] = it;
-        setForm(prev => ({ ...prev, items: newItems }));
-    };
-
+    // ---- save
     const handleSave = async () => {
-        if (!form.customer) return Alert.alert('Error', 'Please select a customer.');
-        if (form.items.length === 0) return Alert.alert('Error', 'Please add at least one item.');
+        if (!customer) { Alert.alert('Customer', 'Choose the customer.'); return; }
+        const filled = lines.filter(l => l.item);
+        if (filled.some(l => !(Number(l.qty) > 0))) { Alert.alert('Quantity', 'Enter a quantity greater than zero for every item.'); return; }
 
-        setIsSaving(true);
+        setSaving(true);
         try {
             const cookies = await SecureStore.getItemAsync('session_cookies');
-            
-            // Updated API Payload matching user specification
-            const payload = {
-                action: edit_id ? 'update' : 'create',
-                customer: form.customer,
-                attach: form.attach || undefined,
-                items: form.items.map(it => ({
-                    item_code: it.item_code,
-                    qty: Number(it.qty),
-                    rate: Number(it.rate),
-                    warehouse: it.warehouse,
-                    delivery_date: form.delivery_date,
-                })),
-                // Optional fields retained if needed by backend, though not in the snippet
-                transaction_date: form.transaction_date,
+            const items = filled.map(l => ({
+                item_code: l.item!.item_code,
+                item_name: l.item!.item_name,
+                description: l.item!.item_name,
+                qty: Number(l.qty),
+                brand,
+            }));
+            const payload: any = {
+                customer: customer.name,
+                transaction_date: orderDate,
+                // ERP asks for a delivery date; the app sets it one week after the order date.
+                delivery_date: addDaysIso(orderDate, 7),
                 company: 'White & Co.',
-                docstatus: 0,
-                quotation: quotation_id || undefined
+                items,
             };
-
-            const url = edit_id 
-                ? apiUrl(`/api/resource/Sales Order/${encodeURIComponent(edit_id as string)}`)
-                : apiUrl('/api/resource/Sales Order');
-            
-            const res = edit_id 
-                ? await apiPost(url, { ...payload, _method: 'PUT' }, cookies) 
-                : await apiPost(url, payload, cookies);
-            
-            const data: any = res.data;
-
-            if (res.ok && (data?.data?.name || data?.name)) {
-                Alert.alert('Success', `Sales Order ${edit_id || data.data.name} ${edit_id ? 'updated' : 'created'} successfully.`, [{ text: 'OK', onPress: () => router.back() }]);
-            } else {
-                let errorMsg = `Failed to ${edit_id ? 'update' : 'create'} Sales Order.`;
-                try {
-                    if (data?._server_messages) {
-                        const msgs = JSON.parse(data._server_messages);
-                        errorMsg = msgs.map((m: any) => JSON.parse(m).message).join('\n');
-                    } else if (data?.message?.error) {
-                        errorMsg = data.message.error;
-                    } else if (data?.message) {
-                        errorMsg = typeof data.message === 'string' ? data.message : JSON.stringify(data.message);
-                    }
-                } catch (e) {
-                    errorMsg = 'Failed to create Sales Order. Please check mandatory fields like Customer and Item details.';
-                }
-                Alert.alert('Save Failed', errorMsg);
-                console.error('Save Failure Detail:', data);
+            // A order with no items still saves: zero totals, as the ERP quotation needs.
+            if (items.length === 0) {
+                Object.assign(payload, { total: 0, net_total: 0, grand_total: 0, base_total: 0, base_net_total: 0, base_grand_total: 0, rounded_total: 0, base_rounded_total: 0, total_taxes_and_charges: 0, base_total_taxes_and_charges: 0 });
             }
-        } catch (e) {
-            console.error('Save Error:', e);
-            Alert.alert('Error', 'An unexpected error occurred while saving.');
+
+            const url = edit_id ? apiUrl(`/api/resource/Sales Order/${encodeURIComponent(edit_id)}`) : apiUrl('/api/resource/Sales Order');
+            const res = edit_id ? await apiPut(url, payload, cookies) : await apiPost(url, payload, cookies);
+            const name: string | undefined = (res.data as any)?.data?.name;
+            if (!res.ok || !name) {
+                Alert.alert('Not saved', serverText(res.data) || 'ERP did not accept the order.');
+                return;
+            }
+
+            // Attach every chosen file to the saved order
+            const failed: string[] = [];
+            for (const f of attachments) {
+                const up: any = await uploadFile(apiUrl('/api/method/upload_file'), f, cookies, { doctype: 'Sales Order', docname: name });
+                if (!up.ok) failed.push(f.name);
+            }
+            const fileNote = failed.length ? `\nThese files were not attached: ${failed.join(', ')}` : '';
+            Alert.alert('Saved in ERP', `Customer Purchase Order ${name} was saved.${fileNote}`, [{ text: 'OK', onPress: () => router.back() }]);
+        } catch {
+            Alert.alert('Not saved', 'Something went wrong while saving. Please try again.');
         } finally {
-            setIsSaving(false);
+            setSaving(false);
         }
     };
+
+    const field = [styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }];
+    const label = [styles.label, { color: colors.textSecondary }];
+    const card = [styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }];
 
     return (
-        <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
-            style={[styles.container, { backgroundColor: colors.background }]}
-        >
+        <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
-                title={edit_id ? 'Edit Sales Order' : 'New Sales Order'}
-                onBack={() => router.canGoBack() ? router.back() : router.replace('/sales-orders')}
-                right={
-                    <TouchableOpacity onPress={handleSave} disabled={isSaving} style={styles.saveBtn}>
-                        {isSaving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveText}>{edit_id ? 'Update' : 'Save'}</Text>}
-                    </TouchableOpacity>
-                }
+                title={edit_id ? 'Edit Purchase Order' : 'Customer Purchase Order'}
+                subtitle={edit_id ? undefined : 'New order'}
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/sales-orders'))}
             />
 
-            {isLoadingData ? (
-                <View style={styles.center}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
+            {loading ? (
+                <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
             ) : (
-                <ScrollView
-                    contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + insets.bottom }]}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    {/* Customer Section */}
-                    <Animated.View entering={FadeInUp.delay(100).springify()} style={[styles.card, { backgroundColor: colors.surface }]}>
-                        <Text style={styles.label}>Customer</Text>
-                        <View style={styles.searchBox}>
-                            <TextInput 
-                                style={[styles.input, { color: colors.text }]}
-                                placeholder="Search Customer..."
-                                placeholderTextColor={colors.placeholder}
-                                value={form.customer_name}
-                                onChangeText={(t) => {
-                                    setForm(p => ({ ...p, customer: t, customer_name: t }));
-                                    fetchCustomers(t);
-                                }}
-                            />
-                            {isSearching && <ActivityIndicator size="small" color={colors.primary} />}
-                        </View>
-                        {searchResults.length > 0 && form.customer.length > 2 && (
-                            <View style={styles.resultsContainer}>
-                                {searchResults.map((c, i) => (
-                                    <TouchableOpacity 
-                                        key={i} 
-                                        style={styles.resultItem}
-                                        onPress={() => {
-                                            setForm(p => ({ ...p, customer: c.name, customer_name: c.customer_name }));
-                                            setSearchResults([]);
-                                        }}
-                                    >
-                                        <View>
-                                            <Text style={{ color: colors.text, fontWeight: '700' }}>{c.customer_name}</Text>
-                                            {c.name !== c.customer_name && <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{c.name}</Text>}
-                                        </View>
+                <ScrollView contentContainerStyle={[styles.pad, { paddingBottom: 320 + insets.bottom }]} keyboardShouldPersistTaps="handled">
+                    {/* 1. Customer */}
+                    <View style={card}>
+                        <Text style={label}>1. Customer</Text>
+                        {customer ? (
+                            <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => { setCustomer(null); setCustomerQuery(''); }}>
+                                <Text style={[styles.selectedText, { color: colors.primary }]}>{customer.customer_name || customer.name}</Text>
+                                <Ionicons name="close-circle" size={18} color={colors.primary} />
+                            </TouchableOpacity>
+                        ) : (
+                            <>
+                                <TextInput style={field} placeholder="Search customer" placeholderTextColor={colors.textSecondary} value={customerQuery} onChangeText={setCustomerQuery} />
+                                {customerResults.map(c => (
+                                    <TouchableOpacity key={c.name} style={[styles.resultRow, { borderBottomColor: colors.border }]} onPress={() => { setCustomer(c); setCustomerResults([]); }}>
+                                        <Text style={[styles.resultText, { color: colors.text }]}>{c.customer_name || c.name}</Text>
                                     </TouchableOpacity>
                                 ))}
-                            </View>
+                            </>
                         )}
-                    </Animated.View>
+                    </View>
 
-                    {/* Delivery Date Section */}
-                    <Animated.View entering={FadeInUp.delay(150).springify()} style={[styles.card, { backgroundColor: colors.surface }]}>
-                        <Text style={styles.label}>Delivery Date</Text>
-                        <Pressable style={styles.searchBox} onPress={() => setShowDatePicker(true)}>
-                            <Ionicons name="calendar-outline" size={20} color={colors.primary} style={{ marginRight: 12 }} />
-                            <Text style={[styles.input, { color: colors.text }]}>
-                                {formatDateDisplay(form.delivery_date)}
-                            </Text>
-                            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-                        </Pressable>
-                        {showDatePicker && (
-                            <DateTimePicker
-                                value={new Date(form.delivery_date)}
-                                mode="date"
-                                display="default"
-                                onChange={onDateChange}
-                                minimumDate={new Date()}
-                            />
-                        )}
-                    </Animated.View>
-
-                    {/* Attachment Section */}
-                    <Animated.View entering={FadeInUp.delay(175).springify()} style={[styles.card, { backgroundColor: colors.surface }]}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.label}>Attachment</Text>
-                            {form.attach ? (
-                                <TouchableOpacity onPress={() => setForm(p => ({ ...p, attach: '' }))}>
-                                    <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '800' }}>REMOVE</Text>
+                    {/* 2. Attachments */}
+                    <View style={card}>
+                        <Text style={label}>2. Attachments</Text>
+                        {existingAttach ? <Text style={[styles.hint, { color: colors.textSecondary }]}>Existing file: {existingAttach.split('/').pop()}</Text> : null}
+                        {attachments.map((f, i) => (
+                            <View key={`${f.uri}-${i}`} style={[styles.fileRow, { borderColor: colors.border }]}>
+                                <Ionicons name={f.type.includes('pdf') ? 'document-text-outline' : 'image-outline'} size={20} color={colors.primary} />
+                                <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>{f.name}</Text>
+                                <TouchableOpacity onPress={() => removeAttachment(i)} hitSlop={8}>
+                                    <Ionicons name="close-circle" size={20} color={colors.danger} />
                                 </TouchableOpacity>
-                            ) : null}
-                        </View>
-                        
-                        {form.attach ? (
-                            <View style={styles.imagePreviewContainer}>
-                                {form.attach.toLowerCase().endsWith('.pdf') ? (
-                                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                                        <Ionicons name="document-text-outline" size={48} color={colors.primary} />
-                                        <Text style={{ marginTop: 8, fontWeight: '700', color: colors.textSecondary }}>PDF Document</Text>
-                                        <Text style={{ fontSize: 10, color: colors.textSecondary }}>{form.attach.split('/').pop()}</Text>
-                                    </View>
-                                ) : (
-                                    <Image source={{ uri: form.attach.startsWith('http') ? form.attach : `${IMAGE_HOST}${form.attach}` }} style={styles.imagePreview} />
-                                )}
-                            </View>
-                        ) : (
-                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                                <TouchableOpacity style={[styles.uploadBox, { flex: 1 }]} onPress={pickAttachment}>
-                                    <Ionicons name="camera-outline" size={32} color={colors.primary} />
-                                    <Text style={[styles.uploadText, { color: colors.primary }]}>Image</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[styles.uploadBox, { flex: 1 }]} onPress={pickDocument}>
-                                    <Ionicons name="document-outline" size={32} color={colors.primary} />
-                                    <Text style={[styles.uploadText, { color: colors.primary }]}>PDF</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </Animated.View>
-
-                    {/* Items Section */}
-                    <Animated.View entering={FadeInUp.delay(200).springify()} style={styles.itemsSection}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Items</Text>
-                            <TouchableOpacity onPress={addItemRow} style={[styles.addBtn, { backgroundColor: colors.primarySoft }]}>
-                                <Ionicons name="add" size={20} color={colors.primary} />
-                                <Text style={[styles.addBtnText, { color: colors.primary }]}>Add Item</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {form.items.map((item, idx) => (
-                            <View key={idx} style={[styles.itemCard, { backgroundColor: colors.surface }]}>
-                                <View style={styles.itemRowHeader}>
-                                    <Text style={[styles.itemIdx, { color: colors.textSecondary }]}>#{idx + 1}</Text>
-                                    <TouchableOpacity onPress={() => removeItemRow(idx)}>
-                                        <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                                    </TouchableOpacity>
-                                </View>
-
-                                <TextInput 
-                                    style={[styles.itemInput, { color: colors.text }]} 
-                                    placeholder="Item Code"
-                                    placeholderTextColor={colors.placeholder}
-                                    value={item.item_code}
-                                    onChangeText={(t) => {
-                                        updateItem(idx, 'item_code', t);
-                                        setActiveItemIndex(idx);
-                                        fetchItems(t);
-                                    }}
-                                />
-                                
-                                {activeItemIndex === idx && itemResults.length > 0 && (
-                                    <View style={styles.itemResults}>
-                                        {itemResults.map((it, i) => (
-                                            <TouchableOpacity 
-                                                key={i} 
-                                                style={styles.resultItem}
-                                                onPress={() => {
-                                                    const newItems = [...form.items];
-                                                    newItems[idx] = { ...newItems[idx], item_code: it.name, item_name: it.item_name, rate: it.standard_rate || 0, amount: (it.standard_rate || 0) * newItems[idx].qty };
-                                                    setForm(p => ({ ...p, items: newItems }));
-                                                    setItemResults([]);
-                                                    setActiveItemIndex(null);
-                                                }}
-                                            >
-                                                <Text style={{ color: colors.text }}>{it.item_name} ({it.name})</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                )}
-
-                                <TextInput 
-                                    style={[styles.itemInput, { color: colors.text }]} 
-                                    placeholder="Warehouse"
-                                    placeholderTextColor={colors.placeholder}
-                                    value={item.warehouse}
-                                    onChangeText={(t) => {
-                                        updateItem(idx, 'warehouse', t);
-                                        setActiveWarehouseIndex(idx);
-                                        fetchWarehouses(t);
-                                    }}
-                                />
-
-                                {activeWarehouseIndex === idx && warehouseResults.length > 0 && (
-                                    <View style={styles.itemResults}>
-                                        {warehouseResults.map((w, i) => (
-                                            <TouchableOpacity 
-                                                key={i} 
-                                                style={styles.resultItem}
-                                                onPress={() => {
-                                                    updateItem(idx, 'warehouse', w.name);
-                                                    setWarehouseResults([]);
-                                                    setActiveWarehouseIndex(null);
-                                                }}
-                                            >
-                                                <Text style={{ color: colors.text }}>{w.name}</Text>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                )}
-
-                                <View style={styles.qtyRateRow}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.subLabel}>Quantity</Text>
-                                        <TextInput 
-                                            style={[styles.miniInput, { color: colors.text }]} 
-                                            keyboardType="numeric"
-                                            value={item.qty.toString()}
-                                            onChangeText={(v) => updateItem(idx, 'qty', parseFloat(v) || 0)}
-                                        />
-                                    </View>
-                                    <View style={{ flex: 1, marginHorizontal: 12 }}>
-                                        <Text style={styles.subLabel}>Rate</Text>
-                                        <TextInput 
-                                            style={[styles.miniInput, { color: colors.text }]} 
-                                            keyboardType="numeric"
-                                            value={item.rate.toString()}
-                                            onChangeText={(v) => updateItem(idx, 'rate', parseFloat(v) || 0)}
-                                        />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.subLabel}>Amount</Text>
-                                        <Text style={[styles.amountText, { color: colors.text }]}>₹{item.amount.toLocaleString()}</Text>
-                                    </View>
-                                </View>
                             </View>
                         ))}
-                    </Animated.View>
-
-                    {/* Footer Summary */}
-                    <View style={styles.footer}>
-                        <View style={styles.totalRow}>
-                            <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Grand Total</Text>
-                            <Text style={[styles.totalValue, { color: colors.primary }]}>₹{calculateTotal().toLocaleString()}</Text>
+                        <View style={styles.row}>
+                            <TouchableOpacity style={[styles.addBox, { borderColor: colors.primary }]} onPress={pickImages}>
+                                <Ionicons name="image-outline" size={18} color={colors.primary} />
+                                <Text style={[styles.addText, { color: colors.primary }]}>Add image</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.addBox, { borderColor: colors.primary }]} onPress={pickPdfs}>
+                                <Ionicons name="document-outline" size={18} color={colors.primary} />
+                                <Text style={[styles.addText, { color: colors.primary }]}>Add PDF</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
+
+                    {/* 3. Date */}
+                    <View style={card}>
+                        <Text style={label}>3. Date</Text>
+                        <Pressable style={[styles.dateBox, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={() => setShowDate(true)}>
+                            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                            <Text style={[styles.dateText, { color: colors.text }]}>{dmy(orderDate)}</Text>
+                        </Pressable>
+                        {showDate && (
+                            <DateTimePicker
+                                value={new Date(`${orderDate}T00:00:00`)}
+                                mode="date"
+                                display="default"
+                                onChange={(_e, selected) => {
+                                    setShowDate(false);
+                                    if (selected) setOrderDate(todayIsoFrom(selected));
+                                }}
+                            />
+                        )}
+                    </View>
+
+                    {/* 4. Items */}
+                    <View style={card}>
+                        <Text style={label}>4. Items</Text>
+                        <Text style={[styles.sub, { color: colors.textSecondary }]}>Brand (for all items)</Text>
+                        <TouchableOpacity
+                            style={[styles.selected, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                            onPress={() => setBrandOpen(v => !v)}
+                        >
+                            <Text style={[styles.selectedText, { color: brand ? colors.text : colors.textSecondary }]}>{brand || 'Select brand'}</Text>
+                            <Ionicons name={brandOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                        {brandOpen && (
+                            <ScrollView style={[styles.dropdown, { borderColor: colors.border, backgroundColor: colors.surface }]} nestedScrollEnabled>
+                                {brands.map(b => (
+                                    <TouchableOpacity
+                                        key={b}
+                                        style={[styles.resultRow, { borderBottomColor: colors.border, paddingHorizontal: 12 }]}
+                                        onPress={() => {
+                                            if (b !== brand) setLines(ls => ls.map(x => ({ ...x, item: null, query: '', results: [] })));
+                                            setBrand(b);
+                                            setBrandOpen(false);
+                                        }}
+                                    >
+                                        <Text style={[styles.resultText, { color: colors.text }]}>{b}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        )}
+                        {lines.map((l, idx) => (
+                            <View key={l.key} style={[styles.lineBox, { borderColor: colors.border }]}>
+                                <View style={styles.lineHead}>
+                                    <Text style={[styles.lineTitle, { color: colors.text }]}>Item {idx + 1}</Text>
+                                    {lines.length > 1 && (
+                                        <TouchableOpacity onPress={() => removeLine(l.key)} hitSlop={8}>
+                                            <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 12 }}>Remove</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+
+                                {brand ? (
+                                    <>
+                                        <Text style={[styles.sub, { color: colors.textSecondary }]}>Item name</Text>
+                                        {l.item ? (
+                                            <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => patchLine(l.key, { item: null, query: '', results: [] })}>
+                                                <Text style={[styles.selectedText, { color: colors.primary }]}>{l.item.item_name}</Text>
+                                                <Ionicons name="close-circle" size={18} color={colors.primary} />
+                                            </TouchableOpacity>
+                                        ) : (
+                                            <>
+                                                <TextInput style={field} placeholder="Search item name (2+ letters)" placeholderTextColor={colors.textSecondary} value={l.query} onChangeText={query => patchLine(l.key, { query, results: [] })} />
+                                                {l.results.map(it => (
+                                                    <TouchableOpacity key={it.item_code} style={[styles.resultRow, { borderBottomColor: colors.border }]} onPress={() => patchLine(l.key, { item: it, results: [], query: '' })}>
+                                                        <Text style={[styles.resultText, { color: colors.text }]}>{it.item_name}</Text>
+                                                        <Text style={[styles.hint, { color: colors.textSecondary }]}>{it.item_code}</Text>
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </>
+                                        )}
+                                    </>
+                                ) : null}
+
+                                <Text style={[styles.sub, { color: colors.textSecondary }]}>Quantity</Text>
+                                <TextInput style={field} value={l.qty} onChangeText={qty => patchLine(l.key, { qty })} keyboardType="decimal-pad" placeholder="Enter quantity" placeholderTextColor={colors.textSecondary} />
+                            </View>
+                        ))}
+                        <TouchableOpacity style={[styles.addItemBtn, { borderColor: colors.primary }]} onPress={addLine}>
+                            <Ionicons name="add" size={18} color={colors.primary} />
+                            <Text style={[styles.addText, { color: colors.primary }]}>Add item</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity style={[styles.saveWide, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
+                        {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveWideText}>{edit_id ? 'Update order' : 'Save order in ERP'}</Text>}
+                    </TouchableOpacity>
                 </ScrollView>
             )}
         </KeyboardAvoidingView>
     );
 }
 
-/** Theme-aware styles — the dividers, muted labels and result panels were
- *  previously hardcoded to light-mode slate colours. */
-const getStyles = (theme: 'light' | 'dark') => {
-    const c = Colors[theme];
+/** yyyy-mm-dd plus a number of days. */
+function addDaysIso(iso: string, days: number) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + days);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
 
-    return StyleSheet.create({
-        container: { flex: 1 },
-        center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-        saveBtn: { minWidth: 44, height: 40, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-        saveText: { fontWeight: '900', fontSize: 14, color: '#FFF' },
-        scrollContent: { padding: 20 },
-        card: { padding: 20, borderRadius: Radius.lg, marginBottom: 20, borderWidth: 1, borderColor: c.border, ...Shadow.card(theme) },
-        label: { fontSize: 12, fontWeight: '800', color: c.textSecondary, marginBottom: 8, textTransform: 'uppercase' },
-        searchBox: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: c.border, paddingBottom: 8 },
-        input: { flex: 1, fontSize: 16, fontWeight: '700', color: c.text },
-        resultsContainer: { marginTop: 12, backgroundColor: c.surfaceSecondary, borderRadius: Radius.md, padding: 8 },
-        resultItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border },
-        itemsSection: { marginBottom: 20 },
-        sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-        sectionTitle: { fontSize: 20, fontWeight: '900' },
-        addBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.md },
-        addBtnText: { fontWeight: '800', marginLeft: 4, fontSize: 14 },
-        itemCard: { padding: 16, borderRadius: Radius.lg, marginBottom: 16, borderWidth: 1, borderColor: c.border, ...Shadow.card(theme) },
-        itemRowHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-        itemIdx: { fontSize: 12, fontWeight: '900' },
-        itemInput: { fontSize: 15, fontWeight: '800', borderBottomWidth: 1, borderBottomColor: c.border, marginBottom: 12, color: c.text },
-        itemResults: { backgroundColor: c.surfaceSecondary, borderRadius: Radius.md, marginBottom: 12 },
-        qtyRateRow: { flexDirection: 'row', alignItems: 'flex-end' },
-        subLabel: { fontSize: 10, fontWeight: '700', color: c.textSecondary, marginBottom: 4 },
-        miniInput: { borderBottomWidth: 1, borderBottomColor: c.border, fontSize: 15, fontWeight: '800', paddingBottom: 4, color: c.text },
-        amountText: { fontSize: 15, fontWeight: '900', paddingBottom: 4 },
-        footer: { marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: c.border },
-        totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-        totalLabel: { fontSize: 16, fontWeight: '800' },
-        totalValue: { fontSize: 26, fontWeight: '900' },
-        imagePreviewContainer: { marginTop: 10, borderRadius: Radius.md, overflow: 'hidden', height: 180, backgroundColor: c.surfaceSecondary },
-        imagePreview: { width: '100%', height: '100%', resizeMode: 'cover' },
-        uploadBox: { height: 120, borderStyle: 'dashed', borderWidth: 2, borderColor: c.border, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surfaceSecondary, marginTop: 8 },
-        uploadText: { marginTop: 8, fontSize: 13, fontWeight: '800' }
-    });
-};
+function todayIsoFrom(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
+/** The message ERP sends back with a failed save. */
+function serverText(data: any): string {
+    try {
+        if (data?._server_messages) {
+            const list: string[] = JSON.parse(data._server_messages);
+            return list.map(m => { try { return JSON.parse(m).message; } catch { return m; } }).join(' ').replace(/<[^>]+>/g, '').slice(0, 300);
+        }
+        if (data?.exception) return String(data.exception).split('\n').pop()!.slice(0, 300);
+    } catch { /* fall through */ }
+    return '';
+}
+
+const styles = StyleSheet.create({
+    container: { flex: 1 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    pad: { padding: 16, gap: 12 },
+    saveBtn: { minWidth: 44, height: 40, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+    saveText: { fontWeight: '900', fontSize: 14, color: '#FFF' },
+    card: { padding: 14, borderRadius: Radius.lg, borderWidth: 1, gap: 8 },
+    label: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
+    sub: { fontSize: 12, fontWeight: '700', marginTop: 6 },
+    hint: { fontSize: 12, fontWeight: '600' },
+    input: { borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, borderWidth: 1 },
+    selected: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
+    selectedText: { fontSize: 14, fontWeight: '700', flex: 1 },
+    resultRow: { paddingVertical: 10, borderBottomWidth: 1, gap: 2 },
+    resultText: { fontSize: 14, fontWeight: '600' },
+    row: { flexDirection: 'row', gap: 10 },
+    addBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12 },
+    addText: { fontSize: 14, fontWeight: '800' },
+    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 8 },
+    fileName: { flex: 1, fontSize: 13, fontWeight: '600' },
+    dateBox: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
+    dateText: { fontSize: 15, fontWeight: '700' },
+    lineBox: { borderWidth: 1, borderRadius: Radius.md, padding: 10, gap: 6, marginTop: 6 },
+    lineHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    lineTitle: { fontSize: 14, fontWeight: '800' },
+    dropdown: { maxHeight: 220, borderWidth: 1, borderRadius: Radius.md },
+    addItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12, marginTop: 6 },
+    saveWide: { borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
+    saveWideText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
+});
