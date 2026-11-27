@@ -94,6 +94,31 @@ export async function searchCustomers(query: string): Promise<SearchResult<Custo
     }
 }
 
+export interface Supplier { name: string; supplier_name?: string }
+
+/** Search suppliers (principals) by name or ID. */
+export async function searchSuppliers(query: string): Promise<SearchResult<Supplier>> {
+    const trimmed = query.trim();
+    if (!trimmed) return { ok: true, data: [] };
+    try {
+        const fields = ['name', 'supplier_name'];
+        const filters = JSON.stringify([['disabled', '=', 0]]);
+        const orFilters = JSON.stringify([
+            ['supplier_name', 'like', `%${escapeLike(trimmed)}%`],
+            ['name', 'like', `%${escapeLike(trimmed)}%`],
+        ]);
+        const res = await apiGet(apiUrl(
+            `/api/resource/Supplier?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+            `&filters=${encodeURIComponent(filters)}` +
+            `&or_filters=${encodeURIComponent(orFilters)}&limit_page_length=20`
+        ), await session());
+        if (!res.ok) return failure(`Server error (${res.status}). Please try again.`);
+        return { ok: true, data: res.data?.data || res.data?.message || [] };
+    } catch {
+        return failure('Network error. Please check your connection.');
+    }
+}
+
 /**
  * Fetch full Customer/Item records for a known list of names/codes — used to
  * populate the "browse" list shown when a filter field is tapped with no

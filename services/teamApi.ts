@@ -45,7 +45,51 @@ export interface Attachment {
      * Absent from an older SmartOps, which is treated as "not failed". */
     read_failed?: boolean;
     file_url: string;
+    /** How the person who posted it filed it ("customer_po", ...). Absent while not filed, and
+     * from an older SmartOps. */
+    doc_type?: string | null;
+    doc_type_label?: string | null;
+    doc_details?: Record<string, string> | null;
 }
+
+// ─────────────────────────── files filed by type ───────────────────────────
+
+export type DocFieldType = 'text' | 'longtext' | 'amount' | 'date' | 'customer' | 'supplier';
+
+/** One field a document type asks for. A customer / supplier field also carries the ERPNext
+ * id it was picked as, under "<key>_id". */
+export interface DocField { key: string; label: string; type: DocFieldType; required: boolean }
+
+/** What a file can be filed as. The list comes from SmartOps, so a new type needs no app build. */
+export interface DocType { key: string; label: string; icon: string; fields: DocField[] }
+
+/** What the person said the file is. */
+export interface Filing { doc_type: string; details: Record<string, string> }
+
+/** A file in the Documents list: filed or not. */
+export interface TeamFile {
+    job_id: string;
+    reply_id?: string | null;
+    document_id: string;
+    filename?: string | null;
+    mime?: string | null;
+    file_url: string;
+    posted_by?: Person | null;
+    posted_at: string;
+    message: string;
+    doc_type?: string | null;
+    doc_type_label?: string | null;
+    doc_details?: Record<string, string> | null;
+    party?: string | null;
+    ref?: string | null;
+    doc_date?: string | null;
+    amount?: number | null;
+    filed_by?: string | null;
+    read_party?: string | null;
+    read_ref?: string | null;
+}
+
+export interface TeamFiles { files: TeamFile[]; counts: Record<string, number>; next_before?: string | null }
 
 /** A voice note: the recording (play it via `team.voiceSource`), what it says in English
  * (also the post's text), and the words as spoken. `text` is null when it could not be
@@ -227,9 +271,13 @@ async function call<T>(send: (headers: Record<string, string>) => Promise<{ ok: 
 const get = <T>(path: string) => call<T>(h => apiGet(smartopsUrl(path), null, h));
 const post = <T>(path: string, body: unknown = {}) => call<T>(h => apiPost(smartopsUrl(path), body, null, h));
 
-function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null): FormData {
+function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null): FormData {
     const f = new FormData();
     f.append('body', body);
+    if (file?.uri && filing) {
+        f.append('doc_type', filing.doc_type);
+        f.append('doc_details', JSON.stringify(filing.details));
+    }
     if (voice?.uri) {
         f.append('voice', { uri: voice.uri, name: 'voice.m4a', type: 'audio/m4a' } as any);
     }
@@ -242,15 +290,37 @@ function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null
 
 // ─────────────────────────── the Team calls ───────────────────────────
 
+let docTypes: DocType[] | null = null;
+
 export const team = {
     people: () => get<People>('/bff/v1/team/people'),
     jobs: (view: JobView, before?: string | null) =>
         get<Jobs>(`/bff/v1/team/jobs?view=${view}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
     job: (id: string) => get<JobDetail>(`/bff/v1/team/jobs/${id}`),
-    post: (body: string, file?: PickedFile | null, voice?: PickedVoice | null) =>
-        call<JobDetail>(h => apiPostForm(smartopsUrl('/bff/v1/team/jobs'), form(body, file, voice), h)),
-    reply: (id: string, body: string, file?: PickedFile | null, voice?: PickedVoice | null) =>
-        call<JobDetail>(h => apiPostForm(smartopsUrl(`/bff/v1/team/jobs/${id}/replies`), form(body, file, voice), h)),
+    post: (body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) =>
+        call<JobDetail>(h => apiPostForm(smartopsUrl('/bff/v1/team/jobs'), form(body, file, voice, filing), h)),
+    reply: (id: string, body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) =>
+        call<JobDetail>(h => apiPostForm(smartopsUrl(`/bff/v1/team/jobs/${id}/replies`), form(body, file, voice, filing), h)),
+    /** What a file can be filed as. Kept after the first answer; an older SmartOps answers 404,
+     * and then files are simply posted without a type. */
+    documentTypes: async (): Promise<DocType[]> => {
+        if (docTypes) return docTypes;
+        const r = await get<{ types: DocType[] }>('/bff/v1/team/document-types');
+        if (r.ok) docTypes = r.data.types;
+        return r.ok ? r.data.types : [];
+    },
+    /** Every file in the chat, newest first: by type ("unfiled" for the ones nobody filed) and any word. */
+    files: (p: { type?: string | null; q?: string; before?: string | null } = {}) => {
+        const qs = [
+            p.type ? `type=${encodeURIComponent(p.type)}` : '',
+            p.q?.trim() ? `q=${encodeURIComponent(p.q.trim())}` : '',
+            p.before ? `before=${encodeURIComponent(p.before)}` : '',
+        ].filter(Boolean).join('&');
+        return get<TeamFiles>(`/bff/v1/team/files${qs ? `?${qs}` : ''}`);
+    },
+    /** File (or re-file) a file already in the chat. */
+    fileAttachment: (jobId: string, replyId: string | null | undefined, filing: Filing) =>
+        post<JobDetail>('/bff/v1/team/files', { job_id: jobId, reply_id: replyId ?? null, ...filing }),
     done: (id: string) => post<JobDetail>(`/bff/v1/team/jobs/${id}/done`),
     /** Read a photo/PDF on this job again, after a read that failed. */
     reread: (id: string, documentId: string) =>

@@ -30,7 +30,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
-    age, Job, JobDetail, JobKind, KIND_COLORS, Payments, People, PickedFile, PickedVoice, Reply, team,
+    age, Filing, Job, JobDetail, JobKind, KIND_COLORS, Payments, People, PickedFile, PickedVoice, Reply, team,
 } from '@/services/teamApi';
 
 const POLL_MS = 10000;
@@ -117,8 +117,8 @@ export default function JobScreen() {
     const open = job.status === 'open';
     const mayAct = me === job.author.id || me === job.assignee?.id;
 
-    const reply = async (text: string, file: PickedFile | null, voice?: PickedVoice | null) => {
-        const ok = await act(() => team.reply(job.id, text, file, voice));
+    const reply = async (text: string, file: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) => {
+        const ok = await act(() => team.reply(job.id, text, file, voice, filing));
         if (ok) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
         return ok;
     };

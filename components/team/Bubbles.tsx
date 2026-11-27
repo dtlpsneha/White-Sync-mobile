@@ -143,6 +143,7 @@ export function JobBubble({ job, mine, showAuthor, meId, theme, colors, onPress,
             {!!job.attachment && (
                 <View style={{ gap: 4 }}>
                     <TeamImage a={job.attachment} colors={colors} width={width} />
+                    <FiledAs a={job.attachment} colors={colors} />
                     {!!readLine(job.attachment) && (
                         <Text style={[styles.read, { color: job.attachment.read_failed ? colors.warning : colors.textSecondary }]}>
                             {readLine(job.attachment)}{job.attachment.read_failed ? ' — open the job to try again' : ''}
@@ -195,6 +196,7 @@ export function ReplyBubble({ reply, mine, showAuthor, theme, colors, onRetryRea
         <Shell mine={mine} showAuthor={showAuthor} authorName={reply.author.name} theme={theme} colors={colors}
             onLongPress={onLongPress}>
             {!!reply.attachment && <TeamImage a={reply.attachment} colors={colors} width={width} />}
+            {!!reply.attachment && <FiledAs a={reply.attachment} colors={colors} />}
             {!!reply.attachment && <ReadState a={reply.attachment} colors={colors} onRetry={onRetryRead} retrying={retrying} />}
             {!!reply.voice && <VoiceNote voice={reply.voice} colors={colors} tint={colors.primary} />}
             {!!reply.body && <Text style={[styles.body, { color: colors.text }]}>{reply.body}</Text>}
@@ -205,6 +207,26 @@ export function ReplyBubble({ reply, mine, showAuthor, theme, colors, onRetryRea
                 <Meta time={reply.created_at} colors={colors} />
             </View>
         </Shell>
+    );
+}
+
+/** What the person who posted the file said it is: "Customer PO · Demo Mills · PO-77". */
+export function filedLine(a: Attachment): string | null {
+    if (!a.doc_type) return null;
+    const d = a.doc_details || {};
+    const party = d.customer || d.supplier;
+    const ref = d.po_no || d.invoice_no || d.quotation_no || d.utr || d.lr_no || d.dc_no;
+    return [a.doc_type_label || a.doc_type, party, ref, d.description].filter(Boolean).join(' · ');
+}
+
+function FiledAs({ a, colors }: { a: Attachment; colors: ThemeColors }) {
+    const line = filedLine(a);
+    if (!line) return null;
+    return (
+        <View style={[styles.filed, { backgroundColor: `${colors.primary}14` }]}>
+            <Ionicons name="pricetag" size={12} color={colors.primary} />
+            <Text style={[styles.filedText, { color: colors.primary }]} numberOfLines={2}>{line}</Text>
+        </View>
     );
 }
 
@@ -262,6 +284,8 @@ const styles = StyleSheet.create({
     deleted: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2, paddingVertical: 2 },
     deletedText: { fontSize: 14.5, fontStyle: 'italic' },
     read: { fontSize: 11.5, fontWeight: '600', paddingHorizontal: 2 },
+    filed: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: '100%' },
+    filedText: { fontSize: 12, fontWeight: '800', flexShrink: 1 },
     facts: { fontSize: 12, fontWeight: '600', paddingHorizontal: 2 },
     tagRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
     tag: {
