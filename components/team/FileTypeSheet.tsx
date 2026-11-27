@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { searchCustomers, searchSuppliers } from '@/services/frappeSearch';
+import { SalesInvoiceHit, searchCustomers, searchSalesInvoices, searchSuppliers } from '@/services/frappeSearch';
 import { DocField, DocType, Filing, PickedFile } from '@/services/teamApi';
 import { choosePhoto, chooseFile, takePhoto } from './Attach';
 import { isImageAttachment } from './chatUi';
@@ -170,6 +170,14 @@ function FieldInput({ field, values, set, colors }: {
             </View>
         );
     }
+    if (field.type === 'invoices') {
+        return (
+            <View style={styles.field}>
+                {title}
+                <InvoicePicker value={value} onChange={v => set(field.key, v)} colors={colors} input={input} />
+            </View>
+        );
+    }
     if (field.type === 'date') {
         return (
             <View style={styles.field}>
@@ -253,6 +261,76 @@ function PartyPicker({ kind, value, onPick, colors, input }: {
                         Use “{typed}”{found.length ? '' : ' — not found in ERPNext'}
                     </Text>
                 </TouchableOpacity>
+            )}
+        </View>
+    );
+}
+
+/** The Sales Invoices an LR carried goods for: several can be picked, from ERPNext. Kept as
+ * "INV-1, INV-2" -- SmartOps checks each is a submitted invoice and takes the customer from it. */
+function InvoicePicker({ value, onChange, colors, input }: {
+    value: string; onChange: (v: string) => void; colors: typeof Colors.light; input: any[];
+}) {
+    const picked = value.split(',').map(s => s.trim()).filter(Boolean);
+    const [query, setQuery] = useState('');
+    const [found, setFound] = useState<SalesInvoiceHit[]>([]);
+    const [shown, setShown] = useState<Record<string, SalesInvoiceHit>>({});
+    const [searching, setSearching] = useState(false);
+
+    useEffect(() => {
+        const q = query.trim();
+        if (q.length < 2) return;
+        const h = setTimeout(async () => {
+            setSearching(true);
+            const r = await searchSalesInvoices(q);
+            setSearching(false);
+            setFound(r.ok ? r.data : []);
+        }, 300);
+        return () => clearTimeout(h);
+    }, [query]);
+
+    const add = (hit: SalesInvoiceHit) => {
+        if (!picked.includes(hit.name)) onChange([...picked, hit.name].join(', '));
+        setShown(s => ({ ...s, [hit.name]: hit }));
+        setQuery('');
+        setFound([]);
+    };
+    const remove = (name: string) => onChange(picked.filter(p => p !== name).join(', '));
+
+    return (
+        <View style={{ gap: 8 }}>
+            {picked.map(name => {
+                const hit = shown[name];
+                return (
+                    <View key={name} style={[styles.picked, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.pickedText, { color: colors.primary }]} numberOfLines={1}>
+                                {hit?.voucher_number ? `${hit.voucher_number} · ${name}` : name}
+                            </Text>
+                            {!!hit?.customer && <Text style={[styles.hint, { color: colors.textSecondary }]} numberOfLines={1}>{hit.customer}</Text>}
+                        </View>
+                        <TouchableOpacity onPress={() => remove(name)} hitSlop={8}>
+                            <Ionicons name="close-circle" size={18} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+                );
+            })}
+            <View style={styles.row}>
+                <TextInput style={[...input, { flex: 1 }]} value={query} onChangeText={setQuery}
+                    placeholder={picked.length ? 'Add another invoice' : 'Invoice no., Tally no. or customer'}
+                    placeholderTextColor={colors.placeholder} autoCapitalize="characters" />
+                {searching && <ActivityIndicator color={colors.primary} style={{ marginLeft: 8 }} />}
+            </View>
+            {query.trim().length >= 2 && found.filter(f => !picked.includes(f.name)).map(f => (
+                <TouchableOpacity key={f.name} onPress={() => add(f)} style={[styles.result, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.resultText, { color: colors.text }]}>
+                        {f.voucher_number ? `${f.voucher_number} · ` : ''}{f.name}
+                    </Text>
+                    <Text style={[styles.hint, { color: colors.textSecondary }]} numberOfLines={1}>{f.customer}</Text>
+                </TouchableOpacity>
+            ))}
+            {query.trim().length >= 2 && !searching && found.length === 0 && (
+                <Text style={[styles.hint, { color: colors.textSecondary }]}>No submitted invoice matches “{query.trim()}”.</Text>
             )}
         </View>
     );

@@ -54,7 +54,7 @@ export interface Attachment {
 
 // ─────────────────────────── files filed by type ───────────────────────────
 
-export type DocFieldType = 'text' | 'longtext' | 'amount' | 'date' | 'customer' | 'supplier';
+export type DocFieldType = 'text' | 'longtext' | 'amount' | 'date' | 'customer' | 'supplier' | 'invoices';
 
 /** One field a document type asks for. A customer / supplier field also carries the ERPNext
  * id it was picked as, under "<key>_id". */
@@ -386,7 +386,7 @@ const PREVIEW_TYPES: DocType[] = [
         { key: 'utr', label: 'UTR / Cheque no', type: 'text', required: false },
         { key: 'payment_date', label: 'Payment date', type: 'date', required: false }] },
     { key: 'dispatch_lr', label: 'Dispatch / LR', icon: 'car-outline', fields: [
-        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'invoices', label: 'Sales Invoices', type: 'invoices', required: true },
         { key: 'transporter', label: 'Transporter', type: 'text', required: false },
         { key: 'lr_no', label: 'LR no', type: 'text', required: false },
         { key: 'lr_date', label: 'LR date', type: 'date', required: false }] },

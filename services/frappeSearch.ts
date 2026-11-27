@@ -96,6 +96,26 @@ export async function searchCustomers(query: string): Promise<SearchResult<Custo
 
 export interface Supplier { name: string; supplier_name?: string }
 
+/** A submitted Sales Invoice, as ERPNext's own "Dispatch Sales Invoice Search" finds it. */
+export interface SalesInvoiceHit { name: string; voucher_number: string; customer: string }
+
+/** Submitted, non-return Sales Invoices by invoice no., Tally voucher no. or customer,
+ * newest first -- ERPNext's server script `dispatch_sales_invoice_search`. */
+export async function searchSalesInvoices(query: string): Promise<SearchResult<SalesInvoiceHit>> {
+    const trimmed = query.trim();
+    if (!trimmed) return { ok: true, data: [] };
+    try {
+        const res = await apiGet(apiUrl(
+            `/api/method/dispatch_sales_invoice_search?txt=${encodeURIComponent(trimmed)}&page_len=12`
+        ), await session());
+        if (!res.ok) return failure(`Server error (${res.status}). Please try again.`);
+        const rows: any[] = res.data?.message || [];
+        return { ok: true, data: rows.map(r => ({ name: String(r[0]), voucher_number: String(r[1] || ''), customer: String(r[2] || '') })) };
+    } catch {
+        return failure('Network error. Please check your connection.');
+    }
+}
+
 /** Search suppliers (principals) by name or ID. */
 export async function searchSuppliers(query: string): Promise<SearchResult<Supplier>> {
     const trimmed = query.trim();
