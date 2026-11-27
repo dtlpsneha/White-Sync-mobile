@@ -1,21 +1,27 @@
 /**
- * "What is this file?" -- asked when a file is attached in Team Chat. Pick the document type,
- * then fill the few fields that type asks for (customer, number, date, amount...). The types
- * and their fields come from SmartOps (`team.documentTypes`), so this draws whatever it is given.
+ * The attach sheet of Team Chat. Top: pick the document type, then fill the few fields that
+ * type asks for (customer, number, date, amount...). Below: add the file itself -- Camera,
+ * Gallery or PDF / file. The types and their fields come from SmartOps, so this draws
+ * whatever it is given.
+ *
+ * With `withFile` it is the attach sheet (the file is chosen here); without, it files a file
+ * already in the chat (the Documents list).
  *
  * Mount it only while it is open (`{open && <FileTypeSheet ... />}`): it starts from
  * `initial` each time, with nothing left over from the last file.
  */
 
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { searchCustomers, searchSuppliers } from '@/services/frappeSearch';
-import { DocField, DocType, Filing } from '@/services/teamApi';
+import { DocField, DocType, Filing, PickedFile } from '@/services/teamApi';
+import { choosePhoto, chooseFile, takePhoto } from './Attach';
+import { isImageAttachment } from './chatUi';
 import { Sheet } from './Sheet';
 
 type Values = Record<string, string>;
@@ -25,13 +31,19 @@ const isoOf = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('-') : iso);
 
-export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClose }: {
+export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClose, withFile, file, onFile, preview }: {
     types: DocType[];
     initial?: Filing | null;
     fileName?: string | null;
     saving?: boolean;
     onSave: (filing: Filing) => void;
     onClose: () => void;
+    /** Ask for the file here too (the attach sheet). */
+    withFile?: boolean;
+    file?: PickedFile | null;
+    onFile?: (f: PickedFile | null) => void;
+    /** SmartOps is too old to keep these details: say so, so nobody fills them in for nothing. */
+    preview?: boolean;
 }) {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
@@ -43,8 +55,7 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
 
     const save = () => {
         if (!type) return;
-        const missing = type.fields.find(f => f.required && !(values[f.key] || '').trim());
-        if (missing) return; // the button says what is missing
+        if (missing || (withFile && !file)) return; // the button says what is missing
         const details: Values = {};
         for (const f of type.fields) {
             const v = (values[f.key] || '').trim();
@@ -56,8 +67,26 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
 
     const missing = type?.fields.find(f => f.required && !(values[f.key] || '').trim());
 
+    const pick = (fn: () => Promise<PickedFile | null>) => async () => {
+        try {
+            const f = await fn();
+            if (f) onFile?.(f);
+        } catch (e: any) {
+            Alert.alert('Attach', `Could not attach: ${e?.message || e}`);
+        }
+    };
+
     return (
-        <Sheet visible title="What is this file?" subtitle={fileName || undefined} onClose={onClose}>
+        <Sheet visible title={withFile ? 'Attach a document' : 'What is this file?'}
+            subtitle={withFile ? 'Say what it is, then add the file' : fileName || undefined} onClose={onClose}>
+            {preview && (
+                <View style={[styles.note, { borderColor: colors.warning, backgroundColor: `${colors.warning}14` }]}>
+                    <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
+                    <Text style={[styles.noteText, { color: colors.text }]}>
+                        Preview: SmartOps has not been updated to keep these details yet, so the file is posted without them.
+                    </Text>
+                </View>
+            )}
             <Text style={[styles.label, { color: colors.textSecondary }]}>Document type</Text>
             <View style={styles.types}>
                 {types.map(t => {
@@ -79,11 +108,43 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
                 <FieldInput key={`${type.key}-${f.key}`} field={f} values={values} set={set} colors={colors} />
             ))}
 
-            <TouchableOpacity disabled={!type || !!missing || saving} onPress={save}
-                style={[styles.save, { backgroundColor: colors.primary, opacity: !type || missing ? 0.5 : 1 }]}>
+            {withFile && (
+                <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.textSecondary }]}>File *</Text>
+                    {file ? (
+                        <View style={[styles.fileRow, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}>
+                            {isImageAttachment(file.mimeType, file.name)
+                                ? <Image source={{ uri: file.uri }} style={styles.thumb} />
+                                : <View style={[styles.thumb, styles.pdf]}><Ionicons name="document-text" size={22} color="#FFF" /></View>}
+                            <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>{file.name || 'Photo'}</Text>
+                            <TouchableOpacity onPress={() => onFile?.(null)} hitSlop={10}>
+                                <Ionicons name="close-circle" size={22} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={styles.sources}>
+                            {([['camera', 'Camera', takePhoto], ['image', 'Gallery', choosePhoto], ['document-text', 'PDF / file', chooseFile]] as const).map(([icon, text, fn]) => (
+                                <TouchableOpacity key={text} onPress={pick(fn)} activeOpacity={0.8}
+                                    style={[styles.source, { borderColor: colors.primary }]}>
+                                    <Ionicons name={icon as any} size={22} color={colors.primary} />
+                                    <Text style={[styles.sourceText, { color: colors.primary }]}>{text}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                </View>
+            )}
+
+            <TouchableOpacity disabled={!type || !!missing || (!!withFile && !file) || saving} onPress={save}
+                style={[styles.save, { backgroundColor: colors.primary, opacity: !type || missing || (withFile && !file) ? 0.5 : 1 }]}>
                 {saving
                     ? <ActivityIndicator color="#FFF" />
-                    : <Text style={styles.saveText}>{!type ? 'Pick a document type' : missing ? `Enter ${missing.label}` : 'Save'}</Text>}
+                    : <Text style={styles.saveText}>
+                        {!type ? 'Pick a document type'
+                            : missing ? `Enter ${missing.label}`
+                            : withFile && !file ? 'Add the file (camera, gallery or PDF)'
+                            : withFile ? 'Attach' : 'Save'}
+                    </Text>}
             </TouchableOpacity>
         </Sheet>
     );
@@ -246,6 +307,15 @@ const styles = StyleSheet.create({
     result: { paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: StyleSheet.hairlineWidth },
     resultText: { fontSize: 14, fontWeight: '600' },
     hint: { fontSize: 12, fontWeight: '600' },
+    note: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.md, padding: 10 },
+    noteText: { flex: 1, fontSize: 12.5, fontWeight: '600' },
+    sources: { flexDirection: 'row', gap: 10 },
+    source: { flex: 1, alignItems: 'center', gap: 4, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 14 },
+    sourceText: { fontSize: 13, fontWeight: '800' },
+    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, padding: 8 },
+    thumb: { width: 40, height: 40, borderRadius: 8 },
+    pdf: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
+    fileName: { flex: 1, fontSize: 14, fontWeight: '700' },
     save: { borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center', marginTop: 6 },
     saveText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
 });

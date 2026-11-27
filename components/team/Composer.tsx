@@ -25,8 +25,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { DocType, Filing, PickedFile, PickedVoice, team } from '@/services/teamApi';
-import { pickAttachment, takePhoto } from './Attach';
+import { DocType, documentTypeChoices, Filing, PickedFile, PickedVoice, team } from '@/services/teamApi';
+import { takePhoto } from './Attach';
 import { FileTypeSheet } from './FileTypeSheet';
 import { isImageAttachment } from './chatUi';
 
@@ -51,16 +51,19 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
     const [file, setFile] = useState<PickedFile | null>(null);
     const [filing, setFiling] = useState<Filing | null>(null);
     const [types, setTypes] = useState<DocType[]>([]);
+    const [supported, setSupported] = useState(true);
     const [asking, setAsking] = useState(false);
     const [sending, setSending] = useState(false);
 
-    /** A file was picked: keep it, and ask what it is. */
-    const attach = async (f: PickedFile) => {
-        setFile(f);
-        setFiling(null);
-        const known = types.length ? types : await team.documentTypes();
-        setTypes(known);
-        if (known.length) setAsking(true);
+    /** The attach sheet: what it is first, then the file (camera, gallery or PDF). */
+    const openAttach = async (picked?: PickedFile) => {
+        if (picked) setFile(picked);
+        if (!types.length) {
+            const got = await documentTypeChoices();
+            setTypes(got.types);
+            setSupported(got.supported);
+        }
+        setAsking(true);
     };
     const dropFile = () => { setFile(null); setFiling(null); };
     const typeLabel = filing ? types.find(t => t.key === filing.doc_type)?.label ?? filing.doc_type : null;
@@ -110,10 +113,9 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
         const body = chipText ?? text.trim();
         const withFile = chipText ? null : file;
         if (sending || (!body && !withFile)) return;
-        // A file goes with its type; SmartOps too old to know types has none to ask for.
-        if (withFile && !filing && types.length) { setAsking(true); return; }
         setSending(true);
-        const ok = await onSend(body, withFile, null, withFile ? filing : null);
+        // A file goes with its type -- unless SmartOps is too old to keep it.
+        const ok = await onSend(body, withFile, null, withFile && supported ? filing : null);
         setSending(false);
         if (ok && !chipText) { setText(''); dropFile(); }
     };
@@ -121,7 +123,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
     const camera = async () => {
         try {
             const f = await takePhoto();
-            if (f) await attach(f);
+            if (f) await openAttach(f);
         } catch {
             // the picker explains itself
         }
@@ -159,7 +161,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
                     <View style={{ flex: 1, gap: 4 }}>
                         <Text style={[styles.previewName, { color: colors.text }]} numberOfLines={1}>{file.name || 'Photo'}</Text>
                         {types.length > 0 && (
-                            <TouchableOpacity onPress={() => setAsking(true)} hitSlop={6}
+                            <TouchableOpacity onPress={() => { openAttach(); }} hitSlop={6}
                                 style={[styles.typeChip, { borderColor: filing ? colors.primary : colors.warning }]}>
                                 <Ionicons name={filing ? 'pricetag' : 'help-circle-outline'} size={12}
                                     color={filing ? colors.primary : colors.warning} />
@@ -194,7 +196,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
             ) : (
             <View style={styles.row}>
                 <View style={[styles.box, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <TouchableOpacity onPress={() => pickAttachment(f => { attach(f); })} hitSlop={8} style={styles.boxIcon}>
+                    <TouchableOpacity onPress={() => { openAttach(); }} hitSlop={8} style={styles.boxIcon}>
                         <Ionicons name="attach" size={24} color={colors.textSecondary} style={{ transform: [{ rotate: '45deg' }] }} />
                     </TouchableOpacity>
                     <TextInput
@@ -240,9 +242,10 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
                 )}
             </View>
             )}
-            {asking && file && (
-                <FileTypeSheet types={types} initial={filing} fileName={file.name || 'Photo'}
-                    onClose={() => setAsking(false)}
+            {asking && (
+                <FileTypeSheet withFile types={types} initial={filing} file={file} onFile={setFile}
+                    preview={!supported}
+                    onClose={() => { setAsking(false); if (!filing) setFile(null); }}
                     onSave={f => { setFiling(f); setAsking(false); }} />
             )}
         </View>

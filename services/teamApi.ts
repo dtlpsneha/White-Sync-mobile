@@ -305,9 +305,13 @@ export const team = {
      * and then files are simply posted without a type. */
     documentTypes: async (): Promise<DocType[]> => {
         if (docTypes) return docTypes;
-        const r = await get<{ types: DocType[] }>('/bff/v1/team/document-types');
-        if (r.ok) docTypes = r.data.types;
-        return r.ok ? r.data.types : [];
+        try {
+            const r = await get<{ types: DocType[] }>('/bff/v1/team/document-types');
+            if (r.ok) docTypes = r.data.types;
+            return r.ok ? r.data.types : [];
+        } catch {
+            return [];   // no sign-in, no network: the sheet falls back to its preview list
+        }
     },
     /** Every file in the chat, newest first: by type ("unfiled" for the ones nobody filed) and any word. */
     files: (p: { type?: string | null; q?: string; before?: string | null } = {}) => {
@@ -358,6 +362,48 @@ export const team = {
             h => apiPostForm(smartopsUrl('/bff/v1/team/transcribe'), f, h));
     },
 };
+
+/** Shown only while SmartOps is too old to give its own list (nothing is saved from them). */
+const PREVIEW_TYPES: DocType[] = [
+    { key: 'customer_po', label: 'Customer PO', icon: 'cart-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'po_no', label: 'PO no', type: 'text', required: false },
+        { key: 'po_date', label: 'PO date', type: 'date', required: false },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false }] },
+    { key: 'principal_invoice', label: 'Principal invoice', icon: 'receipt-outline', fields: [
+        { key: 'supplier', label: 'Supplier', type: 'supplier', required: true },
+        { key: 'invoice_no', label: 'Invoice no', type: 'text', required: false },
+        { key: 'invoice_date', label: 'Invoice date', type: 'date', required: false },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false }] },
+    { key: 'quotation', label: 'Quotation / PI', icon: 'pricetag-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'quotation_no', label: 'Quotation no', type: 'text', required: false },
+        { key: 'date', label: 'Date', type: 'date', required: false },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false }] },
+    { key: 'payment_proof', label: 'Payment proof', icon: 'cash-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false },
+        { key: 'utr', label: 'UTR / Cheque no', type: 'text', required: false },
+        { key: 'payment_date', label: 'Payment date', type: 'date', required: false }] },
+    { key: 'dispatch_lr', label: 'Dispatch / LR', icon: 'car-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'transporter', label: 'Transporter', type: 'text', required: false },
+        { key: 'lr_no', label: 'LR no', type: 'text', required: false },
+        { key: 'lr_date', label: 'LR date', type: 'date', required: false }] },
+    { key: 'delivery_challan', label: 'Delivery challan', icon: 'clipboard-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'dc_no', label: 'DC no', type: 'text', required: false },
+        { key: 'date', label: 'Date', type: 'date', required: false }] },
+    { key: 'other', label: 'Other', icon: 'document-outline', fields: [
+        { key: 'description', label: 'Description', type: 'longtext', required: true }] },
+];
+
+/** The types for the attach sheet. `supported` is false while SmartOps is too old to store
+ * them: the sheet still shows (so it can be seen), says so, and the post goes without them. */
+export async function documentTypeChoices(): Promise<{ types: DocType[]; supported: boolean }> {
+    const types = await team.documentTypes();
+    return types.length ? { types, supported: true } : { types: PREVIEW_TYPES, supported: false };
+}
 
 // ─────────────────────────── small display helpers ───────────────────────────
 
