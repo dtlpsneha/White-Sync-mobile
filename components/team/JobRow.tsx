@@ -8,14 +8,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
-import { age, Job, KIND_COLORS, KIND_ICONS } from '@/services/teamApi';
+import { age, Job, KIND_COLORS, KIND_ICONS, SMARTOPS_ICON, SMARTOPS_TINT } from '@/services/teamApi';
 import { Avatar } from './Avatar';
 import { displayName } from './chatUi';
 
 export function JobRow({ job, meId, colors, onPress }: {
     job: Job; meId?: string; colors: typeof Colors.light; onPress: () => void;
 }) {
-    const tint = KIND_COLORS[job.kind];
+    const tint = job.by_smartops ? SMARTOPS_TINT : KIND_COLORS[job.kind];
     const late = job.status === 'open' && job.age_minutes >= 24 * 60;
     const fromMe = job.author.id === meId;
     const toMe = job.assignee?.id === meId;
@@ -25,9 +25,10 @@ export function JobRow({ job, meId, colors, onPress }: {
     return (
         <TouchableOpacity activeOpacity={0.7} onPress={onPress} style={styles.row}>
             <View>
-                <Avatar name={fromMe ? job.assignee?.name : job.author.name} size={48} />
+                <Avatar name={fromMe ? job.assignee?.name : job.author.name} size={48}
+                    smartops={!fromMe && !!job.by_smartops} />
                 <View style={[styles.kindDot, { backgroundColor: tint, borderColor: colors.background }]}>
-                    <Ionicons name={KIND_ICONS[job.kind] as any} size={11} color="#FFF" />
+                    <Ionicons name={(job.by_smartops ? SMARTOPS_ICON : KIND_ICONS[job.kind]) as any} size={11} color="#FFF" />
                 </View>
             </View>
             <View style={[styles.main, { borderBottomColor: colors.border }]}>

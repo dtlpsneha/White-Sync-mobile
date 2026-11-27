@@ -9,7 +9,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, useWindowDimensi
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
-import { age, Attachment, Job, KIND_COLORS, KIND_ICONS, Reply } from '@/services/teamApi';
+import { age, Attachment, Job, KIND_COLORS, KIND_ICONS, Reply, SMARTOPS_ICON, SMARTOPS_TINT } from '@/services/teamApi';
 import { Avatar } from './Avatar';
 import { displayName, personColor, timeOnly } from './chatUi';
 import { readLine, TeamImage } from './TeamImage';
@@ -18,34 +18,35 @@ import { VoiceNote } from './VoiceNote';
 type ThemeColors = typeof Colors.light;
 
 const MINE_BG = { light: '#E4E7FF', dark: '#2E2A7A' };
+const SMARTOPS_BG = { light: '#ECFDF5', dark: '#0B3B2E' };
 
 function useBubbleWidth() {
     const { width } = useWindowDimensions();
     return Math.min(width * 0.78, 340);
 }
 
-function Shell({ mine, showAuthor, authorName, theme, colors, children, onPress, onLongPress, highlight }: {
+function Shell({ mine, showAuthor, authorName, theme, colors, children, onPress, onLongPress, highlight, smartops }: {
     mine: boolean; showAuthor: boolean; authorName?: string | null; theme: 'light' | 'dark';
     colors: ThemeColors; children: React.ReactNode; onPress?: () => void; onLongPress?: () => void;
-    highlight?: string;
+    highlight?: string; smartops?: boolean;
 }) {
     const maxWidth = useBubbleWidth();
     const body = (
         <View style={[styles.bubble, {
             maxWidth,
-            backgroundColor: mine ? MINE_BG[theme] : colors.surface,
-            borderColor: highlight ?? (mine ? 'transparent' : colors.border),
+            backgroundColor: mine ? MINE_BG[theme] : smartops ? SMARTOPS_BG[theme] : colors.surface,
+            borderColor: highlight ?? (mine ? 'transparent' : smartops ? `${SMARTOPS_TINT}55` : colors.border),
             borderWidth: highlight ? 1.5 : mine ? 0 : StyleSheet.hairlineWidth,
         }, mine ? styles.mine : styles.theirs, showAuthor && (mine ? styles.mineFirst : styles.theirsFirst)]}>
             {!mine && showAuthor && (
-                <Text style={[styles.author, { color: personColor(authorName) }]} numberOfLines={1}>{displayName(authorName)}</Text>
+                <Text style={[styles.author, { color: smartops ? SMARTOPS_TINT : personColor(authorName) }]} numberOfLines={1}>{displayName(authorName)}</Text>
             )}
             {children}
         </View>
     );
     return (
         <View style={[styles.line, mine ? styles.lineMine : styles.lineTheirs, showAuthor && styles.lineFirst]}>
-            {!mine && (showAuthor ? <Avatar name={authorName} size={30} /> : <View style={{ width: 30 }} />)}
+            {!mine && (showAuthor ? <Avatar name={authorName} size={30} smartops={smartops} /> : <View style={{ width: 30 }} />)}
             {onPress || onLongPress
                 ? <TouchableOpacity activeOpacity={0.85} onPress={onPress} onLongPress={onLongPress} delayLongPress={350}>{body}</TouchableOpacity>
                 : body}
@@ -78,7 +79,7 @@ function Deleted({ colors }: { colors: ThemeColors }) {
 export function JobTag({ job, colors, meId, onKind, onAssignee }: {
     job: Job; colors: ThemeColors; meId?: string; onKind?: () => void; onAssignee?: () => void;
 }) {
-    const tint = KIND_COLORS[job.kind];
+    const tint = job.by_smartops ? SMARTOPS_TINT : KIND_COLORS[job.kind];
     const forMe = !!meId && job.assignee?.id === meId;
     const late = job.status === 'open' && job.age_minutes >= 24 * 60;
     const Kind = onKind ? TouchableOpacity : View;
@@ -86,7 +87,7 @@ export function JobTag({ job, colors, meId, onKind, onAssignee }: {
     return (
         <View style={styles.tagRow}>
             <Kind onPress={onKind} style={[styles.tag, { backgroundColor: `${tint}1F`, borderColor: `${tint}55` }]}>
-                <Ionicons name={KIND_ICONS[job.kind] as any} size={13} color={tint} />
+                <Ionicons name={(job.by_smartops ? SMARTOPS_ICON : KIND_ICONS[job.kind]) as any} size={13} color={tint} />
                 <Text style={[styles.tagText, { color: tint }]}>{job.kind_label}{job.kind_suggested ? ' ?' : ''}</Text>
                 {onKind && <Ionicons name="chevron-down" size={12} color={tint} />}
             </Kind>
@@ -137,7 +138,8 @@ export function JobBubble({ job, mine, showAuthor, meId, theme, colors, onPress,
     }
     return (
         <Shell mine={mine} showAuthor={showAuthor} authorName={job.author.name} theme={theme} colors={colors}
-            onPress={onPress} onLongPress={onLongPress} highlight={forMe ? colors.primary : undefined}>
+            onPress={onPress} onLongPress={onLongPress} highlight={forMe ? colors.primary : undefined}
+            smartops={job.by_smartops}>
             {!!job.attachment && (
                 <View style={{ gap: 4 }}>
                     <TeamImage a={job.attachment} colors={colors} width={width} />

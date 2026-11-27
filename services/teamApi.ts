@@ -22,6 +22,10 @@ const TOKEN_KEY = 'smartops_token';
 
 // ─────────────────────────── shapes (mirror app/bff/team.py) ───────────────────────────
 
+/** SmartOps' own colour and icon, for the posts it writes (a customer's payment, for one). */
+export const SMARTOPS_TINT = '#059669';
+export const SMARTOPS_ICON = 'cash-outline';
+
 export type JobKind = 'proforma' | 'place_order' | 'quotation' | 'dispatch' | 'payment' | 'general';
 export type JobStatus = 'open' | 'done' | 'cancelled';
 export type JobAction = 'quotation' | 'order_ref' | 'dispatch' | 'payment' | 'none';
@@ -74,6 +78,9 @@ export interface Job {
     reference?: string | null;
     reference_date?: string | null;
     erpnext_missing: boolean;
+    /** Written by SmartOps itself (e.g. "Payment received: ..."), not by a person. Absent
+     * from an older SmartOps, which is treated as false. */
+    by_smartops?: boolean;
     created_at: string;
     done_at?: string | null;
     age_minutes: number;
