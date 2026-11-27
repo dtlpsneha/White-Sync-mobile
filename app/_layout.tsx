@@ -1,5 +1,5 @@
-import { DarkTheme, DefaultTheme, ThemeProvider as NavigationProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+// Expo Router 58 carries its own React Navigation; the theme must come from it to reach its screens.
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 

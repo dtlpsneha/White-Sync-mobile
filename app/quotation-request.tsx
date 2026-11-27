@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, type ScrollViewInstance } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -24,7 +24,7 @@ export default function QuotationRequestScreen() {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
     const nextKey = useRef(2);
-    const formScrollRef = useRef<ScrollView>(null);
+    const formScrollRef = useRef<ScrollViewInstance>(null);
 
     const newLine = (key: number): Line => ({ key, item: null, query: '', results: [], qty: '' });
 

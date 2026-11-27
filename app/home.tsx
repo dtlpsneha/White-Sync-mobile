@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, type ScrollViewInstance } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
     Easing,
@@ -421,7 +421,7 @@ export default function HomeScreen() {
     // On first layout Android can leave this page scrolled to the bottom once the
     // content is taller than the screen, hiding the header. Pin to the top while the
     // content settles (first ~2s), then leave scrolling entirely to the user.
-    const scrollRef = useRef<ScrollView>(null);
+    const scrollRef = useRef<ScrollViewInstance>(null);
     const settleUntil = useRef(0);
     const pinToTopWhileSettling = () => {
         if (!settleUntil.current) settleUntil.current = Date.now() + 2000;
@@ -516,6 +516,7 @@ export default function HomeScreen() {
                         <SectionHeader title="Quick Navigation" subtitle="Tap a section to open it" icon="apps" />
                         <View style={styles.navSection}>
                             {([
+                                { label: 'TEAM CHAT', sub: 'Jobs & messages with the office', icon: 'chatbubbles', from: '#6EE7B7', to: '#059669', route: '/team', mode: 'push' as const },
                                 { label: 'CUSTOMER VISIT PLANNED', sub: 'Field visit records', icon: 'calendar', from: '#A78BFA', to: '#7C3AED', route: '/maintenance', mode: 'replace' as const },
                                 { label: 'QUOTATION / PROFORMA REQUEST', sub: 'Brand, customer, item & quantity', icon: 'create', from: '#FCD34D', to: '#EA580C', route: '/quotation-request', mode: 'push' as const },
                                 { label: 'QUOTATION CREATED', sub: 'Create & track quotations', icon: 'document-text', from: '#FBBF24', to: '#F97316', route: '/quotations', mode: 'replace' as const },
@@ -657,7 +658,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         metricLabel: { fontSize: ms(12), color: colors.textSecondary, fontWeight: '700' },
         metricValue: { fontSize: ms(18), fontWeight: '900' },
         bgTint: { position: 'absolute', top: 0, left: 0, right: 0, height: vs(430) },
-        heroDeco: { ...StyleSheet.absoluteFillObject, borderRadius: ms(28), overflow: 'hidden' },
+        heroDeco: { ...StyleSheet.absoluteFill, borderRadius: ms(28), overflow: 'hidden' },
         heroCircle: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
         navSection: { paddingHorizontal: s(16), paddingBottom: s(24), gap: s(10) },
         navRowCard: {

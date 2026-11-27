@@ -26,6 +26,7 @@ const NAV_ROUTES = [
 
 const NAV_ITEMS = [
     { id: 'home',       label: 'Home',                         icon: 'home-outline' as const,          activeIcon: 'home' as const,          route: '/home',                           color: '#3B82F6', mode: 'replace' as const },
+    { id: 'team',       label: 'Team Chat',                    icon: 'chatbubbles-outline' as const,   activeIcon: 'chatbubbles' as const,   route: '/team',                           color: '#059669', mode: 'replace' as const },
     { id: 'quotes',     label: 'Quotation',                    icon: 'document-text-outline' as const, activeIcon: 'document-text' as const, route: '/quotations',                     color: '#F59E0B', mode: 'replace' as const },
     { id: 'orders',     label: 'Customer Purchase Order',      icon: 'cart-outline' as const,          activeIcon: 'cart' as const,          route: '/sales-orders',                   color: '#14B8A6', mode: 'replace' as const },
     { id: 'visits',     label: 'Customer Visit',               icon: 'calendar-outline' as const,      activeIcon: 'calendar' as const,      route: '/maintenance',                    color: '#8B5CF6', mode: 'replace' as const },
@@ -100,8 +101,10 @@ export const FloatingNav = () => {
 
     if (keyboardVisible || !isNavVisible) return null;
 
-    const row1 = NAV_ITEMS.slice(0, 4);
-    const row2 = NAV_ITEMS.slice(4, 8);
+    // Nine destinations: three rows of three.
+    const PER_ROW = 3;
+    const rows = Array.from({ length: Math.ceil(NAV_ITEMS.length / PER_ROW) }, (_, r) =>
+        NAV_ITEMS.slice(r * PER_ROW, (r + 1) * PER_ROW));
 
     const renderBox = (item: typeof NAV_ITEMS[0], index: number) => {
         const isActive = activeIndex === index;
@@ -181,12 +184,11 @@ export const FloatingNav = () => {
                     ]}
                 >
                     <View style={styles.gridContent}>
-                        <View style={styles.row}>
-                            {row1.map((item, i) => renderBox(item, i))}
-                        </View>
-                        <View style={styles.row}>
-                            {row2.map((item, i) => renderBox(item, i + 4))}
-                        </View>
+                        {rows.map((row, r) => (
+                            <View key={r} style={styles.row}>
+                                {row.map((item, i) => renderBox(item, r * PER_ROW + i))}
+                            </View>
+                        ))}
                     </View>
                 </Animated.View>
             </View>
@@ -196,7 +198,7 @@ export const FloatingNav = () => {
 
 const styles = StyleSheet.create({
     overlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         backgroundColor: 'rgba(0,0,0,0.4)',
         zIndex: 999,
     },

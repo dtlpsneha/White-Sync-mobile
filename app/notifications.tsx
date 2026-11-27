@@ -6,6 +6,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications } from '@/context/NotificationsContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { notificationTarget } from '@/utils/notificationTarget';
 
 export default function NotificationsScreen() {
     const router = useRouter();
@@ -16,9 +17,8 @@ export default function NotificationsScreen() {
     const { notifications, markAsRead, clearAll } = useNotifications();
 
     const handleNotificationTap = (notification: any) => {
-        if (notification.data?.id) {
-            router.push({ pathname: '/quotations/[id]', params: { id: notification.data.id } });
-        }
+        const target = notificationTarget(notification.data);
+        if (target) router.push(target);
     };
 
     return (

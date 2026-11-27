@@ -61,16 +61,31 @@ export const notificationService = {
     async setupChannels() {
         if (Platform.OS !== 'android') return;
 
-        await Notifications.setNotificationChannelAsync('quotation-alerts', {
-            name: 'Quotation Alerts',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#7367F0',
-            showBadge: true,
-            bypassDnd: true,
-            enableVibrate: true,
-            enableLights: true,
-        });
+        // Never rejects: it is called un-awaited at start-up (app/_layout.tsx), where a
+        // rejection surfaced as "Uncaught (in promise)", and before every local post, which
+        // it then stopped.
+        //
+        // expo-notifications 58 on Android creates the channel and THEN fails turning the
+        // channel it made back into JavaScript (its description, group and sound are null,
+        // and the bridge calls getClass() on each value): "NullPointerException ... getClass()
+        // on a null object reference". The channel exists by then, so that one error is not a
+        // failure here; anything else is still reported.
+        try {
+            await Notifications.setNotificationChannelAsync('quotation-alerts', {
+                name: 'Quotation Alerts',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#7367F0',
+                showBadge: true,
+                bypassDnd: true,
+                enableVibrate: true,
+                enableLights: true,
+            });
+        } catch (e) {
+            if (!String(e).includes('getClass()')) {
+                console.warn('[NotificationService] Channel setup failed:', e);
+            }
+        }
 
         // Set up action buttons here too so they're available even when the
         // background task posts a sticky notification before the UI mounts.

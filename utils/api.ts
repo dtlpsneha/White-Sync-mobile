@@ -64,7 +64,9 @@ function request<T = any>({
         const xhr = new XMLHttpRequest();
         xhr.open(method, url, true);
 
-        if (!isFormData && body !== undefined) {
+        // A FormData body sets its own multipart boundary; labelling it JSON breaks the
+        // upload, so FormData is recognised here even when the caller did not say so.
+        if (!isFormData && !(body instanceof FormData) && body !== undefined) {
             xhr.setRequestHeader(
                 'Content-Type',
                 body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json'
@@ -122,6 +124,13 @@ export function apiGet<T = any>(url: string, cookies?: string | null, customHead
 /** Perform a POST request. A URLSearchParams body is sent form-encoded. */
 export function apiPost<T = any>(url: string, body: unknown, cookies?: string | null, customHeaders?: Record<string, string>) {
     return request<T>({ method: 'POST', url, body, cookies, customHeaders });
+}
+
+/** POST a multipart form (a photo plus fields) with the longer upload timeout. */
+export function apiPostForm<T = any>(url: string, form: FormData, customHeaders?: Record<string, string>) {
+    return request<T>({
+        method: 'POST', url, body: form, customHeaders, isFormData: true, timeoutMs: UPLOAD_TIMEOUT_MS,
+    });
 }
 
 /** Perform a PUT request. */

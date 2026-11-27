@@ -4,6 +4,7 @@ import { useNotifications } from '@/context/NotificationsContext';
 import { useRouter } from 'expo-router';
 import { notifeeService } from '@/services/NotifeeService';
 import { FloatingNotifications } from '@/modules/floating-notifications';
+import { isTeamAlert } from '@/utils/notificationTarget';
 
 export const NotificationPopup = () => {
     const { notifications, markAsRead } = useNotifications();
@@ -28,6 +29,9 @@ export const NotificationPopup = () => {
             const title = content.title || 'New Quotation';
             const body = content.body || 'A quotation requires your attention.';
             const data = content.data || {};
+            // A Team chat alert is already on screen as an ordinary notification, and
+            // the persistent popup and overlay below only know how to open a quotation.
+            if (isTeamAlert(data)) return;
             const quotationId = data.id as string | undefined;
 
             console.log('[NotificationPopup] Received notification, displaying persistently');

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications } from '@/context/NotificationsContext';
+import { notificationTarget } from '@/utils/notificationTarget';
 
 export const NotificationModal = () => {
     const router = useRouter();
@@ -18,12 +19,10 @@ export const NotificationModal = () => {
 
     const handleView = () => {
         console.log('[Modal] VIEW pressed, latestUnread:', !!latestUnread);
-        if (latestUnread?.data?.id) {
+        const target = latestUnread ? notificationTarget(latestUnread.data) : null;
+        if (latestUnread && target) {
             markAsRead(latestUnread.id);
-            router.push({
-                pathname: '/quotations/[id]',
-                params: { id: latestUnread.data.id }
-            });
+            router.push(target);
         }
     };
 

@@ -48,6 +48,12 @@
       "expo-web-browser",
       "expo-task-manager",
       [
+        "expo-audio",
+        {
+          "microphonePermission": "White Sync records voice notes for Team Chat when you hold the mic button."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/logo.png",

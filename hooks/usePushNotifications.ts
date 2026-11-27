@@ -5,9 +5,11 @@ import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
 import { apiUrl } from '../constants/config';
+import { notificationTarget } from '../utils/notificationTarget';
 
 /**
  * Registers this device's Expo push token against the logged-in ERPNext
@@ -21,6 +23,11 @@ async function registerForPushNotificationsAsync(): Promise<string | undefined> 
         console.log('[usePushNotifications] Not a physical device, skipping');
         return undefined;
     }
+    // Expo Go has no remote push on Android (removed in SDK 53): asking for a token there
+    // throws, and the retry loop below would show that error every few seconds.
+    // `isRunningInExpoGo()` is Expo's own check; `Constants.executionEnvironment` did not
+    // report Expo Go as `storeClient` on SDK 58, so that test let the error through.
+    if (isRunningInExpoGo()) return undefined;
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -98,8 +105,13 @@ export const usePushNotifications = () => {
 
         let cancelled = false;
         let registeredWithServer = false;
+        // Expo Go cannot have a push token at all, so there is nothing to retry: without this
+        // the loop below asked every 5 seconds for two minutes and logged "skipping" each time.
+        const noRemotePush = isRunningInExpoGo();
+        if (noRemotePush) console.log('[usePushNotifications] Running in Expo Go, no remote push');
 
         const registerAndSend = () => {
+            if (noRemotePush) return;
             registerForPushNotificationsAsync().then(token => {
                 if (cancelled || !token) return;
                 setExpoPushToken(token);
@@ -133,17 +145,17 @@ export const usePushNotifications = () => {
             setNotification(notification);
         });
 
-        // Tapping a notification navigates to the quotation. The same response can
+        // Tapping a notification opens its quotation, or its Team job. The same response can
         // arrive from both the listener and the cold-start lookup, so open it once.
         let handledResponseId: string | null = null;
         const openFromResponse = (response: Notifications.NotificationResponse | null) => {
             if (!response) return;
             const key = response.notification.request.identifier;
             if (key === handledResponseId) return;
-            const data = response.notification.request.content.data;
-            if (data && data.id) {
+            const target = notificationTarget(response.notification.request.content.data);
+            if (target) {
                 handledResponseId = key;
-                router.push({ pathname: '/quotations/[id]', params: { id: data.id as string } });
+                router.push(target);
             }
         };
         responseListener.current = Notifications.addNotificationResponseReceivedListener(openFromResponse);

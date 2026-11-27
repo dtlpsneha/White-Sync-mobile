@@ -31,6 +31,7 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
     // back-stack every time one is picked from the menu.
     const navItems = useMemo(() => [
         { id: 'home', icon: 'home-outline', activeIcon: 'home', label: 'Home', route: '/home', color: '#3B82F6', mode: 'replace' as const },
+        { id: 'team', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles', label: 'Team Chat', route: '/team', color: '#059669', mode: 'push' as const },
         { id: 'quotes', icon: 'document-text-outline', activeIcon: 'document-text', label: 'Quotes', route: '/quotations', color: '#F59E0B', mode: 'replace' as const },
         { id: 'orders', icon: 'cart-outline', activeIcon: 'cart', label: 'Sales Orders', route: '/sales-orders', color: '#14B8A6', mode: 'replace' as const },
         { id: 'visits', icon: 'calendar-outline', activeIcon: 'calendar', label: 'Visits', route: '/maintenance', color: '#8B5CF6', mode: 'replace' as const },
