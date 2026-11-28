@@ -153,7 +153,7 @@ export default function MyOrdersScreen() {
                     renderItem={({ item }) => <Row row={item} colors={colors} theme={theme} showSeller={!!data?.can_see_all && !salesperson}
                         onPress={() => router.push(item.kind === 'invoice'
                             ? { pathname: '/my-orders/[name]', params: { name: item.name } }
-                            : { pathname: '/sales-orders/[id]', params: { id: item.name } } as any)} />}
+                            : { pathname: '/sales-orders/[id]', params: { id: item.name, stage: item.status } } as any)} />}
                 />
             )}
 

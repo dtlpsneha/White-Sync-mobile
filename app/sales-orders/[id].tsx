@@ -8,6 +8,7 @@ import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { isOrderStatus, OrderSteps } from '@/components/orders/OrderSteps';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { apiGet } from '@/utils/api';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
@@ -44,7 +45,8 @@ const dmy = (iso: string) => {
 };
 
 export default function SalesOrderDetailScreen() {
-    const { id } = useLocalSearchParams();
+    // `stage` comes from My Orders: where this order stands, shown as the five steps.
+    const { id, stage } = useLocalSearchParams();
     const router = useRouter();
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
@@ -181,6 +183,13 @@ export default function SalesOrderDetailScreen() {
                     <Text style={[styles.customer, { color: colors.text }]}>{order.customer_name || order.customer}</Text>
                     <Text style={[styles.muted, { color: colors.textSecondary }]}>{order.customer}</Text>
                 </View>
+
+                {/* Where it stands (opened from My Orders) */}
+                {isOrderStatus(stage) && (
+                    <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <OrderSteps status={stage} colors={colors} />
+                    </View>
+                )}
 
                 {/* Items */}
                 <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>

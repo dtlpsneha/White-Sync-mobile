@@ -10,19 +10,12 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { dmy, inr } from '@/components/orders/format';
+import { OrderSteps } from '@/components/orders/OrderSteps';
 import { orderTone } from '@/components/orders/tones';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius, Shadow, StatusColors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { InvoiceDetail, OrderStatus, team } from '@/services/teamApi';
-
-const STEPS: { key: OrderStatus; label: string }[] = [
-    { key: 'so_pending', label: 'Sales Order' },
-    { key: 'invoice_pending', label: 'Confirmed' },
-    { key: 'invoice_generated', label: 'Invoice' },
-    { key: 'delivery_pending', label: 'Ready' },
-    { key: 'dispatched', label: 'Dispatched' },
-];
+import { InvoiceDetail, team } from '@/services/teamApi';
 
 export default function InvoiceScreen() {
     const { name } = useLocalSearchParams<{ name: string }>();
@@ -55,7 +48,6 @@ export default function InvoiceScreen() {
     const tone = row ? orderTone(row.status, theme) : null;
     const DONE = StatusColors.approved;
     const PLUM = StatusColors.reopen;
-    const at = row ? STEPS.findIndex(s => s.key === row.status) : -1;
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -81,22 +73,11 @@ export default function InvoiceScreen() {
                             </View>
                             <Text style={[styles.total, { color: colors.text }]}>{inr(row.amount)}</Text>
                         </View>
-                        <View style={styles.steps}>
-                            {STEPS.map((s, i) => {
-                                const done = i <= at;
-                                return (
-                                    <View key={s.key} style={styles.step}>
-                                        <View style={[styles.dot, { backgroundColor: done ? DONE : colors.surfaceVariant }]}>
-                                            {done && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                                        </View>
-                                        <Text style={[styles.stepText, { color: i === at ? colors.text : colors.textSecondary }]}>{s.label}</Text>
-                                    </View>
-                                );
-                            })}
-                        </View>
+                        <Text style={[styles.customer, { color: colors.text }]}>{row.customer_name || row.customer}</Text>
+                        <OrderSteps status={row.status} colors={colors} />
                         <Facts colors={colors} facts={[
                             ['Invoice date', dmy(row.date)], ['Customer PO', row.po_no],
-                            ['Sales Order', row.order], ['Sales Invoice', row.sales_invoice || 'not made yet'],
+                            ['Sales Order', row.order], ['Sales Invoice', row.sales_invoice ? row.number : 'not made yet'],
                             ['Payment', row.paid], ['Salesperson', row.salesperson || ''],
                         ]} />
                     </View>
@@ -178,10 +159,7 @@ const styles = StyleSheet.create({
     status: { borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 5 },
     statusText: { fontSize: 12.5, fontWeight: '800' },
     total: { fontSize: 18, fontWeight: '800', flexShrink: 1 },
-    steps: { flexDirection: 'row', justifyContent: 'space-between' },
-    step: { alignItems: 'center', gap: 6, flex: 1 },
-    dot: { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-    stepText: { fontSize: 10.5, fontWeight: '700', textAlign: 'center' },
+    customer: { fontSize: 18, fontWeight: '900', lineHeight: 24 },
     facts: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12 },
     fact: { width: '50%', paddingRight: 8 },
     factKey: { fontSize: 11, fontWeight: '700' },
