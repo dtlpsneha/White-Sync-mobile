@@ -594,7 +594,7 @@ export function DailySalesReportBody() {
                     {mainRows.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Ionicons name="search-outline" size={40} color={colors.textSecondary} />
-                            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No brands match &ldquo;{searchQuery}&rdquo;</Text>
+                            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{searchQuery.trim() ? <>No brands match &ldquo;{searchQuery}&rdquo;</> : 'No sales for this day'}</Text>
                         </View>
                     ) : (
                         <DailySalesTable rows={mainRows} totals={mainTotals} display={display} colors={colors} s={s} vs={vs} ms={ms} />

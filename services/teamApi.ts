@@ -344,7 +344,7 @@ async function call<T>(send: (headers: Record<string, string>) => Promise<{ ok: 
     return res.ok ? { ok: true, data: res.data as T } : { ok: false, status: res.status, error: why(res.status, res.data) };
 }
 
-const get = <T>(path: string) => call<T>(h => apiGet(smartopsUrl(path), null, h));
+const get = <T>(path: string) => call<T>(h => apiGet(smartopsUrl(path), null, { ...h, 'Cache-Control': 'no-cache' }));
 const post = <T>(path: string, body: unknown = {}) => call<T>(h => apiPost(smartopsUrl(path), body, null, h));
 
 function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null): FormData {

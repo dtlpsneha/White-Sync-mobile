@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { clearSessionCaches } from '@/utils/sessionCache';
+import { resetSessionExpired } from '@/utils/api';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -98,6 +99,7 @@ export default function LoginScreen() {
                         await SecureStore.setItemAsync('session_cookies', sessionCookie);
                         // A new sign-in never sees what was kept for the previous person.
                         clearSessionCaches();
+                        resetSessionExpired();
                         console.log('[Login] sid cookie stored successfully');
                     } else {
                         console.warn('[Login] sid cookie not found in header, storing truncated header');
@@ -105,6 +107,7 @@ export default function LoginScreen() {
                         await SecureStore.setItemAsync('session_cookies', sessionCookie);
                         // A new sign-in never sees what was kept for the previous person.
                         clearSessionCaches();
+                        resetSessionExpired();
                     }
                 }
 

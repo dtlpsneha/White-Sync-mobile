@@ -273,7 +273,7 @@ export default function MaintenanceDetailScreen() {
             console.error('Fetch Details Error:', err);
             const msg = (err instanceof Error) ? err.message : String(err);
             Alert.alert("Error", `Could not load visit details: ${msg}`);
-            router.back();
+            if (router.canGoBack()) router.back(); else router.replace('/maintenance');
         } finally {
             setLoading(false);
         }
@@ -502,27 +502,30 @@ export default function MaintenanceDetailScreen() {
     };
 
     const addExpenseRow = (type: 'food' | 'travel' | 'stay' | 'other') => {
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const templates = {
-            food: { date: new Date().toISOString().split('T')[0], meal_type: 'Lunch', cost: '0', attach_image: '' },
-            travel: { from_location: '', to_location: '', date: new Date().toISOString().split('T')[0], mode_of_travel: 'Taxi', cost: '0', attach_image: '' },
-            stay: { hotel_name: '', check_in_date: new Date().toISOString().split('T')[0], checkout_date: new Date().toISOString().split('T')[0], check_in_time: '12:00:00', checkout_time: '12:00:00', cost: '0', attach_image: '' },
+            food: { date: today, meal_type: 'Lunch', cost: '0', attach_image: '' },
+            travel: { from_location: '', to_location: '', date: today, mode_of_travel: 'Taxi', cost: '0', attach_image: '' },
+            stay: { hotel_name: '', check_in_date: today, checkout_date: today, check_in_time: '12:00:00', checkout_time: '12:00:00', cost: '0', attach_image: '' },
             other: { expense_type: 'Other', expense_in_details: '', cost: '0', attach_image: '' }
         };
         const key = `${type}_expenses` as keyof typeof form;
-        updateForm(key, [...(form[key] as any[]), templates[type]]);
+        setForm(prev => ({ ...prev, [key]: [...((prev as any)[key] as any[]), templates[type]] }));
     };
 
     const updateExpenseRow = (type: 'food' | 'travel' | 'stay' | 'other', index: number, field: string, value: any) => {
         const key = `${type}_expenses` as keyof typeof form;
-        const newList = [...(form[key] as any[])];
-        newList[index] = { ...newList[index], [field]: value };
-        updateForm(key, newList);
+        setForm(prev => {
+            const list = [...((prev as any)[key] as any[])];
+            list[index] = { ...list[index], [field]: value };
+            return { ...prev, [key]: list };
+        });
     };
 
     const removeExpenseRow = (type: 'food' | 'travel' | 'stay' | 'other', index: number) => {
         const key = `${type}_expenses` as keyof typeof form;
-        const newList = (form[key] as any[]).filter((_, i) => i !== index);
-        updateForm(key, newList);
+        setForm(prev => ({ ...prev, [key]: ((prev as any)[key] as any[]).filter((_, i) => i !== index) }));
     };
 
     useEffect(() => {
@@ -665,16 +668,6 @@ export default function MaintenanceDetailScreen() {
             const stay_updated = await uploadExpenseImages(form.stay_expenses);
             const other_updated = await uploadExpenseImages(form.other_expenses);
 
-            const purposes_payload = purposes_updated
-                .filter(row => row.item_code.trim() !== '')
-                .map(row => ({
-                    doctype: 'Maintenance Visit Purpose',
-                    item_code: row.item_code,
-                    item_name: row.item_name || row.item_code,
-                    description: row.description || row.item_name || row.item_code,
-                    work_done: row.work_done,
-                }));
-
             const payload = {
                 doctype: 'Maintenance Visit',
                 name: form.name,
@@ -688,7 +681,7 @@ export default function MaintenanceDetailScreen() {
                 new_address: form.new_address,
                 new_contact_number: form.new_contact_number,
                 new_contact_email: form.new_contact_email,
-                purposes: form.purposes
+                purposes: purposes_updated
                     .filter(row => row.item_code.trim() !== '')
                     .map(row => ({
                         doctype: 'Maintenance Visit Purpose',
@@ -698,7 +691,7 @@ export default function MaintenanceDetailScreen() {
                         work_done: row.work_done,
                         image: row.image || '',
                     })),
-                maintenance_visit_purposes: form.purposes
+                maintenance_visit_purposes: purposes_updated
                     .filter(row => row.item_code.trim() !== '')
                     .map(row => ({
                         doctype: 'Maintenance Visit Purpose',
@@ -725,6 +718,7 @@ export default function MaintenanceDetailScreen() {
                 contact_email: form.contact_email,
                 contact_mobile: form.contact_mobile,
                 sales_executive: form.sales_executive,
+                assigned_to: form.assigned_to,
                 food_expenses: food_updated.filter((e: any) => (e.cost || e.amount) || e.food_type),
                 food_expense: food_updated.filter((e: any) => (e.cost || e.amount) || e.food_type),
                 travel_expenses: travel_updated.filter((e: any) => (e.cost || e.amount) || e.from_location || e.to_location),
@@ -766,6 +760,11 @@ export default function MaintenanceDetailScreen() {
 
     const formatDate = (dateStr: string) => {
         if (!dateStr || dateStr === '-') return '-';
+        const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+        if (dateOnly) {
+            const d = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+            return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
         try {
             // Handle both Space and T separators
             const normalized = dateStr.includes(' ') ? dateStr.replace(' ', 'T') : dateStr;
@@ -806,7 +805,7 @@ export default function MaintenanceDetailScreen() {
                 onBack={() => router.canGoBack() ? router.back() : router.replace('/maintenance')}
             />
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 <ScrollView
                     style={styles.container}
                     contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + insets.bottom }]}
@@ -823,7 +822,10 @@ export default function MaintenanceDetailScreen() {
                             </View>
                             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Complete visit information</Text>
                         </View>
-                        <TouchableOpacity testID="editVisitBtn" style={[styles.premiumEditBtn, { backgroundColor: colors.primary }]}onPress={() => setIsEditing(!isEditing)}>
+                        <TouchableOpacity testID="editVisitBtn" style={[styles.premiumEditBtn, { backgroundColor: colors.primary }]}onPress={() => {
+                            if (isEditing) fetchMaintenanceDetails(); // drop unsaved edits
+                            setIsEditing(!isEditing);
+                        }}>
                             <Ionicons name={isEditing ? "close" : "create-outline"} size={20} color="#FFF" />
                             <Text style={styles.premiumEditBtnText}>{isEditing ? "Cancel" : "Edit"}</Text>
                         </TouchableOpacity>

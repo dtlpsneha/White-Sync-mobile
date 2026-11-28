@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput,
+    ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput,
     TouchableOpacity, View, type ScrollViewInstance,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -32,8 +32,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
     age, Filing, Job, JobDetail, JobKind, Payments, People, PickedFile, PickedVoice, Reply, team,
 } from '@/services/teamApi';
+import * as Notifications from 'expo-notifications';
+import { isTeamAlert } from '@/utils/notificationTarget';
 
-const POLL_MS = 10000;
+const POLL_MS = 6000;
 const GROUP_GAP_MS = 10 * 60 * 1000;
 
 /** What the person a job is for says when it is done — words SmartOps closes the job on. */
@@ -72,7 +74,11 @@ export default function JobScreen() {
     useFocusEffect(useCallback(() => {
         load();
         const t = setInterval(load, POLL_MS);
-        return () => clearInterval(t);
+        const alerts = Notifications.addNotificationReceivedListener(n => {
+            if (isTeamAlert(n.request.content.data)) load();
+        });
+        const app = AppState.addEventListener('change', s => { if (s === 'active') load(); });
+        return () => { clearInterval(t); alerts.remove(); app.remove(); };
     }, [load]));
 
     /** Run one change; show what SmartOps said if it refused. */

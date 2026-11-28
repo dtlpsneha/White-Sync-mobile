@@ -23,7 +23,7 @@ const SMARTOPS_EDGE = { light: '#BFD9CC', dark: '#2F5D50' };
 
 function useBubbleWidth() {
     const { width } = useWindowDimensions();
-    return Math.min(width * 0.78, 340);
+    return Math.min(width * 0.78, width >= 600 ? 480 : 340);
 }
 
 function Shell({ mine, showAuthor, authorName, theme, colors, children, onPress, onLongPress, highlight, smartops }: {

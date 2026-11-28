@@ -1,5 +1,8 @@
 // Expo Router 58 carries its own React Navigation; the theme must come from it to reach its screens.
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationProvider, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { setSessionExpiredHandler } from '@/utils/api';
+import { signOut } from '@/utils/signOut';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
@@ -27,7 +30,17 @@ try { registerBackgroundNotificationTask(); } catch (e) { console.warn('[Layout]
 function RootLayoutContent() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   usePushNotifications();
+
+  // Any request can find that ERPNext ended the session: clear this phone's copy and
+  // go to login once, instead of each screen showing "Server error (401)".
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      signOut(false).finally(() => router.replace('/'));
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [router]);
 
   return (
     <NavigationProvider value={theme === 'dark' ? DarkTheme : DefaultTheme}>

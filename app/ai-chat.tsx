@@ -112,6 +112,7 @@ export default function AiChatScreen() {
     // Guards the mount effect from re-firing: params are stable, but a re-render must not
     // spawn a second session for the same customer.
     const attachedCustomerId = useRef<string | null>(null);
+    const listRef = useRef<FlatList<ChatMessage>>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -338,8 +339,10 @@ export default function AiChatScreen() {
                     </View>
                 ) : (
                     <FlatList
+                        ref={listRef}
                         style={styles.messageList}
                         data={messages}
+                        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
                         keyExtractor={(m: ChatMessage) => m.id}
                         renderItem={({ item }: { item: ChatMessage }) => (
                             <Bubble message={item} speakers={data?.speakers ?? {}} />

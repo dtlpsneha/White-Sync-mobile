@@ -51,6 +51,34 @@ interface RequestOptions {
     isFormData?: boolean;
 }
 
+/** 401, or ERPNext's own "session expired / not logged in" answer. A plain 403 can be a
+ *  real permission refusal for one record, so it does not count. */
+function sessionExpired(status: number, text: string): boolean {
+    if (status === 401) return true;
+    if (status !== 403) return false;
+    return /"exc_type"\s*:\s*"(SessionExpired|AuthenticationError)"/.test(text || '');
+}
+
+let onSessionExpired: (() => void) | null = null;
+let expiredFired = false;
+
+/** The app registers what to do when the session ends (sign out, go to login). */
+export function setSessionExpiredHandler(fn: (() => void) | null) {
+    onSessionExpired = fn;
+    expiredFired = false;
+}
+
+function notifySessionExpired() {
+    if (expiredFired || !onSessionExpired) return; // many requests fail together; act once
+    expiredFired = true;
+    try { onSessionExpired(); } catch { /* ignore */ }
+}
+
+/** A new sign-in re-arms the handler. */
+export function resetSessionExpired() {
+    expiredFired = false;
+}
+
 function request<T = any>({
     method,
     url,
@@ -66,7 +94,8 @@ function request<T = any>({
 
         // A FormData body sets its own multipart boundary; labelling it JSON breaks the
         // upload, so FormData is recognised here even when the caller did not say so.
-        if (!isFormData && !(body instanceof FormData) && body !== undefined) {
+        const callerSetsType = Object.keys(customHeaders ?? {}).some(k => k.toLowerCase() === 'content-type');
+        if (!callerSetsType && !isFormData && !(body instanceof FormData) && body !== undefined) {
             xhr.setRequestHeader(
                 'Content-Type',
                 body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json'
@@ -83,6 +112,9 @@ function request<T = any>({
 
         xhr.onload = () => {
             const ok = xhr.status >= 200 && xhr.status < 300;
+
+            // The phone sent a session and ERPNext says it is no longer valid.
+            if (cookies && sessionExpired(xhr.status, xhr.responseText)) notifySessionExpired();
 
             if (!ok) {
                 console.warn(`[api ${method}] ${xhr.status} response body:`, xhr.responseText?.substring(0, 500));

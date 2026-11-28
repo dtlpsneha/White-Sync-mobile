@@ -12,7 +12,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { BandChips, SectionCard } from '@/components/ui/Midnight';
 import Animated from 'react-native-reanimated';
 import { enterSection } from '@/constants/motion';
-import { clearSessionCaches } from '@/utils/sessionCache';
+import { signOut } from '@/utils/signOut';
 
 /** The real version from app.json, e.g. "1.0.1 (build 3)". */
 function appVersion(): string {
@@ -78,13 +78,7 @@ export default function ProfileScreen() {
                 text: 'Logout',
                 style: 'destructive',
                 onPress: async () => {
-                    await SecureStore.deleteItemAsync('session_cookies');
-                    clearSessionCaches();
-                    await SecureStore.deleteItemAsync('user_name');
-                    await SecureStore.deleteItemAsync('is_manager');
-                    await SecureStore.deleteItemAsync('show_all_quotes');
-                    await SecureStore.deleteItemAsync('user_id');
-                    await SecureStore.deleteItemAsync('last_seen_pending_ids');
+                    await signOut();
                     router.replace('/');
                 }
             }

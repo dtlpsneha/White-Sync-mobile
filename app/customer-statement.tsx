@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, BackHandler, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +46,8 @@ export default function CustomerStatementScreen() {
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [results, setResults] = useState<Customer[]>([]);
     const [loadingList, setLoadingList] = useState(false);
+    const [listError, setListError] = useState<string | null>(null);
+    const [listReload, setListReload] = useState(0);
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [building, setBuilding] = useState(false);
     const [job, setJob] = useState<{ job: StatementJob; done: (json: string) => void } | null>(null);
@@ -65,6 +67,8 @@ export default function CustomerStatementScreen() {
             // Only enabled customers in ERP are listed.
             const enabled = used.ok ? await getEnabledCustomerNames() : null;
             if (cancelled) return;
+            // A failed load used to look like "no customers": say so and offer Retry.
+            setListError(used.ok && enabled ? null : 'Could not load the customer list. Check the connection.');
             const names = used.ok && enabled ? used.data.filter(n => enabled.has(n)) : [];
             // Records whose names match once punctuation is removed (e.g. "PLANT - 5" and "PLANT � 5")
             // are one customer in the list. Each entry keeps all of its records; the statement uses
@@ -81,7 +85,7 @@ export default function CustomerStatementScreen() {
             setLoadingList(false);
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [listReload]);
 
     // Search runs on the list above, so it never shows customers without 2024+ invoices.
     useEffect(() => {
@@ -93,14 +97,20 @@ export default function CustomerStatementScreen() {
         setResults(q ? allCustomers.filter(c => `${c.customer_name} ${c.name}`.toLowerCase().includes(q)) : []);
     }, [query, customer, allCustomers]);
 
+    // Each build gets a number; only the newest may show its result.
+    const buildSeq = useRef(0);
+
     // Runs ERP's PDF code in a hidden WebView; resolves with the JSON the page posts back.
     const runJob = (j: StatementJob) => new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => { setJob(null); reject(new Error('timed out')); }, 60000);
+        // On timeout, clear the hidden page only if it is still this job's.
+        const timer = setTimeout(() => { setJob(cur => (cur && cur.job === j ? null : cur)); reject(new Error('timed out')); }, 60000);
         setJob({ job: j, done: (json: string) => { clearTimeout(timer); setJob(null); resolve(json); } });
     });
 
     // Builds the statement for one customer. 'fy2025' uses FY 2025-26 (1 Apr 2025 to 31 Mar 2026).
     const buildFor = async (c: Customer, period: 'current' | 'fy2025') => {
+        const seq = ++buildSeq.current;
+        const stale = () => seq !== buildSeq.current;
         setDoc(null);
         setError(null);
         setBuilding(true);
@@ -112,17 +122,22 @@ export default function CustomerStatementScreen() {
         for (const id of ids) {
             try {
                 const prep = await prepareStatement(kind, id, from, to);
+                if (stale()) return;
                 if (!prep.ok) { last = prep; continue; }
                 const parsed = JSON.parse(await runJob(prep.job));
+                if (stale()) return;
                 if (parsed.error) { last = { ok: false, error: parsed.error }; continue; }
                 const saved = await writeStatementPdf(prep.job.fileName, parsed.data);
+                if (stale()) return;
                 setBuilding(false);
                 setDoc(saved);
                 return;
             } catch {
+                if (stale()) return;
                 last = { ok: false, error: 'Could not build the statement.' };
             }
         }
+        if (stale()) return;
         setBuilding(false);
         setError(last ? last.error : 'Could not build the statement.');
     };
@@ -145,6 +160,9 @@ export default function CustomerStatementScreen() {
     };
 
     const chooseAnotherCustomer = () => {
+        buildSeq.current += 1; // a build still running must not show up later
+        setBuilding(false);
+        setJob(null);
         setCustomer(null);
         setDoc(null);
         setError(null);
@@ -155,6 +173,16 @@ export default function CustomerStatementScreen() {
         if (customer) chooseAnotherCustomer();
         else router.back();
     };
+
+    useEffect(() => {
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (!customer) return false; // default: leave the screen
+            chooseAnotherCustomer();
+            return true;
+        });
+        return () => sub.remove();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [customer]);
 
     const share = async () => {
         if (!doc) return;
@@ -192,7 +220,7 @@ export default function CustomerStatementScreen() {
                 right={customer || doc ? (
                     <View style={styles.headerActions}>
                         {kind === 'ledger' && customer && (
-                            <TouchableOpacity style={styles.fyBtn} onPress={() => setFyOpen(true)} accessibilityLabel="Choose financial year">
+                            <TouchableOpacity style={styles.fyBtn} onPress={() => setFyOpen(true)} disabled={building} accessibilityLabel="Choose financial year">
                                 <Text style={styles.fyBtnText}>{fy === 'fy2025' ? '2025-26' : currentFy}</Text>
                                 <Ionicons name="chevron-down" size={14} color="#FFF" />
                             </TouchableOpacity>
@@ -267,6 +295,11 @@ export default function CustomerStatementScreen() {
                         />
                         {loadingList && <ActivityIndicator size="small" color={colors.primary} />}
                     </View>
+                    {listError ? (
+                        <TouchableOpacity onPress={() => setListReload(n => n + 1)}>
+                            <Text style={[styles.hint, { color: colors.danger }]}>{listError} Tap to retry.</Text>
+                        </TouchableOpacity>
+                    ) : null}
 
                     {results.map(c => (
                         <TouchableOpacity

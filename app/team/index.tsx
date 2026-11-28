@@ -10,7 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, RefreshControl, StyleSheet, Text,
+    ActivityIndicator, Alert, AppState, FlatList, KeyboardAvoidingView, Platform, RefreshControl, StyleSheet, Text,
     TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -27,6 +27,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { notificationService } from '@/services/NotificationService';
 import { age, erpSession, Filing, Job, JobView, People, PickedFile, PickedVoice, team } from '@/services/teamApi';
+import * as Notifications from 'expo-notifications';
+import { isTeamAlert } from '@/utils/notificationTarget';
 
 type Tab = 'chat' | 'mine' | 'open' | 'sent';
 const TABS: { tab: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -35,7 +37,7 @@ const TABS: { tab: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] 
     { tab: 'open', label: 'Open', icon: 'time' },
     { tab: 'sent', label: 'Sent', icon: 'paper-plane' },
 ];
-const POLL_MS = 12000;
+const POLL_MS = 6000; // the chat checks for new posts this often while it is open
 const SEEN_KEY = 'team_seen_mine';
 /** Posts by the same person this close together sit under one name, as in WhatsApp. */
 const GROUP_GAP_MS = 10 * 60 * 1000;
@@ -104,7 +106,13 @@ export default function TeamScreen() {
     useFocusEffect(useCallback(() => {
         refresh();
         const timer = setInterval(refresh, POLL_MS);
-        return () => clearInterval(timer);
+        // A Team alert, or coming back to the app, refreshes at once instead of
+        // waiting for the next check.
+        const alerts = Notifications.addNotificationReceivedListener(n => {
+            if (isTeamAlert(n.request.content.data)) refresh();
+        });
+        const app = AppState.addEventListener('change', s => { if (s === 'active') refresh(); });
+        return () => { clearInterval(timer); alerts.remove(); app.remove(); };
     }, [refresh]));
 
     const switchTo = (t: Tab) => {
@@ -292,9 +300,20 @@ function EmptyList({ tab, colors, onChat }: { tab: Tab; colors: typeof Colors.li
 }
 
 /** Newest first, no duplicates; a job in `a` wins over the same job in `b` (it is fresher). */
-function mergeNewestFirst(a: Job[], b: Job[]): Job[] {
+/**
+ * `a` is the newest page from the server, `b` what is on screen (it may hold older pages).
+ * Posts in the newest page's time window that the server no longer sends were deleted, so
+ * they go; older posts (outside that window) stay. `complete` = the server sent everything.
+ */
+function mergeNewestFirst(a: Job[], b: Job[], complete = false): Job[] {
+    const fresh = new Set(a.map(j => j.id));
+    const oldest = a.length ? a[a.length - 1].created_at : null;
     const byId = new Map<string, Job>();
-    for (const j of b) byId.set(j.id, j);
+    for (const j of b) {
+        const inWindow = complete || (oldest !== null && j.created_at >= oldest) || a.length === 0;
+        if (inWindow && !fresh.has(j.id)) continue; // deleted on the server
+        byId.set(j.id, j);
+    }
     for (const j of a) byId.set(j.id, j);
     return [...byId.values()].sort((x, y) => (x.created_at < y.created_at ? 1 : -1));
 }

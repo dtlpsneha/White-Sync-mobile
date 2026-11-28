@@ -55,7 +55,7 @@ export default function PaymentDetailsScreen() {
     const [iosField, setIosField] = useState<'from' | 'to' | null>(null);
 
     useEffect(() => {
-        loadExecutiveMap().then(setExecMap);
+        loadExecutiveMap().then(setExecMap).catch(() => { /* names fall back to codes */ });
         loadAllBankLines()
             .then(setAllLines)
             .catch(() => setError('Could not load payment details. Check the connection and try again.'))
@@ -98,7 +98,7 @@ export default function PaymentDetailsScreen() {
     const makePdf = async () => {
         const f = fromIso.replace(/-/g, '');
         const t = toIsoDate.replace(/-/g, '');
-        const printed = await Print.printToFileAsync({ html: bankBookHtml(fromIso, toIsoDate, who, lines) });
+        const printed = await Print.printToFileAsync({ html: bankBookHtml(f, t, who, lines) });
         const name = (isAll ? 'All' : customer.trim().replace(/[^A-Za-z0-9]+/g, '_')) + '_' + f + '_' + t;
         const fileName = `Bank_Book_${name}.pdf`;
         const uri = `${FileSystem.cacheDirectory}${fileName}`;

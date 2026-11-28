@@ -159,17 +159,26 @@ export async function searchSuppliers(query: string): Promise<SearchResult<Suppl
  * where callers already have the valid name list from getUsedCustomers/
  * getUsedItems and just need display fields (customer_name / item_name).
  */
+/** Names per request when looking records up by name (keeps the GET URL short). */
+const LOOKUP_CHUNK = 100;
+
 export async function getCustomersByNames(names: string[]): Promise<SearchResult<Customer>> {
     if (!names.length) return { ok: true, data: [] };
     try {
         const fields = ['name', 'customer_name', 'customer_group', 'territory', 'customer_primary_address', 'customer_primary_contact'];
-        const filters = JSON.stringify([['name', 'in', names], ['disabled', '=', 0]]);
-        const res = await apiGet(apiUrl(
-            `/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}` +
-            `&filters=${encodeURIComponent(filters)}&limit_page_length=${names.length}`
-        ), await session());
-        if (!res.ok) return failure(`Server error (${res.status})`);
-        return { ok: true, data: res.data?.data || [] };
+        const out: Customer[] = [];
+        // In chunks: hundreds of names in one GET URL go past the server's URL limit (414).
+        for (let i = 0; i < names.length; i += LOOKUP_CHUNK) {
+            const part = names.slice(i, i + LOOKUP_CHUNK);
+            const filters = JSON.stringify([['name', 'in', part], ['disabled', '=', 0]]);
+            const res = await apiGet(apiUrl(
+                `/api/resource/Customer?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+                `&filters=${encodeURIComponent(filters)}&limit_page_length=${part.length}`
+            ), await session());
+            if (!res.ok) return failure(`Server error (${res.status})`);
+            out.push(...(res.data?.data || []));
+        }
+        return { ok: true, data: out };
     } catch {
         return failure('Network error');
     }
@@ -194,13 +203,18 @@ export async function getItemsByCodes(codes: string[]): Promise<SearchResult<Ite
     if (!codes.length) return { ok: true, data: [] };
     try {
         const fields = ['name', 'item_name', 'description'];
-        const filters = JSON.stringify([['name', 'in', codes]]);
-        const res = await apiGet(apiUrl(
-            `/api/resource/Item?fields=${encodeURIComponent(JSON.stringify(fields))}` +
-            `&filters=${encodeURIComponent(filters)}&limit_page_length=${codes.length}`
-        ), await session());
-        if (!res.ok) return failure(`Server error (${res.status})`);
-        return { ok: true, data: res.data?.data || [] };
+        const out: Item[] = [];
+        for (let i = 0; i < codes.length; i += LOOKUP_CHUNK) {
+            const part = codes.slice(i, i + LOOKUP_CHUNK);
+            const filters = JSON.stringify([['name', 'in', part]]);
+            const res = await apiGet(apiUrl(
+                `/api/resource/Item?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+                `&filters=${encodeURIComponent(filters)}&limit_page_length=${part.length}`
+            ), await session());
+            if (!res.ok) return failure(`Server error (${res.status})`);
+            out.push(...(res.data?.data || []));
+        }
+        return { ok: true, data: out };
     } catch {
         return failure('Network error');
     }
