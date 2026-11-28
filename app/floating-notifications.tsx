@@ -67,7 +67,7 @@ export default function FloatingNotificationsScreen() {
         return (
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <Stack.Screen options={{ headerShown: false }} />
-                <ScreenHeader title="Floating Notifications" onBack={() => router.back()} />
+                <ScreenHeader title="Floating Notifications" subtitle="Pop-ups over other apps" align="left" onBack={() => router.back()} />
                 <View style={styles.unavailableBox}>
                     <Text style={[styles.unavailableText, { color: colors.textSecondary }]}>
                         This feature requires a development or production build — it isn&apos;t available in Expo Go.
@@ -81,7 +81,7 @@ export default function FloatingNotificationsScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <ScreenHeader title="Floating Notifications" onBack={() => router.back()} />
+            <ScreenHeader title="Floating Notifications" subtitle="Pop-ups over other apps" align="left" onBack={() => router.back()} />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={[styles.sectionTitle, { color: colors.primary }]}>Permissions</Text>
