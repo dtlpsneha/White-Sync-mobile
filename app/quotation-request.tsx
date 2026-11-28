@@ -4,6 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { BandChips, InkTile, SectionCard, StepTracker } from '@/components/ui/Midnight';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Customer, searchCustomers } from '@/services/frappeSearch';
@@ -135,64 +136,68 @@ export default function QuotationRequestScreen() {
         }
     };
 
-    const field = [styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }];
+    const field = [styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }];
     const label = [styles.label, { color: colors.textSecondary }];
-    const chip = (on: boolean) => [styles.chip, { borderColor: on ? colors.primary : colors.border, backgroundColor: on ? colors.primary : colors.surface }];
-    const chipText = (on: boolean) => [styles.chipText, { color: on ? '#FFF' : colors.text }];
+
+    const step = !source ? 1 : !brand ? 2 : !type ? 3 : 4;
+    const sourceLabel = source === 'direct' ? 'Direct Supplier' : 'White & Co';
+    const typeLabel = type === 'quotation' ? 'Quotation' : 'Proforma';
+    const chosen = [source && sourceLabel, brand, type && typeLabel].filter(Boolean) as string[];
+    const stepHint = ['Choose a source', 'Choose a brand', 'Quotation or Proforma', 'Customer and items'][step - 1];
+
+    /** A big tappable option: ink tile, title, one line under it, chevron. */
+    const option = (key: string, icon: any, title: string, sub: string, onPress: () => void, tint?: string) => (
+        <TouchableOpacity
+            key={key}
+            activeOpacity={0.85}
+            style={[styles.option, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={onPress}
+        >
+            <InkTile icon={icon} size={52} color={tint} />
+            <View style={{ flex: 1 }}>
+                <Text style={[styles.optionTitle, { color: colors.text }]}>{title}</Text>
+                <Text style={[styles.optionSub, { color: colors.textSecondary }]}>{sub}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+    );
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
-            <ScreenHeader
-                title="Quotation / Proforma"
-                subtitle={
-                    !source ? 'Choose a source'
-                    : !brand ? `${source === 'direct' ? 'Direct Supplier' : 'From White & Co'} · Choose a brand`
-                    : !type ? `${brand} · Quotation or Proforma`
-                    : `${brand} · ${type === 'quotation' ? 'Quotation' : 'Proforma'} request`
-                }
-                onBack={onBack}
-            />
+            <ScreenHeader title="Quotation / Proforma" subtitle={`Step ${step} of 4 · ${stepHint}`} align="left" onBack={onBack}>
+                <StepTracker steps={['Source', 'Brand', 'Type', 'Details']} current={step} />
+                {chosen.length ? <BandChips items={chosen} /> : null}
+            </ScreenHeader>
 
             {!source ? (
-                <View style={styles.typeWrap}>
-                    {([
-                        { key: 'white', label: 'From White & Co', icon: 'business' },
-                        { key: 'direct', label: 'Direct Supplier', icon: 'people' },
-                    ] as const).map(s => (
-                        <TouchableOpacity
-                            key={s.key}
-                            style={[styles.typeBtn, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}
-                            onPress={() => setSource(s.key)}
-                        >
-                            <Ionicons name={s.icon} size={26} color={colors.primary} />
-                            <Text style={[styles.typeText, { color: colors.text }]}>{s.label}</Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={styles.pad}>
+                    <Text style={[styles.question, { color: colors.text }]}>Where is this quote from?</Text>
+                    {option('white', 'business', 'From White & Co', 'Quote from our brands and price list', () => setSource('white'))}
+                    {option('direct', 'people', 'Direct Supplier', 'Ask a supplier to quote directly', () => setSource('direct'), colors.amber)}
                 </View>
             ) : !brand ? (
                 <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
-                    <Text style={label}>Brand</Text>
-                    <View style={styles.chipRow}>
+                    <Text style={[styles.question, { color: colors.text }]}>Which brand?</Text>
+                    <View style={styles.brandGrid}>
                         {REQUEST_BRANDS.map(b => (
-                            <TouchableOpacity key={b} style={chip(false)} onPress={() => chooseBrand(b)}>
-                                <Text style={chipText(false)}>{b}</Text>
+                            <TouchableOpacity
+                                key={b}
+                                activeOpacity={0.85}
+                                style={[styles.brandCard, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}
+                                onPress={() => chooseBrand(b)}
+                            >
+                                <InkTile label={b[0]} size={38} />
+                                <Text style={[styles.brandText, { color: colors.text }]} numberOfLines={1}>{b}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
                 </ScrollView>
             ) : !type ? (
-                <View style={styles.typeWrap}>
-                    {(['quotation', 'proforma'] as RequestType[]).map(t => (
-                        <TouchableOpacity
-                            key={t}
-                            style={[styles.typeBtn, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}
-                            onPress={() => setType(t)}
-                        >
-                            <Ionicons name={t === 'quotation' ? 'document-text' : 'receipt'} size={26} color={colors.primary} />
-                            <Text style={[styles.typeText, { color: colors.text }]}>{t === 'quotation' ? 'Quotation' : 'Proforma'}</Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={styles.pad}>
+                    <Text style={[styles.question, { color: colors.text }]}>What should we prepare?</Text>
+                    {option('quotation', 'document-text', 'Quotation', 'A price offer for the customer', () => setType('quotation'))}
+                    {option('proforma', 'receipt', 'Proforma', 'An advance invoice to collect payment', () => setType('proforma'), colors.amber)}
                 </View>
             ) : (
                 <ScrollView
@@ -200,66 +205,70 @@ export default function QuotationRequestScreen() {
                     contentContainerStyle={[styles.pad, { paddingBottom: 320 }]}
                     keyboardShouldPersistTaps="handled"
                 >
-                    <Text style={label}>Customer</Text>
-                    {customer ? (
-                        <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => { setCustomer(null); setCustomerQuery(''); }}>
-                            <Text style={[styles.selectedText, { color: colors.primary }]}>{customer.customer_name || customer.name}</Text>
-                            <Ionicons name="close-circle" size={18} color={colors.primary} />
-                        </TouchableOpacity>
-                    ) : (
-                        <>
-                            <TextInput
-                                style={field}
-                                placeholder="Search customer"
-                                placeholderTextColor={colors.textSecondary}
-                                value={customerQuery}
-                                onChangeText={setCustomerQuery}
-                            />
-                            {customerResults.map(c => (
-                                <TouchableOpacity key={c.name} style={[styles.resultRow, { borderBottomColor: colors.border }]} onPress={() => { setCustomer(c); setCustomerResults([]); }}>
-                                    <Text style={[styles.resultText, { color: colors.text }]}>{c.customer_name || c.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </>
-                    )}
-
-                    {!brand ? (
-                        <Text style={[styles.hint, { color: colors.textSecondary, marginTop: 12 }]}>Choose a brand to add items.</Text>
-                    ) : (
-                        <>
-                            {lines.map((l, i) => (
-                                <ItemLine
-                                    key={l.key}
-                                    index={i}
-                                    line={l}
-                                    brand={brand}
-                                    canRemove={lines.length > 1}
-                                    onChange={patch => patchLine(l.key, patch)}
-                                    onRemove={() => removeLine(l.key)}
-                                    colors={colors}
-                                    field={field}
-                                    label={label}
-                                />
-                            ))}
-                            <TouchableOpacity style={[styles.addItemBtn, { borderColor: colors.primary }]} onPress={addLine}>
-                                <Ionicons name="add" size={18} color={colors.primary} />
-                                <Text style={[styles.addItemText, { color: colors.primary }]}>Add item</Text>
+                    <SectionCard icon="business" title="Customer" subtitle={customer ? undefined : 'Search by name (2+ letters)'}>
+                        {customer ? (
+                            <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => { setCustomer(null); setCustomerQuery(''); }}>
+                                <Text style={[styles.selectedText, { color: colors.primaryVariant }]}>{customer.customer_name || customer.name}</Text>
+                                <Ionicons name="close-circle" size={18} color={colors.primary} />
                             </TouchableOpacity>
-                            <Text style={label}>Special Instructions</Text>
-                            <TextInput
-                                style={[field, { minHeight: 220, textAlignVertical: 'top' }]}
-                                placeholder="Optional"
-                                placeholderTextColor={colors.textSecondary}
-                                value={specialInstructions}
-                                onChangeText={setSpecialInstructions}
-                                onFocus={() => setTimeout(() => formScrollRef.current?.scrollToEnd({ animated: true }), 350)}
-                                multiline
+                        ) : (
+                            <View>
+                                <TextInput
+                                    style={field}
+                                    placeholder="Search customer"
+                                    placeholderTextColor={colors.placeholder}
+                                    value={customerQuery}
+                                    onChangeText={setCustomerQuery}
+                                />
+                                {customerResults.map(c => (
+                                    <TouchableOpacity key={c.name} style={[styles.resultRow, { borderBottomColor: colors.border }]} onPress={() => { setCustomer(c); setCustomerResults([]); }}>
+                                        <Text style={[styles.resultText, { color: colors.text }]}>{c.customer_name || c.name}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </SectionCard>
+
+                    <SectionCard icon="cube" title="Items" subtitle={`${lines.length} ${lines.length === 1 ? 'line' : 'lines'} · ${brand}`}>
+                        {lines.map((l, i) => (
+                            <ItemLine
+                                key={l.key}
+                                index={i}
+                                line={l}
+                                brand={brand}
+                                canRemove={lines.length > 1}
+                                onChange={patch => patchLine(l.key, patch)}
+                                onRemove={() => removeLine(l.key)}
+                                colors={colors}
+                                field={field}
+                                label={label}
                             />
-                        </>
-                    )}
+                        ))}
+                        <TouchableOpacity style={[styles.addItemBtn, { borderColor: colors.primary }]} onPress={addLine}>
+                            <Ionicons name="add" size={18} color={colors.primary} />
+                            <Text style={[styles.addItemText, { color: colors.primaryVariant }]}>Add item</Text>
+                        </TouchableOpacity>
+                    </SectionCard>
+
+                    <SectionCard icon="document-text" title="Special Instructions" subtitle="Optional">
+                        <TextInput
+                            style={[field, { minHeight: 160, textAlignVertical: 'top' }]}
+                            placeholder="Anything the quote desk should know"
+                            placeholderTextColor={colors.placeholder}
+                            value={specialInstructions}
+                            onChangeText={setSpecialInstructions}
+                            onFocus={() => setTimeout(() => formScrollRef.current?.scrollToEnd({ animated: true }), 350)}
+                            multiline
+                        />
+                    </SectionCard>
 
                     <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary }]} onPress={save} disabled={saving}>
-                        {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveText}>Save and Send to ERP</Text>}
+                        {saving ? <ActivityIndicator color="#FFF" /> : (
+                            <>
+                                <Text style={styles.saveText}>Save and Send to ERP</Text>
+                                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                            </>
+                        )}
                     </TouchableOpacity>
                 </ScrollView>
             )}
@@ -293,7 +302,7 @@ function ItemLine({
     }, [line.query, line.item, brand]);
 
     return (
-        <View style={styles.lineBox}>
+        <View style={[styles.lineBox, { borderColor: colors.border }]}>
             <View style={styles.lineHead}>
                 <Text style={label}>Item {index + 1}</Text>
                 {canRemove && (
@@ -304,7 +313,7 @@ function ItemLine({
             </View>
             {line.item ? (
                 <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => onChange({ item: null, query: '', results: [] })}>
-                    <Text style={[styles.selectedText, { color: colors.primary }]}>{line.item.item_name}</Text>
+                    <Text style={[styles.selectedText, { color: colors.primaryVariant }]}>{line.item.item_name}</Text>
                     <Ionicons name="close-circle" size={18} color={colors.primary} />
                 </TouchableOpacity>
             ) : (
@@ -339,24 +348,25 @@ function ItemLine({
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    typeWrap: { padding: 16, gap: 14, marginTop: 24 },
-    typeBtn: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: Radius.lg, padding: 22 },
-    typeText: { fontSize: 17, fontWeight: '800' },
-    pad: { padding: 16, gap: 8, paddingBottom: 32 },
-    label: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 12 },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1 },
-    chipText: { fontSize: 13, fontWeight: '700' },
+    pad: { padding: 16, gap: 14, paddingBottom: 32 },
+    question: { fontSize: 18, fontWeight: '800', marginTop: 4 },
+    option: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderRadius: 22, padding: 16 },
+    optionTitle: { fontSize: 16, fontWeight: '800' },
+    optionSub: { fontSize: 12.5, marginTop: 3 },
+    brandGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    brandCard: { width: '48%', flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.lg, padding: 12 },
+    brandText: { flex: 1, fontSize: 14, fontWeight: '800' },
+    label: { fontSize: 12, fontWeight: '700' },
     input: { borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, borderWidth: 1 },
-    selected: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
-    selectedText: { fontSize: 14, fontWeight: '700', flex: 1 },
+    selected: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
+    selectedText: { fontSize: 14, fontWeight: '800', flex: 1 },
     resultRow: { paddingVertical: 10, borderBottomWidth: 1, gap: 2 },
     resultText: { fontSize: 14, fontWeight: '600' },
-    hint: { fontSize: 12, fontWeight: '600' },
-    lineBox: { gap: 8, marginTop: 4, paddingTop: 4 },
+    hint: { fontSize: 12, fontWeight: '700' },
+    lineBox: { gap: 8, borderWidth: 1, borderRadius: Radius.md, padding: 12 },
     lineHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    addItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12, marginTop: 14 },
+    addItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12 },
     addItemText: { fontSize: 14, fontWeight: '800' },
-    saveBtn: { borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
-    saveText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
+    saveBtn: { flexDirection: 'row', gap: 8, borderRadius: 16, height: 54, alignItems: 'center', justifyContent: 'center', marginTop: 4, shadowColor: '#E4572E', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+    saveText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
 });

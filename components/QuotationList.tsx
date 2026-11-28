@@ -4,9 +4,10 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius, Shadow, StatusColors } from '@/constants/theme';
 import { useResponsive } from '../hooks/useResponsive';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterRow } from '@/constants/motion';
 import { apiPost } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
 
@@ -50,6 +51,46 @@ interface Quotation {
     color?: string;
 }
 
+/** Which bucket a quote falls in. Same rules the filter pills use. */
+export function quoteFlags(q: Pick<Quotation, 'workflow_state' | 'status' | 'docstatus'>) {
+    const workflow = (q.workflow_state || '').toUpperCase().replace('-', '');
+    const status = (q.status || '').toUpperCase().replace('-', '');
+    // Treat workflow_state as the primary state if present, fallback to standard status.
+    // This prevents Frappe's default 'Draft' status from pulling 'Pending' items into the Draft tab.
+    const activeState = workflow || status || 'DRAFT';
+    const isCanceled = activeState.includes('CANCEL') || activeState.includes('REJECT') || activeState.includes('DECLINE') || q.docstatus === 2;
+    const isApproved = activeState.includes('APPROV') || activeState.includes('ORDER') || activeState === 'SUBMITTED' || (q.docstatus === 1 && !isCanceled);
+    const isPending = activeState.includes('PENDING') || activeState === 'OPEN';
+    const isReview = activeState.includes('REVIEW');
+    const isReopen = activeState.includes('REOPEN') || activeState.includes('RESUBMIT');
+    const isDraft = activeState === 'DRAFT' || activeState === '';
+    return { activeState, isCanceled, isApproved, isPending, isReview, isReopen, isDraft };
+}
+
+/** The quote's value, from whichever total field the endpoint filled. */
+export function quoteAmount(q: Partial<Quotation>): number {
+    return Number(q.grand_total ?? q.net_total ?? q.base_net_total ?? q.rounded_total ?? q.total ?? q.total_amount ?? q.base_grand_total ?? 0) || 0;
+}
+
+/** Status colour (Midnight x Ember). `color` is the backend's own colour name, when it sends one. */
+export function quoteStatusColor(status: string, color?: string): string {
+    const c = (color || '').toLowerCase();
+    if (c === 'green') return StatusColors.approved;
+    if (c === 'orange') return StatusColors.review;
+    if (c === 'blue') return StatusColors.pending;
+    if (c === 'red') return StatusColors.cancelled;
+    if (c === 'grey' || c === 'gray') return StatusColors.draft;
+    const s = (status || '').toUpperCase().replace('-', '');
+    if (s.includes('CANCEL') || s.includes('REJECT') || s.includes('DECLINE')) return StatusColors.cancelled;
+    if (s.includes('REOPEN') || s.includes('RESUBMIT')) return StatusColors.reopen;
+    if (s.includes('APPROV') || s.includes('ORDER') || s.includes('SUBMIT')) return StatusColors.approved;
+    if (s.includes('PENDING')) return StatusColors.pending;
+    if (s.includes('REVIEW') || s === 'OPEN') return StatusColors.review;
+    return StatusColors.draft;
+}
+
+export type { Quotation };
+
 interface QuotationListProps {
     filter?: string;
     searchQuery?: string;
@@ -57,14 +98,15 @@ interface QuotationListProps {
     /** Reports the distinct workflow states in the fetched data, so the parent
      *  screen can build its filter pills without refetching the list. */
     onStatesLoaded?: (states: string[]) => void;
+    /** Hands the whole fetched list to the parent (for the figures in the header). */
+    onLoaded?: (list: Quotation[]) => void;
 }
 
-export default function QuotationList({ filter = 'All', searchQuery = '', scrollEnabled = true, onStatesLoaded }: QuotationListProps) {
+export default function QuotationList({ filter = 'All', searchQuery = '', scrollEnabled = true, onStatesLoaded, onLoaded }: QuotationListProps) {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
-    const isDark = theme === 'dark';
     const { s, vs, ms } = useResponsive();
     // StyleSheet.create() on every render also defeated the memoised renderItem below.
     const styles = useMemo(() => getStyles(theme, { s, vs, ms }), [theme, s, vs, ms]);
@@ -104,6 +146,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                 });
 
                 setAllQuotations(deduped);
+                onLoaded?.(deduped);
 
                 if (onStatesLoaded) {
                     const states = Array.from(new Set(
@@ -134,19 +177,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
 
             filtered = filtered.filter(q => {
                 const cat = (q.dashboard_category || '').toUpperCase().replace('-', '');
-                const workflow = (q.workflow_state || '').toUpperCase().replace('-', '');
-                const status = (q.status || '').toUpperCase().replace('-', '');
-
-                // Treat workflow_state as the primary state if present, fallback to standard status.
-                // This prevents Frappe's default 'Draft' status from pulling 'Pending' items into the Draft tab.
-                const activeState = workflow || status || 'DRAFT';
-
-                const isCanceled = activeState.includes('CANCEL') || activeState.includes('REJECT') || activeState.includes('DECLINE') || q.docstatus === 2;
-                const isApproved = activeState.includes('APPROV') || activeState.includes('ORDER') || activeState === 'SUBMITTED' || (q.docstatus === 1 && !isCanceled);
-                const isPending = activeState.includes('PENDING') || activeState === 'OPEN';
-                const isReview = activeState.includes('REVIEW');
-                const isReopen = activeState.includes('REOPEN') || activeState.includes('RESUBMIT');
-                const isDraft = activeState === 'DRAFT' || activeState === '';
+                const { activeState, isCanceled, isApproved, isPending, isReview, isReopen, isDraft } = quoteFlags(q);
 
                 if (target === 'APPROVED') return isApproved && !isCanceled;
                 if (target === 'CANCELLED') return isCanceled;
@@ -171,43 +202,6 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
 
         return filtered;
     }, [allQuotations, filter, searchQuery]);
-
-    const getStatusColors = (status: string, color?: string) => {
-        const isDark = theme === 'dark';
-        
-        // 1. If explicit color name provided by backend
-        if (color) {
-            const c = color.toLowerCase();
-            if (c === 'green') return { bg: 'rgba(0, 191, 165, 0.1)', text: '#00BFA5', border: 'rgba(0, 191, 165, 0.2)' };
-            if (c === 'orange') return { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.2)' };
-            if (c === 'blue') return { bg: 'rgba(59, 130, 246, 0.1)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.2)' };
-            if (c === 'red') return { bg: 'rgba(239, 68, 68, 0.1)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.2)' };
-            if (c === 'grey' || c === 'gray') return { bg: 'rgba(148, 163, 184, 0.1)', text: '#94A3B8', border: 'rgba(148, 163, 184, 0.2)' };
-        }
-
-        // 2. Logic fallback
-        const s = status.toUpperCase();
-        if (s === 'APPROVED' || s === 'ORDERED' || s === 'SUBMITTED') {
-            return { bg: 'rgba(0, 191, 165, 0.1)', text: '#00BFA5', border: 'rgba(0, 191, 165, 0.2)' };
-        }
-        if (s === 'PENDING') {
-            return { bg: 'rgba(59, 130, 246, 0.1)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.2)' };
-        }
-        if (s === 'REVIEW' || s === 'OPEN') {
-            return { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.2)' };
-        }
-        if (s.includes('REOPEN') || s.includes('RESUBMIT')) {
-            return { bg: 'rgba(30, 58, 138, 0.1)', text: '#1E3A8A', border: 'rgba(30, 58, 138, 0.2)' };
-        }
-        if (s === 'CANCELLED') {
-            return { bg: 'rgba(239, 68, 68, 0.1)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.2)' };
-        }
-        if (s === 'DRAFT') {
-            return { bg: 'rgba(148, 163, 184, 0.1)', text: '#94A3B8', border: 'rgba(148, 163, 184, 0.2)' };
-        }
-
-        return { bg: isDark ? 'rgba(255,255,255,0.05)' : '#F5F7FA', text: '#94A3B8', border: isDark ? 'rgba(255,255,255,0.1)' : '#ECEFF1' };
-    };
 
     const formatDate = (dateString: string) => {
         if (!dateString) return '';
@@ -253,96 +247,61 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
         return rawName.trim().replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'System';
     };
 
-    const renderItem = useCallback(({ item }: { item: Quotation }) => {
+    const renderItem = useCallback(({ item, index }: { item: Quotation; index?: number }) => {
         const displayStatus = item.display_status || item.workflow_state || item.status || 'Draft';
-        const statusConfig = getStatusColors(displayStatus, item.color);
-
-        const amount = Number(item.grand_total ?? item.net_total ?? item.base_net_total ?? item.rounded_total ?? item.total ?? item.total_amount ?? item.base_grand_total ?? 0);
-        const formattedAmount = amount.toLocaleString('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        }).replace('INR', '₹');
-
+        const tone = quoteStatusColor(displayStatus, item.color);
+        const amount = quoteAmount(item);
+        const formattedAmount = '₹' + amount.toLocaleString('en-IN', { maximumFractionDigits: 0 });
         const date = formatDate(item.transaction_date) || formatDate(item.posting_date || '') || formatDate(item.date || '') || formatDate(item.creation || '');
+        const margin = item.item_margin ?? item.total_margin;
+        const validTill = item.valid_till || item.valid_until || '';
+        const validTime = validTill ? new Date(validTill.replace(' ', 'T')).getTime() : NaN;
+        const expired = !isNaN(validTime) && validTime < Date.now() - 86400000;
 
         return (
-            <Animated.View entering={FadeInDown.delay(100 + (item.name.charCodeAt(0) % 5) * 50).springify()}>
+            <Animated.View entering={enterRow(index ?? 0)}>
                 <TouchableOpacity
                     activeOpacity={0.9}
                     style={styles.card}
-                    onPress={() => {
-                        router.push({ pathname: '/quotations/[id]', params: { id: item.name } });
-                    }}
+                    onPress={() => router.push({ pathname: '/quotations/[id]', params: { id: item.name } })}
                 >
-                    {/* Status Accent Line */}
-                    <View style={[styles.statusAccent, { backgroundColor: statusConfig.text }]} />
-
-                    <View style={styles.cardContent}>
-                        {/* Top: Header Info */}
-                        <View style={styles.cardHeader}>
-                            <View style={styles.idBadge}>
-                                <Text style={styles.idText}>#{item.name}</Text>
-                            </View>
-                            <View style={[styles.statusPill, { backgroundColor: statusConfig.bg + '10', borderColor: statusConfig.border }]}>
-                                <View style={[styles.statusDot, { backgroundColor: statusConfig.text }]} />
-                                <Text style={[styles.statusText, { color: statusConfig.text }]}>
-                                    {displayStatus}
-                                </Text>
+                    <View style={[styles.edge, { backgroundColor: tone }]} />
+                    <View style={styles.cardBody}>
+                        <View style={styles.topRow}>
+                            <Text style={styles.qid} numberOfLines={1}>#{item.name}</Text>
+                            <View style={[styles.pill, { backgroundColor: tone + '1F' }]}>
+                                <View style={[styles.pillDot, { backgroundColor: tone }]} />
+                                <Text style={[styles.pillText, { color: tone }]} numberOfLines={1}>{displayStatus}</Text>
                             </View>
                         </View>
-
-                        {/* Middle: Customer Name & Margin */}
-                        <View style={styles.projectInfoRow}>
+                        <View style={styles.midRow}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.customerName} numberOfLines={1}>{item.customer_name}</Text>
+                                <Text style={styles.metaText} numberOfLines={1}>{date} · {formatCreatorName(item)}</Text>
                             </View>
-                            {(item.item_margin !== undefined || item.total_margin !== undefined) && (
-                                <View style={styles.marginChip}>
-                                    <Text style={styles.marginChipLabel}>Margin</Text>
-                                    <View style={styles.marginValueContainer}>
-                                        <Ionicons name="trending-up" size={10} color="#059669" />
-                                        <Text style={styles.marginChipValue}>₹{(item.item_margin ?? item.total_margin ?? 0).toLocaleString()}</Text>
+                            <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={styles.amountText}>{formattedAmount}</Text>
+                                {margin !== undefined && margin !== null ? (
+                                    <View style={styles.marginRow}>
+                                        <Ionicons name="trending-up" size={12} color={colors.success} />
+                                        <Text style={[styles.marginText, { color: colors.success }]}>₹{Number(margin).toLocaleString('en-IN')} margin</Text>
                                     </View>
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Meta Row: Date and Creator */}
-                        <View style={styles.metaRow}>
-                            <View style={styles.metaItem}>
-                                <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
-                                <Text style={styles.metaText}>{date}</Text>
-                            </View>
-                            <View style={styles.metaDivider} />
-                            <View style={styles.metaItem}>
-                                <Ionicons name="person-outline" size={14} color={colors.textSecondary} />
-                                <Text style={styles.metaText}>{formatCreatorName(item)}</Text>
+                                ) : null}
                             </View>
                         </View>
-
-                        {/* Footer: Amount and Expiry */}
-                        <View style={styles.cardFooter}>
-                            <View style={styles.amountContainer}>
-                                <Text style={styles.amountLabel}>Total Value</Text>
-                                <Text style={[styles.amountText, { color: statusConfig.text }]}>{formattedAmount}</Text>
+                        {validTill ? (
+                            <View style={styles.validRow}>
+                                <Ionicons name="time-outline" size={13} color={expired ? colors.danger : colors.textSecondary} />
+                                <Text style={[styles.validText, { color: expired ? colors.danger : colors.textSecondary }]}>
+                                    {expired ? 'Expired' : 'Valid till'} {formatDate(validTill)}
+                                </Text>
                             </View>
-
-                            {(item.valid_till || item.valid_until) && (
-                                <View style={styles.expiryBadge}>
-                                    <Ionicons name="time-outline" size={12} color={isDark ? '#FCA5A5' : '#EF4444'} />
-                                    <Text style={styles.expiryText}>
-                                        {formatDate(item.valid_till || item.valid_until || '')}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
+                        ) : null}
                     </View>
                 </TouchableOpacity>
             </Animated.View>
         );
-    }, [styles, colors, isDark, router]);
+    }, [styles, colors, router]);
 
     if (loading) {
         return (
@@ -378,8 +337,8 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                 />
             ) : (
                 <View style={styles.listContent}>
-                    {quotations.map(item => (
-                        <View key={item.name}>{renderItem({ item })}</View>
+                    {quotations.map((item, i) => (
+                        <View key={item.name}>{renderItem({ item, index: i })}</View>
                     ))}
                 </View>
             )}
@@ -388,187 +347,36 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
 }
 
 function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
-    const isDark = theme === 'dark';
     const colors = Colors[theme];
     return StyleSheet.create({
-        container: {
-            flex: 1,
-        },
-        center: {
-            padding: 40,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        listContent: {
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: 100,
-        },
+        container: { flex: 1 },
+        center: { padding: 40, alignItems: 'center', justifyContent: 'center' },
+        listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 100 },
         card: {
             backgroundColor: colors.surface,
             borderRadius: Radius.lg,
-            marginBottom: 14,
+            marginBottom: 12,
             borderWidth: 1,
             borderColor: colors.border,
             flexDirection: 'row',
             overflow: 'hidden',
             ...Shadow.card(theme),
         },
-        statusAccent: {
-            width: 5,
-            height: '100%',
-        },
-        cardContent: {
-            flex: 1,
-            padding: 16,
-        },
-        cardHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 10,
-        },
-        idBadge: {
-            backgroundColor: colors.primarySoft,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 6,
-        },
-        idText: {
-            fontSize: 10,
-            color: colors.primary,
-            fontWeight: '800',
-            letterSpacing: 0.5,
-        },
-        customerName: {
-            fontSize: ms(16),
-            fontWeight: '900',
-            color: colors.text,
-            letterSpacing: -0.3,
-            marginBottom: 10,
-            textTransform: 'uppercase',
-        },
-        metaRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: 16,
-            gap: 10,
-        },
-        metaItem: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 5,
-        },
-        metaText: {
-            fontSize: 12,
-            color: colors.textSecondary,
-            fontWeight: '600',
-        },
-        metaDivider: {
-            width: 3,
-            height: 3,
-            borderRadius: 1.5,
-            backgroundColor: colors.border,
-        },
-        statusPill: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 3,
-            paddingHorizontal: 8,
-            borderRadius: 8,
-            borderWidth: 1,
-            gap: 4,
-        },
-        statusDot: {
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-        },
-        statusText: {
-            fontSize: ms(9),
-            fontWeight: '800',
-            textTransform: 'uppercase',
-            letterSpacing: 0.8,
-        },
-        cardFooter: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
-            paddingTop: 12,
-            borderTopWidth: 1,
-            borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
-        },
-        amountContainer: {
-            flex: 1,
-        },
-        amountLabel: {
-            fontSize: 9,
-            color: colors.textSecondary,
-            fontWeight: '800',
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-            marginBottom: 2,
-        },
-        amountText: {
-            fontSize: ms(20),
-            fontWeight: '900',
-            color: '#00BFA5',
-            letterSpacing: -0.5,
-        },
-        expiryBadge: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEE2E2',
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 6,
-            gap: 4,
-        },
-        expiryText: {
-            fontSize: 10,
-            color: isDark ? '#FCA5A5' : '#EF4444',
-            fontWeight: '800',
-        },
-        emptyText: {
-            color: colors.textSecondary,
-            fontSize: 15,
-            marginTop: 12,
-            fontWeight: '600',
-        },
-        projectInfoRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 10,
-            gap: 8,
-        },
-        marginChip: {
-            backgroundColor: isDark ? 'rgba(16, 185, 129, 0.1)' : '#ECFDF5',
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5',
-            alignItems: 'center',
-        },
-        marginChipLabel: {
-            fontSize: 8,
-            color: '#10B981',
-            fontWeight: '900',
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-            marginBottom: 2,
-        },
-        marginValueContainer: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 3,
-        },
-        marginChipValue: {
-            fontSize: 13,
-            color: '#059669',
-            fontWeight: '900',
-        },
+        edge: { width: 4 },
+        cardBody: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, gap: 6 },
+        topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+        qid: { flexShrink: 1, fontSize: 11, fontWeight: '800', color: colors.primaryVariant, letterSpacing: 0.2 },
+        pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: Radius.pill },
+        pillDot: { width: 6, height: 6, borderRadius: 3 },
+        pillText: { fontSize: ms(11), fontWeight: '800' },
+        midRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+        customerName: { fontSize: ms(15), fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+        metaText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500', marginTop: 2 },
+        amountText: { fontSize: ms(16), fontWeight: '800', color: colors.text },
+        marginRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
+        marginText: { fontSize: 11, fontWeight: '800' },
+        validRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+        validText: { fontSize: 11.5, fontWeight: '700' },
+        emptyText: { color: colors.textSecondary, fontSize: 15, marginTop: 12, fontWeight: '600' },
     });
 }
-

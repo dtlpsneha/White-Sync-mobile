@@ -1,32 +1,35 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView as RNScrollView } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { BackHandler, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import SalesOrderList from '@/components/SalesOrderList';
-import { apiPost } from '@/utils/api';
+import SalesOrderList, { SalesOrder, orderStatusColor } from '@/components/SalesOrderList';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { useResponsive } from '@/hooks/useResponsive';
-import { apiUrl } from '@/constants/config';
+import { BandStats } from '@/components/ui/Midnight';
+
+const BASE_STATES = ['Pending', 'Approved', 'Cancelled', 'Draft'];
+
+/** ₹ in short Indian units for the header figures: ₹4.2L, ₹1.3Cr. */
+function shortRupees(n: number): string {
+    if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`;
+    if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
+    if (n >= 1e3) return `₹${Math.round(n / 1e3)}K`;
+    return `₹${Math.round(n)}`;
+}
 
 export default function SalesOrderScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const colorScheme = useColorScheme();
-    const theme = colorScheme ?? 'light';
+    const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
-    const { s, vs, ms } = useResponsive();
-    const styles = getStyles(theme, { s, vs, ms });
+    const styles = useMemo(() => getStyles(theme), [theme]);
+    const insets = useSafeAreaInsets();
 
     const [filter, setFilter] = useState((params.filter as string) || 'All');
     const [searchQuery, setSearchQuery] = useState('');
-    const [workflowStates, setWorkflowStates] = useState<string[]>(['All', 'Pending', 'Approved', 'Cancelled', 'Draft']);
-
-    useEffect(() => {
-        fetchWorkflowStates();
-    }, []);
+    const [orders, setOrders] = useState<SalesOrder[] | null>(null);
 
     // Reached via router.replace (see SideNav), so nothing sits beneath it
     // on the navigation stack — without this, Android's hardware/gesture
@@ -43,137 +46,151 @@ export default function SalesOrderScreen() {
         }, [router])
     );
 
-    const fetchWorkflowStates = async () => {
-        try {
-            const sessionCookies = await SecureStore.getItemAsync('session_cookies');
-            const res = await apiPost(apiUrl('/api/method/get_sales_order_resource'), {}, sessionCookies);
-            const data: any = res.data;
-
-            if (res.ok && data && data.message && data.message.success && Array.isArray(data.message.data)) {
-                const orders = data.message.data;
-                const states: string[] = orders
-                    .reduce((acc: string[], o: any) => {
-                        const displayStatus = (o.workflow_state || o.status || '').trim();
-                        if (displayStatus && !acc.some(s => s.toUpperCase() === displayStatus.toUpperCase())) {
-                            acc.push(displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1).toLowerCase());
-                        }
-                        return acc;
-                    }, [])
-                    .sort();
-
-                setWorkflowStates(['All', 'Pending', 'Approved', 'Cancelled', 'Draft', ...states.filter(s => !['Pending', 'Approved', 'Cancelled', 'Draft'].includes(s))]);
-            }
-        } catch (error) {
-            console.error('Error fetching sales order states:', error);
+    // Filter pills: the four standard ones plus every other status in the list
+    // SalesOrderList already fetched (this screen used to download it a second time).
+    const workflowStates = useMemo(() => {
+        const extra: string[] = [];
+        for (const o of orders || []) {
+            const st = (o.workflow_state || o.status || '').trim();
+            if (!st) continue;
+            const label = st.charAt(0).toUpperCase() + st.slice(1).toLowerCase();
+            if (!BASE_STATES.includes(label) && !extra.some(x => x.toUpperCase() === label.toUpperCase())) extra.push(label);
         }
-    };
+        return ['All', ...BASE_STATES, ...extra.sort()];
+    }, [orders]);
+
+    const stats = useMemo(() => {
+        if (!orders) return null;
+        let open = 0, openValue = 0, drafts = 0;
+        for (const o of orders) {
+            const st = (o.workflow_state || o.status || '').toUpperCase();
+            if (st.includes('DRAFT')) drafts += 1;
+            else if (st.startsWith('TO ') || st.includes('OPEN') || st.includes('PENDING') || st.includes('HOLD')) {
+                open += 1;
+                openValue += Number(o.grand_total) || 0;
+            }
+        }
+        return { total: orders.length, open, openValue, drafts };
+    }, [orders]);
 
     return (
         <View style={styles.container}>
             <ScreenHeader
-                title="Customer Purchase Order"
+                title="Customer PO"
+                subtitle="Sales orders in ERPNext"
+                align="left"
                 onBack={() => router.replace('/home')}
             >
-                <View style={styles.searchInner}>
-                    <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+                <BandStats
+                    items={[
+                        { label: 'Open orders', value: stats ? String(stats.open) : '—', note: 'to deliver or bill' },
+                        { label: 'Open value', value: stats ? shortRupees(stats.openValue) : '—', note: stats ? `${stats.total} orders in all` : ' ', color: colors.amber },
+                        { label: 'Drafts', value: stats ? String(stats.drafts) : '—', note: 'not submitted', color: colors.onInk },
+                    ]}
+                />
+            </ScreenHeader>
+
+            <View style={styles.tools}>
+                <View style={[styles.search, Shadow.card(theme)]}>
+                    <Ionicons name="search" size={18} color={colors.textSecondary} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Search orders..."
+                        placeholder="Search orders…"
                         placeholderTextColor={colors.placeholder}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
                     {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                        <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
                         </TouchableOpacity>
                     )}
                 </View>
 
-                <RNScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.filterScrollContent}
-                    style={styles.filterBarContainer}
-                >
-                    {workflowStates.map((item) => {
-                        const isActive = filter === item;
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipBar}>
+                    {workflowStates.map(item => {
+                        const on = filter === item;
                         return (
                             <TouchableOpacity
                                 key={item}
-                                style={[styles.filterPill, isActive && styles.filterPillActive]}
+                                style={[styles.chip, on && styles.chipOn]}
                                 onPress={() => setFilter(item)}
                                 activeOpacity={0.85}
                             >
-                                <Text style={[styles.filterText, isActive && { color: colors.primary, fontWeight: '800' }]}>
-                                    {item}
-                                </Text>
+                                {item !== 'All' ? <View style={[styles.chipDot, { backgroundColor: on ? '#FFF' : orderStatusColor(item) }]} /> : null}
+                                <Text style={[styles.chipText, on && styles.chipTextOn]}>{item}</Text>
                             </TouchableOpacity>
                         );
                     })}
-                </RNScrollView>
-            </ScreenHeader>
-
-            <View style={styles.listContainer}>
-                <SalesOrderList filter={filter} searchQuery={searchQuery} scrollEnabled={true} />
+                </ScrollView>
             </View>
 
-            {/* Floating Action Button for Add */}
-            <TouchableOpacity 
-                style={styles.fab} 
+            <View style={styles.listContainer}>
+                <SalesOrderList filter={filter} searchQuery={searchQuery} scrollEnabled={true} onLoaded={setOrders} />
+            </View>
+
+            <TouchableOpacity
+                style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + 24 }]}
                 activeOpacity={0.8}
                 onPress={() => router.push('/sales-orders/create' as any)}
             >
-                <Ionicons name="add" size={32} color={colors.onPrimary} />
+                <Ionicons name="add" size={30} color={colors.onPrimary} />
             </TouchableOpacity>
         </View>
     );
 }
 
-function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
+function getStyles(theme: 'light' | 'dark') {
     const colors = Colors[theme];
     return StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
-        searchInner: {
+        tools: { paddingTop: 14, paddingHorizontal: 16, gap: 12, paddingBottom: 12 },
+        search: {
             flexDirection: 'row',
             alignItems: 'center',
+            gap: 10,
             backgroundColor: colors.surface,
-            borderRadius: 16,
-            height: 50,
+            borderRadius: Radius.md,
+            borderWidth: 1,
+            borderColor: colors.border,
+            height: 46,
             paddingHorizontal: 14,
         },
-        searchIcon: { marginRight: 10 },
-        searchInput: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
-        filterBarContainer: { marginTop: 14, marginHorizontal: -16 },
-        filterScrollContent: { paddingHorizontal: 16, gap: 10 },
-        filterPill: {
-            paddingVertical: 9,
-            paddingHorizontal: 18,
-            borderRadius: 999,
-            backgroundColor: 'rgba(255,255,255,0.18)',
+        searchInput: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },
+        chipBar: { marginHorizontal: -16, flexGrow: 0 },
+        chips: { paddingHorizontal: 16, gap: 8 },
+        chip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 7,
+            paddingHorizontal: 13,
+            borderRadius: Radius.pill,
+            backgroundColor: colors.surface,
             borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.3)',
+            borderColor: colors.border,
         },
-        filterPillActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
-        filterText: { color: 'rgba(255,255,255,0.92)', fontWeight: '700', fontSize: 13 },
+        chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+        chipDot: { width: 6, height: 6, borderRadius: 3 },
+        chipText: { color: colors.text, fontWeight: '700', fontSize: 12.5 },
+        chipTextOn: { color: '#FFF' },
         listContainer: { flex: 1 },
         fab: {
             position: 'absolute',
-            bottom: vs(70),
-            right: 24,
-            width: 64,
-            height: 64,
-            borderRadius: 32,
+            bottom: 70,
+            right: 22,
+            width: 60,
+            height: 60,
+            borderRadius: 20,
             backgroundColor: colors.primary,
             justifyContent: 'center',
             alignItems: 'center',
             elevation: 8,
             shadowColor: colors.primary,
-            shadowOffset: { width: 0, height: 4 },
+            shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.4,
-            shadowRadius: 12,
+            shadowRadius: 14,
             zIndex: 1000,
-        }
+        },
     });
 }
-

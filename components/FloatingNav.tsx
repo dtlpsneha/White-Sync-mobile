@@ -25,15 +25,15 @@ const NAV_ROUTES = [
 ];
 
 const NAV_ITEMS = [
-    { id: 'home',       label: 'Home',                         icon: 'home-outline' as const,          activeIcon: 'home' as const,          route: '/home',                           color: '#3B82F6', mode: 'replace' as const },
-    { id: 'team',       label: 'Team Chat',                    icon: 'chatbubbles-outline' as const,   activeIcon: 'chatbubbles' as const,   route: '/team',                           color: '#059669', mode: 'replace' as const },
-    { id: 'quotes',     label: 'Quotation',                    icon: 'document-text-outline' as const, activeIcon: 'document-text' as const, route: '/quotations',                     color: '#F59E0B', mode: 'replace' as const },
-    { id: 'orders',     label: 'Customer Purchase Order',      icon: 'cart-outline' as const,          activeIcon: 'cart' as const,          route: '/sales-orders',                   color: '#14B8A6', mode: 'replace' as const },
-    { id: 'visits',     label: 'Customer Visit',               icon: 'calendar-outline' as const,      activeIcon: 'calendar' as const,      route: '/maintenance',                    color: '#8B5CF6', mode: 'replace' as const },
-    { id: 'daily-sales',label: 'Daily Sales Report',           icon: 'bar-chart-outline' as const,     activeIcon: 'bar-chart' as const,     route: '/daily-sales-report',             color: '#F97316', mode: 'push' as const },
-    { id: 'invoices',   label: 'Sales Invoice History',        icon: 'receipt-outline' as const,       activeIcon: 'receipt' as const,       route: '/daily-sales-report/invoice-history', color: '#0891B2', mode: 'push' as const },
-    { id: 'calculator', label: 'Habasit Calculator',           icon: 'calculator-outline' as const,    activeIcon: 'calculator' as const,    route: '/price-calculator',               color: '#10B981', mode: 'push' as const },
-    { id: 'profile',    label: 'Profile',                      icon: 'person-outline' as const,        activeIcon: 'person' as const,        route: '/profile',                        color: '#6366F1', mode: 'replace' as const },
+    { id: 'home',       label: 'Home',                         icon: 'home-outline' as const,          activeIcon: 'home' as const,          route: '/home',                           color: '#1F2421', mode: 'replace' as const },
+    { id: 'team',       label: 'Team Chat',                    icon: 'chatbubbles-outline' as const,   activeIcon: 'chatbubbles' as const,   route: '/team',                           color: '#E4572E', mode: 'replace' as const },
+    { id: 'quotes',     label: 'Quotation',                    icon: 'document-text-outline' as const, activeIcon: 'document-text' as const, route: '/quotations',                     color: '#D99A14', mode: 'replace' as const },
+    { id: 'orders',     label: 'Customer Purchase Order',      icon: 'cart-outline' as const,          activeIcon: 'cart' as const,          route: '/sales-orders',                   color: '#2F5D50', mode: 'replace' as const },
+    { id: 'visits',     label: 'Customer Visit',               icon: 'calendar-outline' as const,      activeIcon: 'calendar' as const,      route: '/maintenance',                    color: '#8E5BB5', mode: 'replace' as const },
+    { id: 'daily-sales',label: 'Daily Sales Report',           icon: 'bar-chart-outline' as const,     activeIcon: 'bar-chart' as const,     route: '/daily-sales-report',             color: '#E4572E', mode: 'push' as const },
+    { id: 'invoices',   label: 'Sales Invoice History',        icon: 'receipt-outline' as const,       activeIcon: 'receipt' as const,       route: '/daily-sales-report/invoice-history', color: '#3E7CB1', mode: 'push' as const },
+    { id: 'calculator', label: 'Habasit Calculator',           icon: 'calculator-outline' as const,    activeIcon: 'calculator' as const,    route: '/price-calculator',               color: '#2F7D5B', mode: 'push' as const },
+    { id: 'profile',    label: 'Profile',                      icon: 'person-outline' as const,        activeIcon: 'person' as const,        route: '/profile',                        color: '#7A6F62', mode: 'replace' as const },
 ];
 
 export const FloatingNav = () => {

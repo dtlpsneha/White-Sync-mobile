@@ -26,7 +26,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterSection } from '@/constants/motion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import {
@@ -952,7 +953,7 @@ export default function MaintenanceDetailScreen() {
 
                     {/* Tab Content: Details */}
                     {activeTab === 'details' && (
-                        <Animated.View entering={FadeInDown.duration(400)}>
+                        <Animated.View entering={enterSection(0)}>
                             <Section title="Customer & Schedule" icon="business">
                                 {!isEditing ? (
                                     <>
@@ -1251,7 +1252,7 @@ export default function MaintenanceDetailScreen() {
 
                     {/* Tab Content: Location */}
                     {activeTab === 'location' && (
-                        <Animated.View entering={FadeInDown.duration(400)}>
+                        <Animated.View entering={enterSection(0)}>
                             <Section title="Location" icon="navigate">
                                 <View style={styles.locationCard}>
                                     <View style={[styles.locationInfo, { backgroundColor: colors.background }]}>
@@ -1321,7 +1322,7 @@ export default function MaintenanceDetailScreen() {
 
                     {/* Tab Content: Expenses */}
                     {activeTab === 'expenses' && (
-                        <Animated.View entering={FadeInDown.duration(400)}>
+                        <Animated.View entering={enterSection(0)}>
                             <Section title="Expenses Summary" icon="cash">
                                 <View style={{ gap: 12 }}>
                                     <View style={[styles.totalCard, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
@@ -1781,7 +1782,7 @@ export default function MaintenanceDetailScreen() {
 
                     {/* Tab Content: Summary */}
                     {activeTab === 'summary' && (
-                        <Animated.View entering={FadeInDown.duration(400)}>
+                        <Animated.View entering={enterSection(0)}>
                             <Section title="Visit Summary" icon="document-text">
                                 <View style={styles.inputWrapper}>
                                     <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Discussion Summary</Text>
@@ -2109,7 +2110,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderRadius: Radius.md,
-        shadowColor: '#4338CA',
+        shadowColor: '#1F2421',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -2124,7 +2125,7 @@ const styles = StyleSheet.create({
         borderRadius: Radius.lg,
         padding: 24,
         marginBottom: 24,
-        shadowColor: '#4338CA',
+        shadowColor: '#1F2421',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.2,
         shadowRadius: 20,
@@ -2213,7 +2214,7 @@ const styles = StyleSheet.create({
         borderRadius: Radius.pill,
     },
     activeTabItem: {
-        shadowColor: '#4338CA',
+        shadowColor: '#1F2421',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.12,
         shadowRadius: 4,
@@ -2448,7 +2449,7 @@ const styles = StyleSheet.create({
         borderRadius: Radius.lg,
         borderWidth: 1,
         marginBottom: 16,
-        shadowColor: '#4338CA',
+        shadowColor: '#1F2421',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,
         shadowRadius: 12,
@@ -2527,7 +2528,7 @@ const styles = StyleSheet.create({
         borderRadius: Radius.md,
         paddingHorizontal: 24,
         gap: 10,
-        shadowColor: '#4338CA',
+        shadowColor: '#1F2421',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.25,
         shadowRadius: 14,
@@ -2552,7 +2553,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 8,
         marginVertical: 8,
-        shadowColor: '#4338CA',
+        shadowColor: '#1F2421',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.18,
         shadowRadius: 16,

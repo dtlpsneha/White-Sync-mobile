@@ -23,7 +23,8 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { searchCustomers, searchItems } from '@/services/frappeSearch';
-import { KIND_COLORS, Plan, team } from '@/services/teamApi';
+import { Plan, team } from '@/services/teamApi';
+import { kindTint } from '@/components/team/chatUi';
 
 interface Line {
     key: string;
@@ -120,7 +121,7 @@ export default function QuotationScreen() {
         );
     }
 
-    const tint = KIND_COLORS[plan.kind];
+    const tint = kindTint(plan.kind);
     const ready = !!brand && !!customer && lines.length > 0 && lines.every(l => l.item_code && Number(l.qty) > 0);
 
     const create = async () => {
@@ -143,6 +144,7 @@ export default function QuotationScreen() {
             <ScreenHeader
                 title={`Draft ${plan.quote_type === 'Proforma' ? 'pro-forma' : 'quotation'}`}
                 subtitle="Saved in ERPNext as a draft — nothing is submitted"
+                align="left"
                 onBack={() => router.back()}
             />
 

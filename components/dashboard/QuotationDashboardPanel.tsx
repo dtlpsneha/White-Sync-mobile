@@ -7,13 +7,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, {
-    Easing,
-    FadeInUp,
-    useAnimatedProps,
-    useSharedValue,
-    withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
+import { enterSection } from '@/constants/motion';
 import Svg, { Circle, G } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 
@@ -26,7 +21,7 @@ import { apiPost } from '@/utils/api';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
 
-const CANCELLED_COLOR = '#C62828';
+const CANCELLED_COLOR = '#C8423B';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -308,7 +303,7 @@ export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (s
                 title="Quotation Performance"
                 subtitle="Approval trends across all quotations"
             />
-            <Animated.View entering={FadeInUp.delay(500).duration(800)} style={styles.donutCard}>
+            <Animated.View entering={enterSection(1)} style={styles.donutCard}>
                 <View style={styles.donutHeader}>
                     <View><Text style={styles.donutTitle}>Donut Chart</Text><Text style={styles.donutSubtitle}>Quote distribution overview</Text></View>
                 </View>
@@ -333,7 +328,7 @@ export function QuotationDashboardPanel({ onSelectFilter }: { onSelectFilter: (s
                 </View>
             </Animated.View>
 
-            <Animated.View entering={FadeInUp.delay(600)} style={styles.metricsContainer}>
+            <Animated.View entering={enterSection(2)} style={styles.metricsContainer}>
                 <View style={[styles.metricCard, { backgroundColor: colors.success + '1A', borderLeftColor: colors.success, borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: colors.success }]}><Ionicons name="trending-up" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Approved Rate</Text><Text style={[styles.metricValue, { color: colors.success }]}>{summaryStats.conversionRate}</Text></View></View>
                 <View style={[styles.metricCard, { backgroundColor: colors.primarySoft, borderLeftColor: colors.primary, borderLeftWidth: ms(4) }]}><View style={[styles.metricIcon, { backgroundColor: colors.primary }]}><Ionicons name="cash-outline" size={ms(16)} color="#FFF" /></View><View><Text style={styles.metricLabel}>Avg. Quote Value</Text><Text style={[styles.metricValue, { color: colors.primary }]}>{summaryStats.avgQuoteValue}</Text></View></View>
             </Animated.View>

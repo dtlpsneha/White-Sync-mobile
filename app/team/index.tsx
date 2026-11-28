@@ -170,22 +170,22 @@ export default function TeamScreen() {
             <ScreenHeader
                 title="Team Chat"
                 subtitle={people ? `${people.people.length} people · ${waiting ? `${waiting} waiting for you` : 'nothing waiting for you'}` : 'Office team'}
+                align="left"
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
                 rightIcon="folder-open-outline"
                 onRightPress={() => router.push('/team/documents')}
             >
-                <View style={[styles.tabs, { backgroundColor: 'rgba(255,255,255,0.14)' }]}>
+                <View style={[styles.tabs, { backgroundColor: colors.ink2 }]}>
                     {TABS.map(t => {
                         const active = t.tab === tab;
                         const count = t.tab === 'mine' && waiting ? waiting : null;
                         return (
                             <TouchableOpacity key={t.tab} onPress={() => switchTo(t.tab)} activeOpacity={0.8}
                                 style={[styles.tab, active && { backgroundColor: '#FFF' }]}>
-                                <Ionicons name={t.icon} size={14} color={active ? colors.primary : '#FFF'} />
-                                <Text style={[styles.tabText, { color: active ? colors.primary : '#FFF', fontSize: ms(13) }]}>{t.label}</Text>
+                                <Text style={[styles.tabText, { color: active ? '#1F2421' : colors.onInk, fontSize: ms(12.5) }]}>{t.label}</Text>
                                 {count !== null && (
-                                    <View style={[styles.count, { backgroundColor: active ? colors.primary : '#FFF' }]}>
-                                        <Text style={[styles.countText, { color: active ? '#FFF' : colors.primary }]}>{count}</Text>
+                                    <View style={[styles.count, { backgroundColor: colors.primary }]}>
+                                        <Text style={[styles.countText, { color: '#FFF' }]}>{count}</Text>
                                     </View>
                                 )}
                             </TouchableOpacity>
@@ -209,7 +209,7 @@ export default function TeamScreen() {
                         <TouchableOpacity onPress={() => switchTo('mine')} activeOpacity={0.85}
                             style={[styles.banner, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}40` }]}>
                             <Ionicons name="flag" size={16} color={colors.primary} />
-                            <Text style={[styles.bannerText, { color: colors.primary }]} numberOfLines={1}>
+                            <Text style={[styles.bannerText, { color: colors.primaryVariant }]} numberOfLines={1}>
                                 {waiting === 1 ? '1 job is waiting for you' : `${waiting} jobs are waiting for you`} · oldest {age(oldest)}
                             </Text>
                             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
@@ -251,7 +251,7 @@ export default function TeamScreen() {
                     data={list}
                     keyExtractor={j => j.id}
                     renderItem={({ item }) => <JobRow job={item} meId={me} colors={colors} onPress={() => open(item.id)} />}
-                    contentContainerStyle={{ paddingVertical: 6, flexGrow: 1 }}
+                    contentContainerStyle={{ paddingVertical: 10, flexGrow: 1 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); refresh(); }} />}
                     ListEmptyComponent={loading
                         ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
@@ -352,14 +352,14 @@ function parseSeen(raw: string | null): { sid: string | null; ids: string[] } | 
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    tabs: { flexDirection: 'row', borderRadius: Radius.pill, padding: 4, marginTop: 14, gap: 4 },
+    tabs: { flexDirection: 'row', borderRadius: 14, padding: 4, marginTop: 4, gap: 4 },
     tab: {
         flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-        paddingVertical: 8, borderRadius: Radius.pill,
+        paddingVertical: 8, borderRadius: 10,
     },
-    tabText: { fontWeight: '800' },
-    count: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, justifyContent: 'center', alignItems: 'center' },
-    countText: { fontSize: 11, fontWeight: '900' },
+    tabText: { fontWeight: '700' },
+    count: { minWidth: 18, height: 17, borderRadius: 9, paddingHorizontal: 5, justifyContent: 'center', alignItems: 'center' },
+    countText: { fontSize: 10, fontWeight: '800' },
     banner: {
         flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, marginTop: 10,
         paddingHorizontal: 14, paddingVertical: 10, borderRadius: Radius.md, borderWidth: 1,

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterItem } from '@/constants/motion';
 
 import { Radius } from '@/constants/theme';
 import { useResponsive } from '@/hooks/useResponsive';
@@ -28,7 +29,7 @@ export function KpiCard({
 
     return (
         <Animated.View
-            entering={FadeInDown.delay(delay).springify()}
+            entering={enterItem(Math.round(delay / 100))}
             style={[
                 styles.card,
                 {

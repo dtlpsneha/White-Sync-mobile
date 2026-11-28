@@ -200,7 +200,7 @@ export default function CompletionReportScreen() {
                             {query.trim().length > 0 && (
                                 <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primarySoft }]} onPress={() => addCustomer(query)}>
                                     <Ionicons name="add" size={18} color={colors.primary} />
-                                    <Text style={[styles.addText, { color: colors.primary }]}>Add "{query.trim()}" as new customer</Text>
+                                    <Text style={[styles.addText, { color: colors.primary }]}>Add “{query.trim()}” as new customer</Text>
                                 </TouchableOpacity>
                             )}
                         </View>

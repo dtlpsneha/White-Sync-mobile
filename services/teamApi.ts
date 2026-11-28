@@ -23,7 +23,7 @@ const TOKEN_KEY = 'smartops_token';
 // ─────────────────────────── shapes (mirror app/bff/team.py) ───────────────────────────
 
 /** SmartOps' own colour and icon, for the posts it writes (a customer's payment, for one). */
-export const SMARTOPS_TINT = '#059669';
+export const SMARTOPS_TINT = '#2F5D50';
 export const SMARTOPS_ICON = 'cash-outline';
 
 export type JobKind = 'proforma' | 'place_order' | 'quotation' | 'dispatch' | 'payment' | 'general';
@@ -152,11 +152,11 @@ export interface LrEntry {
 export interface InvoiceDetail { row: OrderRow; lrs: LrEntry[] }
 
 export const ORDER_COLORS: Record<OrderStatus, string> = {
-    so_pending: '#64748B',
-    invoice_pending: '#F59E0B',
-    invoice_generated: '#2563EB',
-    delivery_pending: '#8B5CF6',
-    dispatched: '#16A34A',
+    so_pending: '#8C8173',
+    invoice_pending: '#D99A14',
+    invoice_generated: '#3E7CB1',
+    delivery_pending: '#8E5BB5',
+    dispatched: '#2F7D5B',
 };
 
 export const ORDER_ICONS: Record<OrderStatus, string> = {
@@ -497,12 +497,12 @@ export async function documentTypeChoices(): Promise<{ types: DocType[]; support
 // ─────────────────────────── small display helpers ───────────────────────────
 
 export const KIND_COLORS: Record<JobKind, string> = {
-    proforma: '#2563EB',
-    place_order: '#0D9488',
-    quotation: '#F59E0B',
-    dispatch: '#8B5CF6',
-    payment: '#16A34A',
-    general: '#64748B',
+    proforma: '#3E7CB1',
+    place_order: '#2F5D50',
+    quotation: '#D99A14',
+    dispatch: '#8E5BB5',
+    payment: '#2F7D5B',
+    general: '#8C8173',
 };
 
 export const KIND_ICONS: Record<JobKind, string> = {

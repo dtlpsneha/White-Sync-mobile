@@ -9,16 +9,17 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, useWindowDimensi
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
-import { age, Attachment, Job, KIND_COLORS, KIND_ICONS, Reply, SMARTOPS_ICON, SMARTOPS_TINT } from '@/services/teamApi';
+import { age, Attachment, Job, KIND_ICONS, Reply, SMARTOPS_ICON } from '@/services/teamApi';
 import { Avatar } from './Avatar';
-import { displayName, personColor, timeOnly } from './chatUi';
+import { displayName, docTint, kindTint, personColor, SMARTOPS_GREEN, timeOnly } from './chatUi';
 import { readLine, TeamImage } from './TeamImage';
 import { VoiceNote } from './VoiceNote';
 
 type ThemeColors = typeof Colors.light;
 
-const MINE_BG = { light: '#E4E7FF', dark: '#2E2A7A' };
-const SMARTOPS_BG = { light: '#ECFDF5', dark: '#0B3B2E' };
+const MINE_BG = { light: '#F7E3D6', dark: '#4A2C20' };
+const SMARTOPS_BG = { light: '#E3F0EA', dark: '#173A2E' };
+const SMARTOPS_EDGE = { light: '#BFD9CC', dark: '#2F5D50' };
 
 function useBubbleWidth() {
     const { width } = useWindowDimensions();
@@ -35,18 +36,18 @@ function Shell({ mine, showAuthor, authorName, theme, colors, children, onPress,
         <View style={[styles.bubble, {
             maxWidth,
             backgroundColor: mine ? MINE_BG[theme] : smartops ? SMARTOPS_BG[theme] : colors.surface,
-            borderColor: highlight ?? (mine ? 'transparent' : smartops ? `${SMARTOPS_TINT}55` : colors.border),
-            borderWidth: highlight ? 1.5 : mine ? 0 : StyleSheet.hairlineWidth,
+            borderColor: highlight ?? (mine ? 'transparent' : smartops ? SMARTOPS_EDGE[theme] : 'transparent'),
+            borderWidth: highlight ? 1.5 : smartops ? 1 : 0,
         }, mine ? styles.mine : styles.theirs, showAuthor && (mine ? styles.mineFirst : styles.theirsFirst)]}>
             {!mine && showAuthor && (
-                <Text style={[styles.author, { color: smartops ? SMARTOPS_TINT : personColor(authorName) }]} numberOfLines={1}>{displayName(authorName)}</Text>
+                <Text style={[styles.author, { color: smartops ? SMARTOPS_GREEN : personColor(authorName) }]} numberOfLines={1}>{displayName(authorName)}</Text>
             )}
             {children}
         </View>
     );
     return (
         <View style={[styles.line, mine ? styles.lineMine : styles.lineTheirs, showAuthor && styles.lineFirst]}>
-            {!mine && (showAuthor ? <Avatar name={authorName} size={30} smartops={smartops} /> : <View style={{ width: 30 }} />)}
+            {!mine && (showAuthor ? <Avatar name={authorName} size={32} smartops={smartops} /> : <View style={{ width: 32 }} />)}
             {onPress || onLongPress
                 ? <TouchableOpacity activeOpacity={0.85} onPress={onPress} onLongPress={onLongPress} delayLongPress={350}>{body}</TouchableOpacity>
                 : body}
@@ -79,7 +80,7 @@ function Deleted({ colors }: { colors: ThemeColors }) {
 export function JobTag({ job, colors, meId, onKind, onAssignee }: {
     job: Job; colors: ThemeColors; meId?: string; onKind?: () => void; onAssignee?: () => void;
 }) {
-    const tint = job.by_smartops ? SMARTOPS_TINT : KIND_COLORS[job.kind];
+    const tint = kindTint(job.kind, job.by_smartops);
     const forMe = !!meId && job.assignee?.id === meId;
     const late = job.status === 'open' && job.age_minutes >= 24 * 60;
     const Kind = onKind ? TouchableOpacity : View;
@@ -223,10 +224,11 @@ export function filedLine(a: Attachment): string | null {
 function FiledAs({ a, colors }: { a: Attachment; colors: ThemeColors }) {
     const line = filedLine(a);
     if (!line) return null;
+    const tint = docTint(a.doc_type);
     return (
-        <View style={[styles.filed, { backgroundColor: `${colors.primary}14` }]}>
-            <Ionicons name="pricetag" size={12} color={colors.primary} />
-            <Text style={[styles.filedText, { color: colors.primary }]} numberOfLines={2}>{line}</Text>
+        <View style={[styles.filed, { backgroundColor: `${tint}1F` }]}>
+            <Ionicons name="pricetag" size={12} color={tint} />
+            <Text style={[styles.filedText, { color: tint }]} numberOfLines={2}>{line}</Text>
         </View>
     );
 }
@@ -265,27 +267,30 @@ export function SystemNote({ text, colors }: { text: string; colors: ThemeColors
 export function DayDivider({ label, colors }: { label: string; colors: ThemeColors }) {
     return (
         <View style={styles.dayWrap}>
-            <Text style={[styles.day, { backgroundColor: colors.surface, color: colors.textSecondary, borderColor: colors.border }]}>{label}</Text>
+            <Text style={[styles.day, { backgroundColor: colors.surfaceVariant, color: colors.textSecondary }]}>{label}</Text>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    line: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingHorizontal: 10, marginTop: 3 },
+    line: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, marginTop: 3 },
     lineFirst: { marginTop: 10 },
     lineMine: { justifyContent: 'flex-end' },
     lineTheirs: { justifyContent: 'flex-start' },
-    bubble: { borderRadius: 16, paddingHorizontal: 8, paddingTop: 6, paddingBottom: 5, gap: 6 },
-    mine: {},
-    theirs: {},
-    mineFirst: { borderTopRightRadius: 4 },
-    theirsFirst: { borderTopLeftRadius: 4 },
-    author: { fontSize: 13, fontWeight: '800', marginBottom: -2, paddingHorizontal: 2 },
-    body: { fontSize: 15.5, lineHeight: 21, paddingHorizontal: 2 },
+    bubble: {
+        borderRadius: 18, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8, gap: 7,
+        shadowColor: '#1F2421', shadowOpacity: 0.06, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+    },
+    mine: { borderBottomRightRadius: 6 },
+    theirs: { borderBottomLeftRadius: 6 },
+    mineFirst: {},
+    theirsFirst: {},
+    author: { fontSize: 12, fontWeight: '800', marginBottom: -3 },
+    body: { fontSize: 14.5, lineHeight: 20 },
     deleted: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2, paddingVertical: 2 },
     deletedText: { fontSize: 14.5, fontStyle: 'italic' },
     read: { fontSize: 11.5, fontWeight: '600', paddingHorizontal: 2 },
-    filed: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, maxWidth: '100%' },
+    filed: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, maxWidth: '100%' },
     filedText: { fontSize: 12, fontWeight: '800', flexShrink: 1 },
     facts: { fontSize: 12, fontWeight: '600', paddingHorizontal: 2 },
     tagRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
@@ -313,7 +318,7 @@ const styles = StyleSheet.create({
     systemText: { fontSize: 12.5, fontWeight: '600', flexShrink: 1, textAlign: 'center' },
     dayWrap: { alignItems: 'center', marginVertical: 10 },
     day: {
-        fontSize: 12, fontWeight: '800', paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.pill,
-        overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth,
+        fontSize: 11, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 4, borderRadius: Radius.pill,
+        overflow: 'hidden',
     },
 });

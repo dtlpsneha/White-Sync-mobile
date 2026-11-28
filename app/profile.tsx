@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterSection } from '@/constants/motion';
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -104,7 +105,7 @@ export default function ProfileScreen() {
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header/Avatar Section */}
-                <Animated.View entering={FadeInUp.delay(100).duration(800)} style={styles.profileHeader}>
+                <Animated.View entering={enterSection(0)} style={styles.profileHeader}>
                     <View style={[styles.avatar, { backgroundColor: colors.primarySoft, borderColor: colors.border }, Shadow.card(theme)]}>
                         <Text style={[styles.avatarText, { color: colors.primary }]}>{firstLetter}</Text>
                     </View>
@@ -117,7 +118,7 @@ export default function ProfileScreen() {
                 </Animated.View>
 
                 {/* Account Details Card */}
-                <Animated.View entering={FadeInDown.delay(200).duration(800)} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}>
+                <Animated.View entering={enterSection(1)} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}>
                     <Text style={[styles.sectionTitle, { color: colors.primary }]}>Account Information</Text>
                     
                     <View style={styles.infoRow}>
@@ -146,7 +147,7 @@ export default function ProfileScreen() {
                 </Animated.View>
 
                 {/* Preferences & Actions */}
-                <Animated.View entering={FadeInDown.delay(300).duration(800)} style={styles.settingsList}>
+                <Animated.View entering={enterSection(2)} style={styles.settingsList}>
                     <Text style={[styles.sectionTitle, { color: colors.primary, marginLeft: 8, marginBottom: 4 }]}>App Preferences</Text>
 
                     {/* Dark Mode */}
@@ -189,7 +190,7 @@ export default function ProfileScreen() {
                 </Animated.View>
 
                 {/* Version Info Footer */}
-                <Animated.View entering={FadeInDown.delay(400).duration(800)} style={styles.footer}>
+                <Animated.View entering={enterSection(3)} style={styles.footer}>
                     <Text style={[styles.footerText, { color: colors.textSecondary }]}>White Sync App</Text>
                     <Text style={[styles.versionText, { color: colors.textSecondary }]}>Version 1.0.0 (Build 24)</Text>
                 </Animated.View>
@@ -246,7 +247,7 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#10B981',
+        backgroundColor: '#2F7D5B',
         marginRight: 8,
     },
     statusText: {

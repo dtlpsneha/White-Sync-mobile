@@ -5,16 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, type ScrollViewInstance } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-    Easing,
-    FadeInDown,
-    FadeInUp,
-    useAnimatedProps,
-    useAnimatedStyle,
-    withSpring,
-    useSharedValue,
-    withTiming
-} from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiPost } from '../utils/api';
 import { apiUrl } from '@/constants/config';
@@ -22,7 +13,8 @@ import { apiUrl } from '@/constants/config';
 import { AiBubble, AiSearchBar } from '@/components/AiSearchBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
-import { Colors } from '@/constants/theme';
+import { Colors, Gradients } from '@/constants/theme';
+import { enterItem } from '@/constants/motion';
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications, type PersistentNotification } from '@/context/NotificationsContext';
@@ -162,6 +154,21 @@ const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: numb
     );
 };
 
+type HomeSnapshot = {
+    userName: string | null;
+    isManager: boolean;
+    statsMap: Record<string, any>;
+    summaryStats: { totalValue: string; totalQuotes: number; totalCustomers: number; conversionRate: string; avgQuoteValue: string };
+    lastUpdated: string;
+};
+
+/**
+ * Last figures Home showed, kept for the life of the app. Coming back to Home
+ * draws these at once and refreshes in the background, instead of a blank
+ * loading screen every time.
+ */
+let homeCache: HomeSnapshot | null = null;
+
 export default function HomeScreen() {
     const router = useRouter();
     const colorScheme = useColorScheme();
@@ -174,13 +181,16 @@ export default function HomeScreen() {
 
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
-    const [userName, setUserName] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    // First visit this app session? Only then do the sections animate in.
+    const firstVisit = useRef(!homeCache).current;
+    const [userName, setUserName] = useState<string | null>(homeCache?.userName ?? null);
+    const [loading, setLoading] = useState(!homeCache);
+    const [statsReady, setStatsReady] = useState(!!homeCache);
     const [refreshing, setRefreshing] = useState(false);
     const [permissionDenied, setPermissionDenied] = useState(false);
 
-    const [statsMap, setStatsMap] = useState<Record<string, any>>({});
-    const [summaryStats, setSummaryStats] = useState({
+    const [statsMap, setStatsMap] = useState<Record<string, any>>(homeCache?.statsMap ?? {});
+    const [summaryStats, setSummaryStats] = useState(homeCache?.summaryStats ?? {
         totalValue: '₹0',
         totalQuotes: 0,
         totalCustomers: 0,
@@ -188,11 +198,11 @@ export default function HomeScreen() {
         avgQuoteValue: '₹0',
     });
     const pendingQuotes = Object.entries(statsMap).find(([k]) => k.toUpperCase() === 'PENDING')?.[1]?.quotes ?? 0;
-    const [lastUpdated, setLastUpdated] = useState<string>(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const [lastUpdated, setLastUpdated] = useState<string>(homeCache?.lastUpdated ?? '…');
 
     const [lastSeenPendingIds, setLastSeenPendingIds] = useState<string[]>([]);
     const lastSeenPendingIdsRef = useRef<string[]>([]);
-    const [isManager, setIsManager] = useState(false);
+    const [isManager, setIsManager] = useState(homeCache?.isManager ?? false);
     const [hasSession, setHasSession] = useState(false);
 
     useEffect(() => { loadData(); }, []);
@@ -239,23 +249,23 @@ export default function HomeScreen() {
     }, [loading, hasSession, permissionDenied]);
 
     const loadData = async () => {
-        setLoading(true);
         const sessionActive = await checkSession();
         setHasSession(sessionActive);
-        if (sessionActive) {
-            await loadUserData();
-            const stored = await SecureStore.getItemAsync('last_seen_pending_ids');
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored);
-                    setLastSeenPendingIds(parsed);
-                    lastSeenPendingIdsRef.current = parsed;
-                } catch (e) { }
-            }
-            await fetchStats();
-            await checkForNewPending(true);
+        if (!sessionActive) return;
+        await loadUserData();
+        const stored = await SecureStore.getItemAsync('last_seen_pending_ids');
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                setLastSeenPendingIds(parsed);
+                lastSeenPendingIdsRef.current = parsed;
+            } catch (e) { }
         }
+        // Everything above is read from the phone, so the screen can show now.
+        // Figures from ERPNext fill in when they arrive (or update the cached ones).
         setLoading(false);
+        await fetchStats();
+        await checkForNewPending(true);
     };
 
     const checkSession = async () => {
@@ -279,6 +289,14 @@ export default function HomeScreen() {
             setUserName(name || 'User');
             const isManagerStr = await SecureStore.getItemAsync('is_manager');
             setIsManager(isManagerStr === 'true');
+            homeCache = {
+                statsMap: {},
+                summaryStats: { totalValue: '₹0', totalQuotes: 0, totalCustomers: 0, conversionRate: '0%', avgQuoteValue: '₹0' },
+                lastUpdated: '…',
+                ...homeCache,
+                userName: name || 'User',
+                isManager: isManagerStr === 'true',
+            };
         } catch (error) { }
     };
 
@@ -347,7 +365,24 @@ export default function HomeScreen() {
                     conversionRate,
                     avgQuoteValue: avgQuoteValueNumeric.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
                 });
-                setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+                const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const nextSummary = {
+                    totalValue: totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
+                    totalQuotes,
+                    totalCustomers: 0,
+                    conversionRate,
+                    avgQuoteValue: avgQuoteValueNumeric.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }),
+                };
+                setLastUpdated(stamp);
+                setStatsReady(true);
+                homeCache = {
+                    userName: homeCache?.userName ?? null,
+                    isManager: homeCache?.isManager ?? false,
+                    ...homeCache,
+                    statsMap: newStatsMap,
+                    summaryStats: nextSummary,
+                    lastUpdated: stamp,
+                };
             }
         } catch (error) {
             console.error('[Home] Fetch stats error:', error);
@@ -433,10 +468,10 @@ export default function HomeScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['left', 'right']}>
             <LinearGradient
                 pointerEvents="none"
-                colors={theme === 'dark' ? ['#222763', colors.background] : ['#DDE1FF', colors.background]}
+                colors={[colors.background, colors.background]}
                 style={styles.bgTint}
             />
             <ScrollView
@@ -445,7 +480,7 @@ export default function HomeScreen() {
                 style={styles.scrollContent}
                 contentContainerStyle={{ paddingBottom: 60 + insets.bottom }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.text} />}>
-                <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+                <StatusBar style="light" />
                 {permissionDenied ? (
                     <View style={styles.deniedContainer}>
                         <View style={styles.deniedContent}>
@@ -457,7 +492,7 @@ export default function HomeScreen() {
                     </View>
                 ) : (
                     <>
-                        <LinearGradient colors={['#4338CA', '#7367F0', '#A78BFA']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+                        <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, { paddingTop: insets.top + ms(14) }]}>
                             <View pointerEvents="none" style={styles.heroDeco}>
                                 <View style={[styles.heroCircle, { width: ms(170), height: ms(170), right: -ms(40), top: -ms(50) }]} />
                                 <View style={[styles.heroCircle, { width: ms(110), height: ms(110), right: ms(60), bottom: -ms(50), opacity: 0.6 }]} />
@@ -483,19 +518,17 @@ export default function HomeScreen() {
                             <AiSearchBar />
                         </View>
 
-                        <SectionHeader title="Overview" subtitle="Your quotations at a glance" icon="pulse" />
+                        <SectionHeader title="Overview" subtitle="Your quotations at a glance" accentBar />
                         <View style={styles.statGrid}>
                             {([
-                                { label: 'TOTAL QUOTES', value: String(summaryStats.totalQuotes), icon: 'documents', colors: ['#4F46E5', '#7C3AED'] as const, filter: undefined },
-                                { label: 'PENDING', value: String(pendingQuotes), icon: 'time', colors: ['#F59E0B', '#F97316'] as const, filter: 'PENDING' },
-                                { label: 'APPROVAL RATE', value: summaryStats.conversionRate, icon: 'checkmark-done', colors: ['#10B981', '#047857'] as const, filter: 'APPROVED' },
-                                { label: 'TOTAL VALUE', value: summaryStats.totalValue, icon: 'cash', colors: ['#EC4899', '#8B5CF6'] as const, filter: undefined },
+                                { label: 'TOTAL QUOTES', value: statsReady ? String(summaryStats.totalQuotes) : '—', icon: 'documents', colors: ['#3A413C', '#1F2421'] as const, filter: undefined },
+                                { label: 'PENDING', value: statsReady ? String(pendingQuotes) : '—', icon: 'time', colors: ['#F2B134', '#D99A14'] as const, filter: 'PENDING' },
+                                { label: 'APPROVAL RATE', value: statsReady ? summaryStats.conversionRate : '—', icon: 'checkmark-done', colors: ['#3F8F6B', '#2F5D50'] as const, filter: 'APPROVED' },
+                                { label: 'TOTAL VALUE', value: statsReady ? summaryStats.totalValue : '—', icon: 'cash', colors: ['#F07A55', '#E4572E'] as const, filter: undefined },
                             ]).map((t, i) => (
-                                <Animated.View key={t.label} entering={FadeInDown.delay(i * 90).springify().damping(14)} style={styles.statCell}>
-                                    <Tappable
-                                        style={styles.statTileWrap}
-                                        onPress={() => router.replace((t.filter ? { pathname: '/quotations', params: { filter: t.filter } } : '/quotations') as any)}
-                                    >
+                                <Animated.View key={t.label} entering={firstVisit ? enterItem(i) : undefined} style={styles.statCell}>
+                                    {/* Overview figures are for reading only; they do not open another page. */}
+                                    <View style={styles.statTileWrap}>
                                         <LinearGradient colors={t.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statTile}>
                                             <Ionicons name={t.icon as any} size={ms(70)} color="rgba(255,255,255,0.16)" style={styles.statBgIcon} />
                                             <View style={styles.statTop}>
@@ -508,28 +541,28 @@ export default function HomeScreen() {
                                                 <Text style={styles.statLabel} numberOfLines={1}>{t.label}</Text>
                                             </View>
                                         </LinearGradient>
-                                    </Tappable>
+                                    </View>
                                 </Animated.View>
                             ))}
                         </View>
 
-                        <SectionHeader title="Quick Navigation" subtitle="Tap a section to open it" icon="apps" />
+                        <SectionHeader title="Quick Navigation" subtitle="Tap a section to open it" accentBar />
                         <View style={styles.navSection}>
                             {([
-                                { label: 'TEAM CHAT', sub: 'Jobs & messages with the office', icon: 'chatbubbles', from: '#6EE7B7', to: '#059669', route: '/team', mode: 'push' as const },
-                                { label: 'CUSTOMER VISIT PLANNED', sub: 'Field visit records', icon: 'calendar', from: '#A78BFA', to: '#7C3AED', route: '/maintenance', mode: 'replace' as const },
-                                { label: 'QUOTATION / PROFORMA REQUEST', sub: 'Brand, customer, item & quantity', icon: 'create', from: '#FCD34D', to: '#EA580C', route: '/quotation-request', mode: 'push' as const },
-                                { label: 'QUOTATION CREATED', sub: 'Create & track quotations', icon: 'document-text', from: '#FBBF24', to: '#F97316', route: '/quotations', mode: 'replace' as const },
-                                { label: 'CUSTOMER PURCHASE ORDER', sub: 'Orders from customers', icon: 'cart', from: '#2DD4BF', to: '#0D9488', route: '/sales-orders', mode: 'replace' as const },
-                                { label: 'MY ORDERS', sub: 'Order → invoice → dispatch, with LRs', icon: 'git-network', from: '#4ADE80', to: '#16A34A', route: '/my-orders', mode: 'push' as const },
-                                { label: 'SALES INVOICE HISTORY (DETAILED)', sub: 'Line-item invoice detail', icon: 'receipt', from: '#38BDF8', to: '#0284C7', route: '/daily-sales-report/invoice-history', mode: 'push' as const },
-                                { label: 'SERVICE INVOICES', sub: 'LC service invoices', icon: 'construct', from: '#F472B6', to: '#BE185D', route: '/daily-sales-report/invoice-history?service=1', mode: 'push' as const },
-                                { label: 'DAILY SALES INVOICE (CUMULATIVE)', sub: 'Brand-wise daily totals', icon: 'bar-chart', from: '#FB7185', to: '#E11D48', route: '/daily-sales-report', mode: 'push' as const },
-                                { label: 'HABASIT CALCULATOR', sub: 'Belt price estimate', icon: 'calculator', from: '#34D399', to: '#059669', route: '/price-calculator', mode: 'push' as const },
+                                { label: 'TEAM CHAT', sub: 'Jobs & messages with the office', icon: 'chatbubbles', from: '#F07A55', to: '#E4572E', route: '/team', mode: 'push' as const },
+                                { label: 'CUSTOMER VISIT PLANNED', sub: 'Field visit records', icon: 'calendar', from: '#A97BCB', to: '#8E5BB5', route: '/maintenance', mode: 'replace' as const },
+                                { label: 'QUOTATION / PROFORMA REQUEST', sub: 'Brand, customer, item & quantity', icon: 'create', from: '#F2B134', to: '#D99A14', route: '/quotation-request', mode: 'push' as const },
+                                { label: 'QUOTATION CREATED', sub: 'Create & track quotations', icon: 'document-text', from: '#F2B134', to: '#D99A14', route: '/quotations', mode: 'replace' as const },
+                                { label: 'CUSTOMER PURCHASE ORDER', sub: 'Orders from customers', icon: 'cart', from: '#3F8F6B', to: '#2F5D50', route: '/sales-orders', mode: 'replace' as const },
+                                { label: 'MY ORDERS', sub: 'Order → invoice → dispatch, with LRs', icon: 'git-network', from: '#F07A55', to: '#E4572E', route: '/my-orders', mode: 'push' as const },
+                                { label: 'SALES INVOICE HISTORY (DETAILED)', sub: 'Line-item invoice detail', icon: 'receipt', from: '#5B95C6', to: '#3E7CB1', route: '/daily-sales-report/invoice-history', mode: 'push' as const },
+                                { label: 'SERVICE INVOICES', sub: 'LC service invoices', icon: 'construct', from: '#A97BCB', to: '#8E5BB5', route: '/daily-sales-report/invoice-history?service=1', mode: 'push' as const },
+                                { label: 'DAILY SALES INVOICE (CUMULATIVE)', sub: 'Brand-wise daily totals', icon: 'bar-chart', from: '#F07A55', to: '#E4572E', route: '/daily-sales-report', mode: 'push' as const },
+                                { label: 'HABASIT CALCULATOR', sub: 'Belt price estimate', icon: 'calculator', from: '#3F8F6B', to: '#2F5D50', route: '/price-calculator', mode: 'push' as const },
                             ]).map((item, i) => (
-                                <Animated.View key={item.label} entering={FadeInDown.delay(300 + i * 80).springify().damping(15)}>
+                                <Animated.View key={item.label} entering={firstVisit ? enterItem(4 + i) : undefined}>
                                     <Tappable
-                                        style={[styles.navRowCard, { backgroundColor: item.to + (theme === 'dark' ? '26' : '14'), borderColor: item.to + (theme === 'dark' ? '55' : '40') }]}
+                                        style={[styles.navRowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                                         onPress={() => item.mode === 'push' ? router.push(item.route as any) : router.replace(item.route as any)}
                                     >
                                         <View style={[styles.navRowAccent, { backgroundColor: item.to }]} />
@@ -540,7 +573,7 @@ export default function HomeScreen() {
                                             <Text style={[styles.navRowTitle, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
                                             <Text style={[styles.navRowSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</Text>
                                         </View>
-                                        <View style={[styles.navRowChevron, { backgroundColor: item.to + '26' }]}>
+                                        <View style={[styles.navRowChevron, { backgroundColor: colors.surfaceSecondary }]}>
                                             <Ionicons name="chevron-forward" size={16} color={item.to} />
                                         </View>
                                     </Tappable>
@@ -548,15 +581,15 @@ export default function HomeScreen() {
                             ))}
                         </View>
 
-                        <SectionHeader title="Stock & Payments" subtitle="Tally stock list and bank receipts" icon="layers" />
+                        <SectionHeader title="Stock & Payments" subtitle="Tally stock list and bank receipts" accentBar />
                         <View style={styles.navSection}>
                             {([
-                                { label: 'STOCK LIST', sub: 'Tally stock by brand and item', icon: 'cube', from: '#34D399', to: '#059669', route: '/stock-list' },
-                                { label: 'PAYMENT DETAILS', sub: 'ICICI bank receipts by date', icon: 'card', from: '#60A5FA', to: '#2563EB', route: '/payment-details' },
+                                { label: 'STOCK LIST', sub: 'Tally stock by brand and item', icon: 'cube', from: '#3F8F6B', to: '#2F5D50', route: '/stock-list' },
+                                { label: 'PAYMENT DETAILS', sub: 'ICICI bank receipts by date', icon: 'card', from: '#5B95C6', to: '#3E7CB1', route: '/payment-details' },
                             ]).map((item, i) => (
-                                <Animated.View key={item.route} entering={FadeInDown.delay(850 + i * 80).springify().damping(15)}>
+                                <Animated.View key={item.route} entering={firstVisit ? enterItem(6) : undefined}>
                                     <Tappable
-                                        style={[styles.navRowCard, { backgroundColor: item.to + (theme === 'dark' ? '26' : '14'), borderColor: item.to + (theme === 'dark' ? '55' : '40') }]}
+                                        style={[styles.navRowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                                         onPress={() => router.push(item.route as any)}
                                     >
                                         <View style={[styles.navRowAccent, { backgroundColor: item.to }]} />
@@ -567,7 +600,7 @@ export default function HomeScreen() {
                                             <Text style={[styles.navRowTitle, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
                                             <Text style={[styles.navRowSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</Text>
                                         </View>
-                                        <View style={[styles.navRowChevron, { backgroundColor: item.to + '26' }]}>
+                                        <View style={[styles.navRowChevron, { backgroundColor: colors.surfaceSecondary }]}>
                                             <Ionicons name="chevron-forward" size={16} color={item.to} />
                                         </View>
                                     </Tappable>
@@ -575,15 +608,15 @@ export default function HomeScreen() {
                             ))}
                         </View>
 
-                        <SectionHeader title="Customer Statements" subtitle="Outstanding bills and ledger PDFs" icon="document-text" />
+                        <SectionHeader title="Customer Statements" subtitle="Outstanding bills and ledger PDFs" accentBar />
                         <View style={styles.navSection}>
                             {([
-                                { label: 'LEDGER PDF', sub: 'Sales & receipts, 1 April to today', icon: 'list', from: '#818CF8', to: '#4F46E5', kind: 'ledger' },
-                                { label: 'OUTSTANDING PDF', sub: 'Unpaid bills', icon: 'time', from: '#F59E0B', to: '#EA580C', kind: 'outstanding' },
+                                { label: 'LEDGER PDF', sub: 'Sales & receipts, 1 April to today', icon: 'list', from: '#3A413C', to: '#1F2421', kind: 'ledger' },
+                                { label: 'OUTSTANDING PDF', sub: 'Unpaid bills', icon: 'time', from: '#F2B134', to: '#D99A14', kind: 'outstanding' },
                             ]).map((item, i) => (
-                                <Animated.View key={item.kind} entering={FadeInDown.delay(900 + i * 80).springify().damping(15)}>
+                                <Animated.View key={item.kind} entering={firstVisit ? enterItem(6) : undefined}>
                                     <Tappable
-                                        style={[styles.navRowCard, { backgroundColor: item.to + (theme === 'dark' ? '26' : '14'), borderColor: item.to + (theme === 'dark' ? '55' : '40') }]}
+                                        style={[styles.navRowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                                         onPress={() => router.push({ pathname: '/customer-statement', params: { kind: item.kind } } as any)}
                                     >
                                         <View style={[styles.navRowAccent, { backgroundColor: item.to }]} />
@@ -594,7 +627,7 @@ export default function HomeScreen() {
                                             <Text style={[styles.navRowTitle, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
                                             <Text style={[styles.navRowSub, { color: colors.textSecondary }]} numberOfLines={1}>{item.sub}</Text>
                                         </View>
-                                        <View style={[styles.navRowChevron, { backgroundColor: item.to + '26' }]}>
+                                        <View style={[styles.navRowChevron, { backgroundColor: colors.surfaceSecondary }]}>
                                             <Ionicons name="chevron-forward" size={16} color={item.to} />
                                         </View>
                                     </Tappable>
@@ -620,7 +653,7 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: Platform.OS === 'android' ? vs(50) : vs(20), paddingHorizontal: s(24), marginBottom: vs(12) },
         welcomeText: { fontSize: ms(12), color: '#00BFA5', fontWeight: '900', letterSpacing: 1.5, marginBottom: vs(2), textTransform: 'uppercase' },
         liveIndicatorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: vs(4), gap: s(6) },
-        liveDot: { width: ms(6), height: ms(6), borderRadius: ms(3), backgroundColor: '#4CAF50' },
+        liveDot: { width: ms(6), height: ms(6), borderRadius: ms(3), backgroundColor: '#7FD1A8' },
         liveText: { fontSize: ms(10), color: colors.textSecondary, fontWeight: '500' },
         deniedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: vs(150), paddingHorizontal: s(24) },
         deniedContent: { backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(32), alignItems: 'center', elevation: 5 },
@@ -638,7 +671,9 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         notificationBadgeText: { fontSize: ms(10), fontWeight: '900', color: '#FFF' },
         aiSearchWrap: {
         paddingHorizontal: 20,
-        marginBottom: 18,
+        marginTop: -ms(28),
+        marginBottom: 6,
+        zIndex: 2,
     },
     kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(16), gap: s(16) },
         donutCard: { margin: s(16), backgroundColor: colors.surface, borderRadius: ms(32), padding: ms(24), elevation: 5 },
@@ -659,8 +694,8 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         metricLabel: { fontSize: ms(12), color: colors.textSecondary, fontWeight: '700' },
         metricValue: { fontSize: ms(18), fontWeight: '900' },
         bgTint: { position: 'absolute', top: 0, left: 0, right: 0, height: vs(430) },
-        heroDeco: { ...StyleSheet.absoluteFill, borderRadius: ms(28), overflow: 'hidden' },
-        heroCircle: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
+        heroDeco: { ...StyleSheet.absoluteFill, borderBottomLeftRadius: ms(32), borderBottomRightRadius: ms(32), overflow: 'hidden' },
+        heroCircle: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(228,87,46,0.18)' },
         navSection: { paddingHorizontal: s(16), paddingBottom: s(24), gap: s(10) },
         navRowCard: {
             flexDirection: 'row',
@@ -675,23 +710,18 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         },
         navRowAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
         navRowIcon: {
-            width: ms(52),
-            height: ms(52),
-            borderRadius: ms(17),
+            width: ms(46),
+            height: ms(46),
+            borderRadius: ms(14),
             justifyContent: 'center',
             alignItems: 'center',
-            elevation: 4,
-            shadowColor: '#000',
-            shadowOpacity: 0.2,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 3 },
         },
         navRowTitle: { fontSize: ms(13), fontWeight: '800', letterSpacing: 0.3 },
         navRowSub: { fontSize: ms(11), fontWeight: '500', marginTop: 2 },
-        navRowChevron: { width: ms(30), height: ms(30), borderRadius: ms(15), justifyContent: 'center', alignItems: 'center' },
+        navRowChevron: { width: ms(30), height: ms(30), borderRadius: ms(10), justifyContent: 'center', alignItems: 'center' },
         statGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), paddingBottom: s(20), gap: s(10) },
         statCell: { width: '48.4%' },
-        statTileWrap: { borderRadius: ms(22), elevation: 5, shadowColor: '#4338CA', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
+        statTileWrap: { borderRadius: ms(22), elevation: 5, shadowColor: '#1F2421', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 } },
         statTile: { borderRadius: ms(22), padding: ms(14), minHeight: ms(112), justifyContent: 'space-between', overflow: 'hidden' },
         statBgIcon: { position: 'absolute', right: -ms(8), bottom: -ms(10) },
         statTop: { flexDirection: 'row', alignItems: 'center' },
@@ -699,12 +729,12 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         statValue: { fontSize: ms(25), fontWeight: '900', color: '#FFF', letterSpacing: -0.5 },
         statLabel: { fontSize: ms(10), fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.9, marginTop: 2 },
         hero: {
-            marginHorizontal: s(16),
-            marginBottom: vs(18),
-            borderRadius: ms(28),
-            padding: ms(22),
+            borderBottomLeftRadius: ms(32),
+            borderBottomRightRadius: ms(32),
+            paddingHorizontal: s(20),
+            paddingBottom: ms(46),
             elevation: 6,
-            shadowColor: '#4338CA',
+            shadowColor: '#1F2421',
             shadowOpacity: 0.3,
             shadowRadius: 14,
             shadowOffset: { width: 0, height: 8 },
@@ -715,18 +745,16 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         heroAvatar: {
             width: ms(44),
             height: ms(44),
-            borderRadius: ms(14),
-            backgroundColor: 'rgba(255,255,255,0.22)',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.45)',
+            borderRadius: ms(22),
+            backgroundColor: '#FFFFFF',
             justifyContent: 'center',
             alignItems: 'center',
         },
-        heroAvatarText: { fontSize: ms(18), fontWeight: '900', color: '#FFF' },
-        heroWelcome: { fontSize: ms(11), fontWeight: '800', color: 'rgba(255,255,255,0.8)', letterSpacing: 1.6 },
+        heroAvatarText: { fontSize: ms(18), fontWeight: '900', color: '#1F2421' },
+        heroWelcome: { fontSize: ms(14), fontWeight: '600', color: '#E9DFCF' },
         heroName: { fontSize: ms(26), fontWeight: '900', color: '#FFF', marginTop: vs(2) },
-        heroUpdated: { flexDirection: 'row', alignItems: 'center', gap: s(6), marginTop: vs(12) },
-        heroUpdatedText: { fontSize: ms(11), color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
+        heroUpdated: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: s(6), marginTop: vs(12), backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999 },
+        heroUpdatedText: { fontSize: ms(11), color: '#E9DFCF', fontWeight: '700' },
     });
 }
 

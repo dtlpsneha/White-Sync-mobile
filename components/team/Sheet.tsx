@@ -5,7 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, Radius } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /** A bottom sheet for a short form or list: the ERPNext step, payment matches. */
@@ -20,7 +20,7 @@ export function Sheet({ visible, title, subtitle, onClose, children }: {
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <Pressable style={styles.backdrop} onPress={onClose} />
                 <View style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 20 }]}>
-                    <View style={[styles.grabber, { backgroundColor: colors.border }]} />
+                    <View style={[styles.grabber, { backgroundColor: colors.surfaceVariant }]} />
                     <View style={styles.head}>
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
@@ -40,10 +40,10 @@ export function Sheet({ visible, title, subtitle, onClose, children }: {
 }
 
 const styles = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(10,15,25,0.45)' },
-    sheet: { borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, paddingHorizontal: 20, paddingTop: 10 },
-    grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: 'center', marginBottom: 12 },
+    backdrop: { flex: 1, backgroundColor: 'rgba(31,36,33,0.55)' },
+    sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 10 },
+    grabber: { width: 42, height: 5, borderRadius: 3, alignSelf: 'center', marginBottom: 12 },
     head: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14, gap: 12 },
-    title: { fontSize: 19, fontWeight: '900' },
-    subtitle: { fontSize: 13, fontWeight: '600', marginTop: 2 },
+    title: { fontSize: 19, fontWeight: '800' },
+    subtitle: { fontSize: 12.5, fontWeight: '500', marginTop: 2 },
 });

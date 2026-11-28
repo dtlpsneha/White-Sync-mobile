@@ -8,14 +8,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
-import { age, Job, KIND_COLORS, KIND_ICONS, SMARTOPS_ICON, SMARTOPS_TINT } from '@/services/teamApi';
+import { age, Job, KIND_ICONS, SMARTOPS_ICON } from '@/services/teamApi';
 import { Avatar } from './Avatar';
-import { displayName } from './chatUi';
+import { displayName, kindTint } from './chatUi';
 
 export function JobRow({ job, meId, colors, onPress }: {
     job: Job; meId?: string; colors: typeof Colors.light; onPress: () => void;
 }) {
-    const tint = job.by_smartops ? SMARTOPS_TINT : KIND_COLORS[job.kind];
+    const tint = kindTint(job.kind, job.by_smartops);
     const late = job.status === 'open' && job.age_minutes >= 24 * 60;
     const fromMe = job.author.id === meId;
     const toMe = job.assignee?.id === meId;
@@ -23,15 +23,15 @@ export function JobRow({ job, meId, colors, onPress }: {
     const line = job.body || job.customer_name || job.customer_hint || (job.attachment ? '📷 Photo' : '');
 
     return (
-        <TouchableOpacity activeOpacity={0.7} onPress={onPress} style={styles.row}>
+        <TouchableOpacity activeOpacity={0.7} onPress={onPress} style={[styles.row, { backgroundColor: colors.surface, borderLeftColor: tint }]}>
             <View>
-                <Avatar name={fromMe ? job.assignee?.name : job.author.name} size={48}
+                <Avatar name={fromMe ? job.assignee?.name : job.author.name} size={42}
                     smartops={!fromMe && !!job.by_smartops} />
                 <View style={[styles.kindDot, { backgroundColor: tint, borderColor: colors.background }]}>
                     <Ionicons name={(job.by_smartops ? SMARTOPS_ICON : KIND_ICONS[job.kind]) as any} size={11} color="#FFF" />
                 </View>
             </View>
-            <View style={[styles.main, { borderBottomColor: colors.border }]}>
+            <View style={styles.main}>
                 <View style={styles.top}>
                     <Text style={[styles.who, { color: colors.text }]} numberOfLines={1}>{who}</Text>
                     <Text style={[styles.age, { color: late ? colors.danger : colors.textSecondary }]}>{age(job.age_minutes)}</Text>
@@ -56,18 +56,22 @@ export function JobRow({ job, meId, colors, onPress }: {
 }
 
 const styles = StyleSheet.create({
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 14 },
+    row: {
+        flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 12, marginHorizontal: 16, marginVertical: 5,
+        borderRadius: 18, borderLeftWidth: 4, overflow: 'hidden',
+        shadowColor: '#1F2421', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+    },
     kindDot: {
         position: 'absolute', right: -3, bottom: -3, width: 22, height: 22, borderRadius: 11, borderWidth: 2,
         justifyContent: 'center', alignItems: 'center',
     },
-    main: { flex: 1, paddingVertical: 12, paddingRight: 14, borderBottomWidth: StyleSheet.hairlineWidth, gap: 3 },
+    main: { flex: 1, paddingVertical: 12, paddingRight: 14, gap: 3 },
     top: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    who: { flex: 1, fontSize: 16, fontWeight: '800' },
+    who: { flex: 1, fontSize: 14.5, fontWeight: '800' },
     age: { fontSize: 12, fontWeight: '700' },
     bottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     kind: { fontSize: 13, fontWeight: '800' },
-    line: { fontSize: 14, marginTop: 1 },
+    line: { fontSize: 13, marginTop: 1 },
     badge: { minWidth: 22, height: 22, borderRadius: Radius.pill, paddingHorizontal: 6, justifyContent: 'center', alignItems: 'center' },
     badgeText: { fontSize: 12, fontWeight: '800' },
 });

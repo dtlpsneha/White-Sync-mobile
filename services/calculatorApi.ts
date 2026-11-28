@@ -40,9 +40,12 @@ export interface CalculateBeltPriceResponse {
 }
 
 const getHeaders = () => {
+    // No Content-Type here: utils/api already sets it for a JSON body. Setting it
+    // twice made the phone send "application/json, application/json", which ERPNext
+    // does not read as JSON -- calculate_belt_price then never saw the grade id and
+    // answered "Parameter 'id' is required", so no price ever showed.
     const headers: Record<string, string> = {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
     };
     
     // Only add Authorization header if keys are actually configured

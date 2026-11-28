@@ -11,7 +11,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterRow } from '@/constants/motion';
 
 interface MaintenanceRecord {
     name: string;
@@ -90,7 +91,7 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
         const isCompleted = item.completion_status === 'Completed';
 
         return (
-            <Animated.View entering={FadeInDown.delay(index * 100).duration(500)}>
+            <Animated.View entering={enterRow(index)}>
                 <TouchableOpacity
                     style={[styles.itemCard, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}
                     onPress={() => handleRecordPress(item)}

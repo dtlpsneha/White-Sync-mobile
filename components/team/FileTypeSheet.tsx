@@ -95,7 +95,7 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
                         <TouchableOpacity key={t.key} onPress={() => setTypeKey(t.key)} activeOpacity={0.8}
                             style={[styles.type, {
                                 borderColor: on ? colors.primary : colors.border,
-                                backgroundColor: on ? colors.primary : colors.background,
+                                backgroundColor: on ? colors.primary : colors.surface,
                             }]}>
                             <Ionicons name={t.icon as any} size={16} color={on ? '#FFF' : colors.primary} />
                             <Text style={[styles.typeText, { color: on ? '#FFF' : colors.text }]}>{t.label}</Text>
@@ -127,7 +127,7 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
                                 <TouchableOpacity key={text} onPress={pick(fn)} activeOpacity={0.8}
                                     style={[styles.source, { borderColor: colors.primary }]}>
                                     <Ionicons name={icon as any} size={22} color={colors.primary} />
-                                    <Text style={[styles.sourceText, { color: colors.primary }]}>{text}</Text>
+                                    <Text style={[styles.sourceText, { color: colors.primaryVariant }]}>{text}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -136,7 +136,7 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
             )}
 
             <TouchableOpacity disabled={!type || !!missing || (!!withFile && !file) || saving} onPress={save}
-                style={[styles.save, { backgroundColor: colors.primary, opacity: !type || missing || (withFile && !file) ? 0.5 : 1 }]}>
+                style={[styles.save, { backgroundColor: !type || missing || (withFile && !file) ? colors.surfaceVariant : colors.primary }]}>
                 {saving
                     ? <ActivityIndicator color="#FFF" />
                     : <Text style={styles.saveText}>
@@ -236,7 +236,7 @@ function PartyPicker({ kind, value, onPick, colors, input }: {
         return (
             <TouchableOpacity onPress={() => { onPick('', ''); setQuery(''); setFound([]); }}
                 style={[styles.picked, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}>
-                <Text style={[styles.pickedText, { color: colors.primary }]} numberOfLines={1}>{value}</Text>
+                <Text style={[styles.pickedText, { color: colors.primaryVariant }]} numberOfLines={1}>{value}</Text>
                 <Ionicons name="close-circle" size={18} color={colors.primary} />
             </TouchableOpacity>
         );
@@ -309,7 +309,7 @@ function InvoicePicker({ value, labels, onChange, colors, input }: {
                 return (
                     <View key={name} style={[styles.picked, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]}>
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.pickedText, { color: colors.primary }]} numberOfLines={1}>
+                            <Text style={[styles.pickedText, { color: colors.primaryVariant }]} numberOfLines={1}>
                                 {hit?.voucher_number || name}
                             </Text>
                             {!!hit?.customer && <Text style={[styles.hint, { color: colors.textSecondary }]} numberOfLines={1}>{hit.customer}</Text>}
@@ -375,30 +375,30 @@ function DateInput({ value, onChange, colors, input }: {
 }
 
 const styles = StyleSheet.create({
-    label: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
+    label: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.66, marginBottom: 6 },
     types: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     type: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 8 },
-    typeText: { fontSize: 13, fontWeight: '700' },
+    typeText: { fontSize: 12.5, fontWeight: '700' },
     field: { gap: 0 },
     row: { flexDirection: 'row', alignItems: 'center' },
-    input: { borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
+    input: { borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, minHeight: 46 },
     long: { minHeight: 90 },
     rupee: { fontSize: 16, fontWeight: '800', marginRight: 8 },
     dateBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-    picked: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 10 },
-    pickedText: { flex: 1, fontSize: 15, fontWeight: '700' },
+    picked: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: 14, minHeight: 46, paddingVertical: 10 },
+    pickedText: { flex: 1, fontSize: 14, fontWeight: '800' },
     result: { paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: StyleSheet.hairlineWidth },
     resultText: { fontSize: 14, fontWeight: '600' },
     hint: { fontSize: 12, fontWeight: '600' },
     note: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.md, padding: 10 },
     noteText: { flex: 1, fontSize: 12.5, fontWeight: '600' },
     sources: { flexDirection: 'row', gap: 10 },
-    source: { flex: 1, alignItems: 'center', gap: 4, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 14 },
-    sourceText: { fontSize: 13, fontWeight: '800' },
-    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, padding: 8 },
+    source: { flex: 1, height: 72, alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 16 },
+    sourceText: { fontSize: 12, fontWeight: '800' },
+    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1.5, borderRadius: Radius.md, padding: 8 },
     thumb: { width: 40, height: 40, borderRadius: 8 },
-    pdf: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
+    pdf: { backgroundColor: '#E4572E', justifyContent: 'center', alignItems: 'center' },
     fileName: { flex: 1, fontSize: 14, fontWeight: '700' },
-    save: { borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center', marginTop: 6 },
-    saveText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+    save: { borderRadius: 16, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+    saveText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
 });
