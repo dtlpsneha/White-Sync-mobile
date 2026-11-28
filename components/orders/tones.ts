@@ -3,6 +3,7 @@
  * text / wash of its status pill. Kept here, next to the screens that use them.
  */
 import type { OrderStatus } from '@/services/teamApi';
+import { toneFor } from '@/constants/theme';
 
 type Tone = { edge: string; text: string; soft: string };
 
@@ -17,5 +18,7 @@ const TONES: Record<OrderStatus, Tone> = {
 /** The tone for a status; on dark screens the pill is a wash of the edge colour instead. */
 export function orderTone(status: OrderStatus, theme: 'light' | 'dark' = 'light'): Tone {
     const t = TONES[status] ?? TONES.so_pending;
-    return theme === 'dark' ? { edge: t.edge, text: t.edge, soft: `${t.edge}2E` } : t;
+    if (theme !== 'dark') return t;
+    const bright = toneFor('dark', t.edge);
+    return { edge: bright, text: bright, soft: `${t.edge}38` };
 }

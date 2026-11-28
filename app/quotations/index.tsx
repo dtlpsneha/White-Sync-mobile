@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import QuotationList, { Quotation, quoteAmount, quoteFlags, quoteStatusColor } from '@/components/QuotationList';
 import { QuotationDashboardPanel } from '@/components/dashboard/QuotationDashboardPanel';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius, Shadow, toneFor } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { BandStats } from '@/components/ui/Midnight';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -146,7 +146,7 @@ export default function QuotationListScreen() {
                                 onPress={() => setFilter(item)}
                                 activeOpacity={0.85}
                             >
-                                {item !== 'All' ? <View style={[styles.chipDot, { backgroundColor: on ? '#FFF' : quoteStatusColor(item) }]} /> : null}
+                                {item !== 'All' ? <View style={[styles.chipDot, { backgroundColor: on ? '#FFF' : toneFor(theme, quoteStatusColor(item)) }]} /> : null}
                                 <Text style={[styles.chipText, on && styles.chipTextOn]}>{item}</Text>
                             </TouchableOpacity>
                         );

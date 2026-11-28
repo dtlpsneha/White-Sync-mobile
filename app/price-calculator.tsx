@@ -218,7 +218,7 @@ export default function PriceCalculatorScreen() {
             </ScreenHeader>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
                 <ScrollView
@@ -310,7 +310,7 @@ export default function PriceCalculatorScreen() {
                             <Text style={[styles.calculatingText, { color: UI_COLORS.textMuted }]}>Calculating...</Text>
                         </View>
                     ) : result ? (
-                        <Animated.View layout={smoothLayout} entering={appear} style={[styles.result, { backgroundColor: colors.ink }, Shadow.raised(theme)]}>
+                        <Animated.View layout={smoothLayout} entering={appear} style={[styles.result, { backgroundColor: colors.inkDeep }, theme === 'dark' && { borderWidth: 1, borderColor: colors.border }, Shadow.raised(theme)]}>
                             <View pointerEvents="none" style={styles.resultGlow} />
                             <View style={styles.resultTop}>
                                 <Text style={[styles.resultLabel, { color: colors.onInkMuted }]}>FINAL PRICE (INR)</Text>

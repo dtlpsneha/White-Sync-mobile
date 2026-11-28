@@ -13,6 +13,7 @@ import {
     Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { clearSessionCaches } from '@/utils/sessionCache';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -95,11 +96,15 @@ export default function LoginScreen() {
                     if (sidMatch) {
                         sessionCookie = `sid=${sidMatch[1].trim()}`;
                         await SecureStore.setItemAsync('session_cookies', sessionCookie);
+                        // A new sign-in never sees what was kept for the previous person.
+                        clearSessionCaches();
                         console.log('[Login] sid cookie stored successfully');
                     } else {
                         console.warn('[Login] sid cookie not found in header, storing truncated header');
                         sessionCookie = setCookieHeader.substring(0, 1000);
                         await SecureStore.setItemAsync('session_cookies', sessionCookie);
+                        // A new sign-in never sees what was kept for the previous person.
+                        clearSessionCaches();
                     }
                 }
 
@@ -247,7 +252,7 @@ export default function LoginScreen() {
 function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
     const colors = Colors[theme];
     return StyleSheet.create({
-        screen: { flex: 1, backgroundColor: colors.ink, overflow: 'hidden' },
+        screen: { flex: 1, backgroundColor: '#1F2421', overflow: 'hidden' },
         container: { flex: 1 },
         inner: { flex: 1, justifyContent: 'flex-end' },
         glow: { position: 'absolute', borderRadius: 999 },
