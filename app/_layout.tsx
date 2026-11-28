@@ -39,7 +39,7 @@ function RootLayoutContent() {
           * in dark mode. Matching it to the current theme's background stops
           * that flash from ever being a different color than the screen
           * underneath. */}
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors[theme].background } }} />
+        <Stack screenOptions={{ headerShown: false, animation: 'fade_from_bottom', animationDuration: 280, animationTypeForReplace: 'push', contentStyle: { backgroundColor: Colors[theme].background } }} />
         <NotificationPopup />
         <NotificationModal />
       </View>

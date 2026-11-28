@@ -8,7 +8,8 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterItem } from '@/constants/motion';
 
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -35,7 +36,7 @@ export function QuickActionCard({
     const { s, vs, ms } = useResponsive();
 
     return (
-        <Animated.View entering={FadeInDown.delay(delay).springify()}>
+        <Animated.View entering={enterItem(Math.round(delay / 100))}>
             <TouchableOpacity
                 style={[
                     styles.row,

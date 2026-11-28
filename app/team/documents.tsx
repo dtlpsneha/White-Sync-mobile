@@ -13,7 +13,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { displayName } from '@/components/team/chatUi';
+import { displayName, docTint } from '@/components/team/chatUi';
 import { FileTypeSheet } from '@/components/team/FileTypeSheet';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius } from '@/constants/theme';
@@ -99,21 +99,23 @@ export default function DocumentsScreen() {
             <ScreenHeader
                 title="Documents"
                 subtitle={counts.all !== undefined ? `${counts.all} files in Team Chat` : 'Files in Team Chat'}
+                align="left"
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/team'))}
-            />
-
-            <View style={styles.top}>
-                <View style={[styles.search, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Ionicons name="search" size={18} color={colors.textSecondary} />
-                    <TextInput style={[styles.searchInput, { color: colors.text }]} value={query} onChangeText={setQuery}
-                        placeholder="Customer, number, file name…" placeholderTextColor={colors.placeholder}
+            >
+                <View style={[styles.search, { backgroundColor: colors.ink2 }]}>
+                    <Ionicons name="search" size={18} color={colors.onInkMuted} />
+                    <TextInput style={[styles.searchInput, { color: '#FFF' }]} value={query} onChangeText={setQuery}
+                        placeholder="Customer, number, file name…" placeholderTextColor={colors.onInkMuted}
                         returnKeyType="search" autoCorrect={false} />
                     {!!query && (
                         <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
-                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                            <Ionicons name="close-circle" size={18} color={colors.onInkMuted} />
                         </TouchableOpacity>
                     )}
                 </View>
+            </ScreenHeader>
+
+            <View style={styles.top}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
                     {chips.map(c => {
                         const on = c.key === filter;
@@ -122,12 +124,11 @@ export default function DocumentsScreen() {
                             <TouchableOpacity key={c.key ?? 'all'} onPress={() => { setLoading(true); setFilter(c.key); }}
                                 activeOpacity={0.8}
                                 style={[styles.chip, {
-                                    backgroundColor: on ? colors.primary : colors.surface,
-                                    borderColor: on ? colors.primary : colors.border,
+                                    backgroundColor: on ? colors.ink : colors.surface,
+                                    borderColor: on ? colors.ink : colors.border,
                                 }]}>
-                                <Ionicons name={c.icon as any} size={14} color={on ? '#FFF' : colors.primary} />
                                 <Text style={[styles.chipText, { color: on ? '#FFF' : colors.text }]}>{c.label}</Text>
-                                <Text style={[styles.chipCount, { color: on ? '#FFF' : colors.textSecondary }]}>{n}</Text>
+                                <Text style={[styles.chipCount, { color: on ? '#FFF' : colors.text }]}>{n}</Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -166,30 +167,34 @@ export default function DocumentsScreen() {
                         const filed = !!f.doc_type;
                         const facts = [f.party || (!filed ? f.read_party : null), f.ref || (!filed ? f.read_ref : null)].filter(Boolean).join(' · ');
                         const when = [dmy(f.doc_date), f.amount != null ? inr(f.amount) : ''].filter(Boolean).join(' · ');
+                        const tint = docTint(f.doc_type);
                         return (
                             <TouchableOpacity activeOpacity={0.85}
                                 onPress={() => router.push({ pathname: '/team/[id]', params: { id: f.job_id } })}
-                                style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                                <View style={[styles.icon, { backgroundColor: filed ? `${colors.primary}1A` : `${colors.warning}1F` }]}>
-                                    <Ionicons name={iconFor(f) as any} size={22} color={filed ? colors.primary : colors.warning} />
+                                style={[styles.row, { backgroundColor: colors.surface, borderLeftColor: tint }]}>
+                                <View style={[styles.icon, { backgroundColor: `${tint}22` }]}>
+                                    <Ionicons name={iconFor(f) as any} size={20} color={tint} />
                                 </View>
                                 <View style={{ flex: 1, gap: 2 }}>
-                                    <Text style={[styles.type, { color: filed ? colors.primary : colors.warning }]}>
+                                    <Text style={[styles.type, { color: tint }]}>
                                         {filed ? f.doc_type_label : 'Not filed'}
                                     </Text>
                                     {!!facts && <Text style={[styles.facts, { color: colors.text }]} numberOfLines={1}>{facts}</Text>}
-                                    {!!when && <Text style={[styles.meta, { color: colors.text }]}>{when}</Text>}
+                                    {!!when && <Text style={[styles.meta, { color: colors.textSecondary }]}>{when}</Text>}
                                     {!!f.doc_details?.description && (
                                         <Text style={[styles.meta, { color: colors.text }]} numberOfLines={2}>{f.doc_details.description}</Text>
                                     )}
-                                    <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>
+                                    <Text style={[styles.meta, styles.small, { color: colors.textSecondary }]} numberOfLines={1}>
                                         {[f.filename, f.posted_by ? displayName(f.posted_by.name) : null, `${age(minutesSince(f.posted_at))} ago`].filter(Boolean).join(' · ')}
                                     </Text>
                                 </View>
                                 {types.length > 0 && (
                                     <TouchableOpacity onPress={() => setEditing(f)} hitSlop={8}
-                                        style={[styles.fileBtn, { borderColor: filed ? colors.border : colors.primary }]}>
-                                        <Text style={[styles.fileBtnText, { color: filed ? colors.textSecondary : colors.primary }]}>
+                                        style={[styles.fileBtn, {
+                                            borderColor: filed ? colors.border : colors.primary,
+                                            backgroundColor: filed ? 'transparent' : colors.primary,
+                                        }]}>
+                                        <Text style={[styles.fileBtnText, { color: filed ? colors.textSecondary : '#FFF' }]}>
                                             {filed ? 'Edit' : 'File'}
                                         </Text>
                                     </TouchableOpacity>
@@ -211,21 +216,26 @@ export default function DocumentsScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    top: { paddingHorizontal: 14, paddingTop: 12, gap: 10 },
-    search: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 14, height: 44 },
-    searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
+    top: { paddingHorizontal: 16, paddingTop: 14 },
+    search: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, paddingHorizontal: 14, height: 46, marginTop: 2 },
+    searchInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
     chips: { gap: 8, paddingBottom: 4 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
-    chipText: { fontSize: 13, fontWeight: '700' },
-    chipCount: { fontSize: 12, fontWeight: '800' },
-    list: { padding: 14, gap: 10, paddingBottom: 40 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: Radius.lg, padding: 12 },
-    icon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    type: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.4 },
-    facts: { fontSize: 15, fontWeight: '800' },
-    meta: { fontSize: 12.5, fontWeight: '600' },
-    fileBtn: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
-    fileBtnText: { fontSize: 13, fontWeight: '800' },
+    chipText: { fontSize: 12, fontWeight: '700' },
+    chipCount: { fontSize: 12, fontWeight: '800', opacity: 0.6 },
+    list: { paddingHorizontal: 16, paddingTop: 12, gap: 12, paddingBottom: 40 },
+    row: {
+        flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, borderLeftWidth: 4,
+        paddingVertical: 12, paddingHorizontal: 14,
+        shadowColor: '#1F2421', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+    },
+    icon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    type: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.66 },
+    facts: { fontSize: 14, fontWeight: '700' },
+    meta: { fontSize: 12, fontWeight: '500' },
+    small: { fontSize: 11 },
+    fileBtn: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+    fileBtnText: { fontSize: 11, fontWeight: '700' },
     empty: { alignItems: 'center', gap: 10, marginTop: 60 },
     emptyText: { fontSize: 14, fontWeight: '600' },
     notice: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 14, padding: 14, borderWidth: 1, borderRadius: Radius.md },

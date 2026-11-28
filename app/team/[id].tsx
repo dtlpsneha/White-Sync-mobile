@@ -22,7 +22,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DayDivider, JobTag, ReplyBubble } from '@/components/team/Bubbles';
-import { dayLabel, displayName, sameDay } from '@/components/team/chatUi';
+import { dayLabel, displayName, kindTint, sameDay } from '@/components/team/chatUi';
 import { Composer, ComposerChip } from '@/components/team/Composer';
 import { PickerSheet } from '@/components/team/PickerSheet';
 import { Sheet } from '@/components/team/Sheet';
@@ -30,7 +30,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
-    age, Filing, Job, JobDetail, JobKind, KIND_COLORS, Payments, People, PickedFile, PickedVoice, Reply, team,
+    age, Filing, Job, JobDetail, JobKind, Payments, People, PickedFile, PickedVoice, Reply, team,
 } from '@/services/teamApi';
 
 const POLL_MS = 10000;
@@ -163,6 +163,7 @@ export default function JobScreen() {
             <ScreenHeader
                 title={displayName(job.author.name)}
                 subtitle={`${job.kind_label} · ${open ? `waiting ${age(job.age_minutes)}` : job.status === 'done' ? 'done' : 'cancelled'}`}
+                align="left"
                 onBack={() => router.back()}
                 rightIcon="ellipsis-vertical"
                 onRightPress={menu}
@@ -238,7 +239,7 @@ function ErpStepButton({ job, colors, open, mayAct, onOpenSheet, onQuotation, on
     job: Job; colors: typeof Colors.light; open: boolean; mayAct: boolean;
     onOpenSheet: () => void; onQuotation: () => void; onOpenQuotation: () => void;
 }) {
-    const tint = KIND_COLORS[job.kind];
+    const tint = kindTint(job.kind);
     // An older SmartOps sends no `action` at all: show no ERPNext step rather than a wrong one.
     if (!job.action || job.action === 'none') return null;
 
@@ -287,7 +288,7 @@ function ErpStepSheet({ visible, job, colors, busy, open, onClose, onDone }: {
     visible: boolean; job: Job; colors: typeof Colors.light; busy: boolean; open: boolean;
     onClose: () => void; onDone: (fn: () => Promise<Result>) => Promise<void>;
 }) {
-    const tint = KIND_COLORS[job.kind];
+    const tint = kindTint(job.kind);
     const [reference, setReference] = useState('');
     const [transporter, setTransporter] = useState(job.transporter ?? '');
     const [payments, setPayments] = useState<Payments | null>(null);

@@ -1,7 +1,7 @@
 /**
  * White Sync design system.
  *
- * One indigo brand across every screen. Screens should read colors from
+ * Midnight x Ember: charcoal header bands, terracotta actions, sand pages. Screens should read colors from
  * `Colors[theme]`, and use `Radius`, `Space`, `Shadow`, `Gradients` and `Type`
  * below instead of hardcoding hex values, radii or shadows, so the whole app
  * stays visually consistent.
@@ -11,67 +11,94 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#141B34',
-    textSecondary: '#5B6485',
-    background: '#F4F5FB', // Soft indigo-tinted page
+    text: '#1F2421', // Charcoal ink
+    textSecondary: '#7A6F62', // Warm grey
+    background: '#FAF6EF', // Sand page
     surface: '#FFFFFF',
-    surfaceSecondary: '#EEF0FA',
-    surfaceVariant: '#E2E6F5',
-    tint: '#4F46E5',
-    primary: '#4F46E5', // Indigo 600 — buttons, links, active states
-    primaryVariant: '#4338CA',
-    primarySoft: '#EEF0FF', // Tinted backgrounds behind primary icons/chips
-    secondary: '#5B6485',
-    icon: '#5B6485',
-    border: '#E3E6F4',
-    tabIconDefault: '#9AA3C0',
-    tabIconSelected: '#4F46E5',
-    success: '#10B981',
-    danger: '#EF4444',
-    warning: '#F59E0B',
-    info: '#0EA5E9',
+    surfaceSecondary: '#F4EFE7',
+    surfaceVariant: '#E9DFCF', // Beige
+    tint: '#E4572E',
+    primary: '#E4572E', // Terracotta — buttons, links, active states
+    primaryVariant: '#B4401F',
+    primarySoft: '#FDE7DF', // Tinted backgrounds behind primary icons/chips
+    secondary: '#7A6F62',
+    icon: '#7A6F62',
+    border: '#EDE5D8',
+    tabIconDefault: '#A79C8E',
+    tabIconSelected: '#E4572E',
+    success: '#2F7D5B',
+    danger: '#C8423B',
+    warning: '#D99A14',
+    info: '#3E7CB1',
     onPrimary: '#FFFFFF',
-    cardShadow: 'rgba(67, 56, 202, 0.12)',
-    placeholder: '#9AA3C0',
+    cardShadow: 'rgba(31, 36, 33, 0.10)',
+    placeholder: '#A79C8E',
+    /** Charcoal header band, dark icon tiles and their raised steps. */
+    ink: '#1F2421',
+    ink2: '#2A302C',
+    ink3: '#3A413C',
+    onInk: '#E9DFCF',
+    onInkMuted: '#A79C8E',
+    amber: '#F2B134',
+    mint: '#7FD1A8', // Positive figures on the charcoal band
+    plum: '#8E5BB5',
   },
   dark: {
-    text: '#EEF0FB',
-    textSecondary: '#9AA3C7',
+    text: '#F4EFE7',
+    textSecondary: '#B5AA9C',
     /**
      * Elevation ladder: each step is a visible increment so cards keep their
      * edges against the page.
      */
-    background: '#0A0B14',
-    surface: '#14162A',
-    surfaceSecondary: '#1C1F38',
-    surfaceVariant: '#262A48',
-    tint: '#A5B4FC',
-    primary: '#6366F1', // Indigo 500 — keeps white text readable
-    primaryVariant: '#4F46E5',
-    primarySoft: 'rgba(99, 102, 241, 0.18)',
-    secondary: '#9AA3C7',
-    icon: '#9AA3C7',
-    border: 'rgba(165, 180, 252, 0.14)',
-    tabIconDefault: '#6B74A0',
-    tabIconSelected: '#A5B4FC',
-    success: '#34D399',
-    danger: '#F87171',
-    warning: '#FBBF24',
-    info: '#38BDF8',
+    background: '#121412',
+    surface: '#1F2421',
+    surfaceSecondary: '#2A302C',
+    surfaceVariant: '#3A413C',
+    tint: '#F08A68',
+    primary: '#E4572E',
+    primaryVariant: '#F08A68',
+    primarySoft: 'rgba(228, 87, 46, 0.18)',
+    secondary: '#B5AA9C',
+    icon: '#B5AA9C',
+    border: 'rgba(233, 223, 207, 0.12)',
+    tabIconDefault: '#8C8173',
+    tabIconSelected: '#F08A68',
+    success: '#5FBF8F',
+    danger: '#E8766F',
+    warning: '#F2B134',
+    info: '#6FA6D6',
     onPrimary: '#FFFFFF',
     cardShadow: 'rgba(0, 0, 0, 0.6)',
-    placeholder: '#6B74A0',
+    placeholder: '#8C8173',
+    ink: '#0B0D0C',
+    ink2: '#1F2421',
+    ink3: '#2A302C',
+    onInk: '#E9DFCF',
+    onInkMuted: '#A79C8E',
+    amber: '#F2B134',
+    mint: '#7FD1A8',
+    plum: '#B48AD6',
   },
 };
 
 /** Brand gradients: headers, hero cards, primary buttons. */
 export const Gradients = {
-  brand: ['#4338CA', '#6366F1', '#8B5CF6'] as const,
-  brandSoft: ['#6366F1', '#8B5CF6'] as const,
-  success: ['#10B981', '#059669'] as const,
-  warning: ['#F59E0B', '#F97316'] as const,
-  danger: ['#F87171', '#E11D48'] as const,
-  info: ['#38BDF8', '#0EA5E9'] as const,
+  brand: ['#1F2421', '#2A302C', '#3A2A22'] as const, // Charcoal band with a warm edge
+  brandSoft: ['#F07A55', '#E4572E'] as const, // Terracotta
+  success: ['#3F8F6B', '#2F5D50'] as const,
+  warning: ['#F2B134', '#D99A14'] as const,
+  danger: ['#E4572E', '#C8423B'] as const,
+  info: ['#5B95C6', '#3E7CB1'] as const,
+};
+
+/** Status colours shared by quotations, orders and visits. */
+export const StatusColors = {
+  approved: '#2F7D5B',
+  pending: '#3E7CB1',
+  review: '#D99A14',
+  reopen: '#8E5BB5',
+  cancelled: '#C8423B',
+  draft: '#8C8173',
 };
 
 /** Corner radii. */
@@ -106,14 +133,14 @@ export const Type = {
 /** Elevation: pass `Shadow.card(theme)` into a style array. */
 export const Shadow = {
   card: (theme: 'light' | 'dark') => ({
-    shadowColor: theme === 'dark' ? '#000' : '#4338CA',
+    shadowColor: theme === 'dark' ? '#000' : '#1F2421',
     shadowOpacity: theme === 'dark' ? 0.35 : 0.1,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   }),
   raised: (theme: 'light' | 'dark') => ({
-    shadowColor: theme === 'dark' ? '#000' : '#4338CA',
+    shadowColor: theme === 'dark' ? '#000' : '#1F2421',
     shadowOpacity: theme === 'dark' ? 0.5 : 0.22,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },

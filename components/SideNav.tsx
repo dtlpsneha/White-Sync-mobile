@@ -30,17 +30,17 @@ export const SideNav = ({ onDark = false }: { onDark?: boolean }) => {
     // tab-like destinations, where replace avoids growing an unbounded
     // back-stack every time one is picked from the menu.
     const navItems = useMemo(() => [
-        { id: 'home', icon: 'home-outline', activeIcon: 'home', label: 'Home', route: '/home', color: '#3B82F6', mode: 'replace' as const },
-        { id: 'team', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles', label: 'Team Chat', route: '/team', color: '#059669', mode: 'push' as const },
-        { id: 'quotes', icon: 'document-text-outline', activeIcon: 'document-text', label: 'Quotes', route: '/quotations', color: '#F59E0B', mode: 'replace' as const },
-        { id: 'orders', icon: 'cart-outline', activeIcon: 'cart', label: 'Sales Orders', route: '/sales-orders', color: '#14B8A6', mode: 'replace' as const },
-        { id: 'myOrders', icon: 'git-network-outline', activeIcon: 'git-network', label: 'My Orders', route: '/my-orders', color: '#16A34A', mode: 'push' as const },
-        { id: 'visits', icon: 'calendar-outline', activeIcon: 'calendar', label: 'Visits', route: '/maintenance', color: '#8B5CF6', mode: 'replace' as const },
-        { id: 'calculator', icon: 'calculator-outline', activeIcon: 'calculator', label: 'Price Calculator', route: '/price-calculator', color: '#10B981', mode: 'push' as const },
-        { id: 'invoiceHistory', icon: 'receipt-outline', activeIcon: 'receipt', label: 'Sales Invoice History', route: '/daily-sales-report/invoice-history', color: '#0891B2', mode: 'push' as const },
-        { id: 'customerSearch', icon: 'search-outline', activeIcon: 'search', label: 'Search Customers', route: '/customer-search', color: '#0EA5E9', mode: 'push' as const },
-        { id: 'ai', icon: 'sparkles-outline', activeIcon: 'sparkles', label: 'Smart Ops AI', route: '/ai-chat', color: '#EC4899', mode: 'push' as const },
-        { id: 'profile', icon: 'person-outline', activeIcon: 'person', label: 'Profile', route: '/profile', color: '#6366F1', mode: 'replace' as const },
+        { id: 'home', icon: 'home-outline', activeIcon: 'home', label: 'Home', route: '/home', color: '#1F2421', mode: 'replace' as const },
+        { id: 'team', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles', label: 'Team Chat', route: '/team', color: '#E4572E', mode: 'push' as const },
+        { id: 'quotes', icon: 'document-text-outline', activeIcon: 'document-text', label: 'Quotes', route: '/quotations', color: '#D99A14', mode: 'replace' as const },
+        { id: 'orders', icon: 'cart-outline', activeIcon: 'cart', label: 'Sales Orders', route: '/sales-orders', color: '#2F5D50', mode: 'replace' as const },
+        { id: 'myOrders', icon: 'git-network-outline', activeIcon: 'git-network', label: 'My Orders', route: '/my-orders', color: '#2F7D5B', mode: 'push' as const },
+        { id: 'visits', icon: 'calendar-outline', activeIcon: 'calendar', label: 'Visits', route: '/maintenance', color: '#8E5BB5', mode: 'replace' as const },
+        { id: 'calculator', icon: 'calculator-outline', activeIcon: 'calculator', label: 'Price Calculator', route: '/price-calculator', color: '#2F7D5B', mode: 'push' as const },
+        { id: 'invoiceHistory', icon: 'receipt-outline', activeIcon: 'receipt', label: 'Sales Invoice History', route: '/daily-sales-report/invoice-history', color: '#3E7CB1', mode: 'push' as const },
+        { id: 'customerSearch', icon: 'search-outline', activeIcon: 'search', label: 'Search Customers', route: '/customer-search', color: '#3E7CB1', mode: 'push' as const },
+        { id: 'ai', icon: 'sparkles-outline', activeIcon: 'sparkles', label: 'Smart Ops AI', route: '/ai-chat', color: '#E4572E', mode: 'push' as const },
+        { id: 'profile', icon: 'person-outline', activeIcon: 'person', label: 'Profile', route: '/profile', color: '#7A6F62', mode: 'replace' as const },
     ], []);
 
     const activeIndex = useMemo(() => {

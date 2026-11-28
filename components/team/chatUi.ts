@@ -5,6 +5,40 @@
 
 const PERSON_COLORS = ['#E11D48', '#7C3AED', '#0891B2', '#D97706', '#059669', '#2563EB', '#C026D3', '#EA580C'];
 
+/** SmartOps' own posts: deep green, as in the Figma Team Chat frame. */
+export const SMARTOPS_GREEN = '#2F5D50';
+
+/** One Ember colour per job kind (proforma, order, quotation, dispatch, payment, general). */
+const KIND_TINT: Record<string, string> = {
+    proforma: '#3E7CB1',
+    place_order: '#2F5D50',
+    quotation: '#D99A14',
+    dispatch: '#8E5BB5',
+    payment: '#2F7D5B',
+    general: '#8C8173',
+};
+
+export function kindTint(kind: string | null | undefined, bySmartops = false): string {
+    if (bySmartops) return SMARTOPS_GREEN;
+    return KIND_TINT[kind || 'general'] ?? KIND_TINT.general;
+}
+
+/** One Ember colour per document type; amber for a file nobody has filed yet. */
+const DOC_TINT: Record<string, string> = {
+    customer_po: '#E4572E',
+    principal_invoice: '#3E7CB1',
+    quotation: '#D99A14',
+    payment_proof: '#2F5D50',
+    dispatch_lr: '#2F7D5B',
+    delivery_challan: '#8E5BB5',
+    other: '#8C8173',
+};
+
+export function docTint(docType: string | null | undefined): string {
+    if (!docType) return '#D99A14';
+    return DOC_TINT[docType] ?? '#8C8173';
+}
+
 export function personColor(name: string | null | undefined): string {
     const s = (name || '?').toLowerCase();
     let h = 0;

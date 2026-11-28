@@ -28,13 +28,18 @@ export function TeamImage({ a, colors, width, onDark = false }: {
 
     if (!isImageAttachment(a.mime, a.filename)) {
         return (
-            <View style={[styles.file, { backgroundColor: onDark ? 'rgba(255,255,255,0.16)' : colors.surfaceSecondary, width }]}>
-                <View style={[styles.fileIcon, { backgroundColor: '#EF4444' }]}>
+            <View style={[styles.file, { backgroundColor: onDark ? 'rgba(255,255,255,0.16)' : colors.background, width }]}>
+                <View style={[styles.fileIcon, { backgroundColor: '#E4572E' }]}>
                     <Ionicons name="document-text" size={20} color="#FFF" />
                 </View>
-                <Text style={[styles.fileName, { color: onDark ? '#FFF' : colors.text }]} numberOfLines={2}>
-                    {a.filename || 'Document.pdf'}
-                </Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={[styles.fileName, { color: onDark ? '#FFF' : colors.text }]} numberOfLines={2}>
+                        {a.filename || 'Document.pdf'}
+                    </Text>
+                    <Text style={[styles.fileKind, { color: onDark ? 'rgba(255,255,255,0.7)' : colors.textSecondary }]}>
+                        {(a.mime || '').includes('pdf') || /\.pdf$/i.test(a.filename || '') ? 'PDF' : 'File'}
+                    </Text>
+                </View>
             </View>
         );
     }
@@ -76,10 +81,11 @@ export function readLine(a: Attachment): string {
 }
 
 const styles = StyleSheet.create({
-    photo: { borderRadius: 12, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-    file: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, padding: 10 },
-    fileIcon: { width: 36, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-    fileName: { flex: 1, fontSize: 14, fontWeight: '600' },
+    photo: { borderRadius: 14, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+    file: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, padding: 8 },
+    fileIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+    fileName: { fontSize: 13, fontWeight: '700' },
+    fileKind: { fontSize: 11, marginTop: 1 },
     viewer: { flex: 1, backgroundColor: '#000' },
     close: {
         position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22,

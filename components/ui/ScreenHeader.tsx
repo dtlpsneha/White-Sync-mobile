@@ -19,14 +19,16 @@ type Props = {
     right?: React.ReactNode;
     /** Content under the title row — search bars, filter pills, summary tiles. */
     children?: React.ReactNode;
+    /** 'left' puts the title beside the back button (redesigned screens); default is centred. */
+    align?: 'center' | 'left';
 };
 
 /**
- * The one header every screen uses: brand gradient, rounded bottom edge, white
- * title. Keep screen content out of here; pass only the title row and any
+ * The one header every screen uses: charcoal band, rounded bottom edge, white
+ * title, a soft terracotta glow. Keep screen content out of here; pass only the title row and any
  * search or filter controls via `children`.
  */
-export function ScreenHeader({ title, subtitle, onBack, rightIcon, onRightPress, right, children }: Props) {
+export function ScreenHeader({ title, subtitle, onBack, rightIcon, onRightPress, right, children, align = 'center' }: Props) {
     const insets = useSafeAreaInsets();
     const { ms } = useResponsive();
 
@@ -38,18 +40,23 @@ export function ScreenHeader({ title, subtitle, onBack, rightIcon, onRightPress,
             style={[styles.wrap, { paddingTop: insets.top + 10 }]}
         >
             <StatusBar style="light" />
+            {/* The glow is clipped by its own layer so the header keeps its shadow
+                and anything that hangs below it (dropdowns) is not cut off. */}
+            <View pointerEvents="none" style={styles.glowClip}>
+                <View style={styles.glow} />
+            </View>
             <View style={styles.row}>
                 {onBack ? (
                     <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={styles.iconBtn} hitSlop={8}>
                         <Ionicons name="chevron-back" size={22} color="#FFF" />
                     </TouchableOpacity>
-                ) : (
+                ) : align === 'left' ? null : (
                     <View style={styles.iconSpacer} />
                 )}
 
-                <View style={styles.titleWrap}>
-                    <Text style={[styles.title, { fontSize: ms(19) }]} numberOfLines={1}>{title}</Text>
-                    {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
+                <View style={[styles.titleWrap, align === 'left' && styles.titleLeft]}>
+                    <Text style={[styles.title, { fontSize: ms(19) }]} numberOfLines={1} maxFontSizeMultiplier={1.25}>{title}</Text>
+                    {subtitle ? <Text style={styles.subtitle} numberOfLines={1} maxFontSizeMultiplier={1.25}>{subtitle}</Text> : null}
                 </View>
 
                 {right ? (
@@ -58,7 +65,7 @@ export function ScreenHeader({ title, subtitle, onBack, rightIcon, onRightPress,
                     <TouchableOpacity onPress={onRightPress} activeOpacity={0.8} style={styles.iconBtn} hitSlop={8}>
                         <Ionicons name={rightIcon} size={20} color="#FFF" />
                     </TouchableOpacity>
-                ) : (
+                ) : align === 'left' ? null : (
                     <View style={styles.iconSpacer} />
                 )}
             </View>
@@ -73,8 +80,8 @@ const styles = StyleSheet.create({
         paddingBottom: 18,
         borderBottomLeftRadius: Radius.xl,
         borderBottomRightRadius: Radius.xl,
-        shadowColor: '#4338CA',
-        shadowOpacity: 0.28,
+        shadowColor: '#1F2421',
+        shadowOpacity: 0.25,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 8 },
         elevation: 8,
@@ -85,15 +92,18 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 14,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(255,255,255,0.08)',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.35)',
+        borderColor: 'rgba(255,255,255,0.16)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     iconSpacer: { width: 40, height: 40 },
-    titleWrap: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+    titleWrap: { flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 8 },
+    titleLeft: { alignItems: 'flex-start', paddingHorizontal: 12 },
+    glowClip: { ...StyleSheet.absoluteFill, overflow: 'hidden', borderBottomLeftRadius: Radius.xl, borderBottomRightRadius: Radius.xl },
+    glow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, right: -60, top: -70, backgroundColor: 'rgba(228,87,46,0.18)' },
     title: { color: '#FFF', fontWeight: '800', letterSpacing: -0.2 },
-    subtitle: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '600', marginTop: 2 },
+    subtitle: { color: '#A79C8E', fontSize: 11, fontWeight: '600', marginTop: 2 },
     body: { marginTop: 14 },
 });

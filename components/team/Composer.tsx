@@ -150,7 +150,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
     const visibleChips = chips.filter(c => c.send || !text.trim());
 
     return (
-        <View style={[styles.wrap, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <View style={[styles.wrap, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
             {visibleChips.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
                     contentContainerStyle={styles.chips}>
@@ -161,7 +161,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
                             disabled={sending}
                             onPress={() => (c.send ? send(c.send) : setText(`${c.insert ?? ''}${text}`))}
                             style={[styles.chip, {
-                                backgroundColor: c.color ? `${c.color}1F` : colors.surface,
+                                backgroundColor: c.color ? `${c.color}1F` : colors.background,
                                 borderColor: c.color ? `${c.color}66` : colors.border,
                             }]}
                         >
@@ -172,7 +172,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
             )}
 
             {file && (
-                <View style={[styles.preview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[styles.preview, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     {isImageAttachment(file.mimeType, file.name)
                         ? <Image source={{ uri: file.uri }} style={styles.thumb} />
                         : <View style={[styles.thumb, styles.pdf]}><Ionicons name="document-text" size={24} color="#FFF" /></View>}
@@ -197,11 +197,11 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
 
             {recording ? (
                 <View style={styles.row}>
-                    <View style={[styles.box, styles.recBox, { backgroundColor: colors.surface, borderColor: '#EF4444' }]}>
+                    <View style={[styles.box, styles.recBox, { backgroundColor: colors.background, borderColor: colors.danger }]}>
                         <TouchableOpacity onPress={() => stopRecording(false)} hitSlop={8} style={styles.boxIcon}>
-                            <Ionicons name="trash-outline" size={22} color="#EF4444" />
+                            <Ionicons name="trash-outline" size={22} color={colors.danger} />
                         </TouchableOpacity>
-                        <View style={styles.recDot} />
+                        <View style={[styles.recDot, { backgroundColor: colors.danger }]} />
                         <Text style={[styles.recText, { color: colors.text }]}>
                             Listening {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
                         </Text>
@@ -213,7 +213,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
                 </View>
             ) : (
             <View style={styles.row}>
-                <View style={[styles.box, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[styles.box, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     <TouchableOpacity onPress={() => { openAttach(); }} hitSlop={8} style={styles.boxIcon}>
                         <Ionicons name="attach" size={24} color={colors.textSecondary} style={{ transform: [{ rotate: '45deg' }] }} />
                     </TouchableOpacity>
@@ -249,7 +249,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
                     <>
                         <TouchableOpacity onPress={() => setLang(l => (l === 'en' ? 'ta' : 'en'))}
                             accessibilityLabel="Language to write in"
-                            style={[styles.lang, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                            style={[styles.lang, { borderColor: colors.border, backgroundColor: colors.background }]}>
                             <Text style={[styles.langText, { color: colors.primary }]}>{lang === 'en' ? 'EN' : 'த'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={startRecording} accessibilityLabel="Speak instead of typing"
@@ -273,26 +273,29 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWit
 const styles = StyleSheet.create({
     typeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2, maxWidth: '100%' },
     typeChipText: { fontSize: 12, fontWeight: '800' },
-    wrap: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 8 },
+    wrap: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, borderTopWidth: 1, gap: 8 },
     chips: { gap: 8, paddingHorizontal: 2, alignItems: 'center' },
     chipsTitle: { fontSize: 12, fontWeight: '700', marginRight: 2 },
-    chip: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 14, paddingVertical: 7 },
-    chipText: { fontSize: 13, fontWeight: '700' },
+    chip: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
+    chipText: { fontSize: 12, fontWeight: '700' },
     preview: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, padding: 8 },
     thumb: { width: 44, height: 44, borderRadius: 8 },
-    pdf: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
+    pdf: { backgroundColor: '#E4572E', justifyContent: 'center', alignItems: 'center' },
     previewName: { fontSize: 13, fontWeight: '600' },
     row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
     box: {
         flex: 1, flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, borderWidth: 1,
-        paddingHorizontal: 6, minHeight: 48,
+        paddingHorizontal: 6, minHeight: 46,
     },
     boxIcon: { width: 36, height: 46, justifyContent: 'center', alignItems: 'center' },
     input: { flex: 1, fontSize: 16, paddingVertical: 12, paddingHorizontal: 4, maxHeight: 120 },
-    send: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+    send: {
+        width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center',
+        shadowColor: '#E4572E', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+    },
     recBox: { alignItems: 'center', borderWidth: 1.5 },
-    recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444', marginHorizontal: 6 },
+    recDot: { width: 10, height: 10, borderRadius: 5, marginHorizontal: 6 },
     recText: { flex: 1, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
-    lang: { height: 48, minWidth: 40, borderRadius: 24, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
+    lang: { height: 46, minWidth: 40, borderRadius: 24, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
     langText: { fontSize: 15, fontWeight: '900' },
 });

@@ -18,12 +18,15 @@ export function SectionHeader({
     title,
     subtitle,
     icon,
+    accentBar,
     actionLabel,
     onAction,
 }: {
     title: string;
     subtitle?: string;
     icon?: keyof typeof Ionicons.glyphMap;
+    /** A short terracotta bar before the title instead of an icon tile. */
+    accentBar?: boolean;
     actionLabel?: string;
     onAction?: () => void;
 }) {
@@ -34,13 +37,15 @@ export function SectionHeader({
 
     return (
         <View style={[styles.row, { paddingHorizontal: s(16), marginBottom: vs(10) }]}>
-            {icon ? (
+            {accentBar ? (
+                <View style={{ width: 4, height: ms(30), borderRadius: 2, backgroundColor: colors.primary }} />
+            ) : icon ? (
                 <View style={[styles.iconWrap, { width: ms(34), height: ms(34), borderRadius: Radius.md, backgroundColor: colors.primarySoft }]}>
                     <Ionicons name={icon} size={ms(17)} color={colors.primary} />
                 </View>
             ) : null}
             <View style={{ flex: 1 }}>
-                <Text style={[styles.title, { fontSize: ms(15), color: colors.text }]}>{title}</Text>
+                <Text style={[styles.title, { fontSize: ms(15), color: colors.text }]} numberOfLines={1} maxFontSizeMultiplier={1.25}>{title}</Text>
                 {subtitle ? (
                     <Text style={[styles.subtitle, { fontSize: ms(11), color: colors.textSecondary }]}>
                         {subtitle}

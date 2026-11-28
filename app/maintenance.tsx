@@ -2,12 +2,14 @@ import MaintenanceList from '@/components/MaintenanceList';
 import { CustomerVisit, loadVisits, syncPendingVisits } from '@/services/visitExtras';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { BandStats, StatusPill } from '@/components/ui/Midnight';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, BackHandler, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { apiGet } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
@@ -58,6 +60,7 @@ interface MaintenanceRecord {
 
 export default function MaintenanceScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
     const colors = Colors[theme];
@@ -158,11 +161,19 @@ export default function MaintenanceScreen() {
     const partial = records.filter(v => (v.completion_status || '').toLowerCase() === 'partially completed').length;
 
     const stats = [
-        { label: 'TOTAL CUSTOMERS', value: String(uniqueCustomers), note: 'All time', icon: 'people-outline', color: '#4F46E5' },
-        { label: 'INTERACTIONS', value: String(totalInteractions), note: 'This month', icon: 'chatbubbles-outline', color: '#10B981' },
-        { label: 'FOLLOW-UPS', value: String(followUps), note: 'Required', icon: 'notifications-outline', color: '#F59E0B' },
-        { label: 'PARTIALLY COMPLETED', value: String(partial), note: 'Visits', icon: 'hourglass-outline', color: '#EF4444' },
+        { label: 'TOTAL CUSTOMERS', value: String(uniqueCustomers), note: 'All time', icon: 'people-outline', color: '#1F2421' },
+        { label: 'INTERACTIONS', value: String(totalInteractions), note: 'This month', icon: 'chatbubbles-outline', color: '#2F7D5B' },
+        { label: 'FOLLOW-UPS', value: String(followUps), note: 'Required', icon: 'notifications-outline', color: '#D99A14' },
+        { label: 'PARTIALLY COMPLETED', value: String(partial), note: 'Visits', icon: 'hourglass-outline', color: '#C8423B' },
     ];
+
+    const syncedCount = savedVisits.filter(v => !!v.erp_name).length;
+    const notSynced = savedVisits.length - syncedCount;
+    const [show, setShow] = useState<'all' | 'synced' | 'pending'>('all');
+    const shown = useMemo(
+        () => savedVisits.filter(v => (show === 'all' ? true : show === 'synced' ? !!v.erp_name : !v.erp_name)),
+        [savedVisits, show],
+    );
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -171,107 +182,133 @@ export default function MaintenanceScreen() {
             <ScreenHeader
                 title="Customer Visit"
                 subtitle="Saved on this phone"
+                align="left"
                 onBack={() => router.replace('/home')}
-            />
+            >
+                <BandStats
+                    items={[
+                        { label: 'Saved', value: String(savedVisits.length), note: 'visits on phone' },
+                        { label: 'Synced', value: String(syncedCount), note: 'sent to ERP', color: colors.mint },
+                        { label: 'Not synced', value: String(notSynced), note: 'retry on open', color: colors.amber },
+                    ]}
+                />
+            </ScreenHeader>
 
             <ScrollView
                 style={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollInner}
             >
-                {savedVisits.length === 0 ? (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No visits saved yet. Tap + to add a visit.</Text>
-                ) : savedVisits.map(v => (
-                    <View key={v.id} style={[styles.visitCard, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        <View style={styles.visitHead}>
-                            <Text style={[styles.visitTitle, { color: colors.text }]}>{v.date_of_visit}</Text>
-                            <View style={[styles.doneBadge, { backgroundColor: (v.erp_name ? colors.success : colors.danger) + '1F' }]}>
-                                <Text style={[styles.doneText, { color: v.erp_name ? colors.success : colors.danger }]}>{v.erp_name ? 'Synced' : 'Not synced'}</Text>
+                <View style={styles.chips}>
+                    {([
+                        ['all', 'All', savedVisits.length],
+                        ['synced', 'Synced', syncedCount],
+                        ['pending', 'Not synced', notSynced],
+                    ] as const).map(([key, text, n]) => {
+                        const on = show === key;
+                        return (
+                            <TouchableOpacity
+                                key={key}
+                                onPress={() => setShow(key)}
+                                style={[styles.chip, { backgroundColor: on ? colors.ink : colors.surface, borderColor: on ? colors.ink : colors.border }]}
+                            >
+                                <Text style={[styles.chipText, { color: on ? '#FFF' : colors.text }]}>{text}</Text>
+                                <Text style={[styles.chipCount, { color: on ? '#FFF' : colors.textSecondary }]}>{n}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+
+                {shown.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        {savedVisits.length === 0 ? 'No visits saved yet. Tap + to add a visit.' : 'No visits in this list.'}
+                    </Text>
+                ) : shown.map(v => {
+                    const synced = !!v.erp_name;
+                    const edge = synced ? colors.success : colors.danger;
+                    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v.date_of_visit || '');
+                    const day = m ? String(Number(m[3])) : '—';
+                    const mon = m ? MONTHS[Number(m[2]) - 1] : '';
+                    const who = [v.executive || '-', v.along_with.length ? `with ${v.along_with.join(', ')}` : ''].filter(Boolean).join(' · ');
+                    return (
+                        <View key={v.id} style={[styles.visitCard, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                            <View style={[styles.edge, { backgroundColor: edge }]} />
+                            <View style={styles.visitHead}>
+                                <View style={[styles.dateTile, { backgroundColor: colors.ink }]}>
+                                    <Text style={styles.dateDay}>{day}</Text>
+                                    <Text style={[styles.dateMon, { color: colors.amber }]}>{mon}</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.visitTitle, { color: colors.text }]} numberOfLines={2}>
+                                        {v.customer_planned.length ? v.customer_planned.join(', ') : 'No customers listed'}
+                                    </Text>
+                                    <Text style={[styles.visitSub, { color: colors.textSecondary }]} numberOfLines={1}>{who}</Text>
+                                </View>
+                                <StatusPill text={synced ? 'Synced' : 'Not synced'} color={edge} />
                             </View>
+                            <TouchableOpacity
+                                style={[styles.reportBtn, { backgroundColor: colors.background }]}
+                                onPress={() => router.push({ pathname: '/maintenance/completion-report', params: { id: v.id } } as any)}
+                            >
+                                <Ionicons name="document-text-outline" size={16} color={colors.primaryVariant} />
+                                <Text style={[styles.reportBtnText, { color: colors.primaryVariant }]}>{v.completion ? 'Open visit record' : 'Completion Report'}</Text>
+                                <Ionicons name="chevron-forward" size={16} color={colors.primaryVariant} />
+                            </TouchableOpacity>
                         </View>
-                        <Text style={[styles.visitSub, { color: colors.textSecondary }]}>Executive: {v.executive || '-'}</Text>
-                        <Text style={[styles.visitSub, { color: colors.textSecondary }]}>
-                            Customers: {v.customer_planned.length ? v.customer_planned.join(', ') : '-'}
-                        </Text>
-                        {v.along_with.length > 0 && (
-                            <Text style={[styles.visitSub, { color: colors.textSecondary }]}>Along with: {v.along_with.join(', ')}</Text>
-                        )}
-                        <TouchableOpacity
-                            style={[styles.reportBtn, { backgroundColor: colors.primary }]}
-                            onPress={() => router.push({ pathname: '/maintenance/completion-report', params: { id: v.id } } as any)}
-                        >
-                            <Ionicons name="document-text-outline" size={16} color="#FFF" />
-                            <Text style={styles.reportBtnText}>{v.completion ? 'Open visit record' : 'Completion Report'}</Text>
-                        </TouchableOpacity>
-                    </View>
-                ))}
+                    );
+                })}
             </ScrollView>
 
             <TouchableOpacity
-                style={[styles.fab, { backgroundColor: colors.primary }, Shadow.raised(theme)]}
+                style={[styles.fab, { backgroundColor: colors.primary, bottom: Math.max(insets.bottom, 12) + 24 }]}
                 onPress={() => router.push('/maintenance/create')}
                 activeOpacity={0.85}
                 accessibilityLabel="Add Visit"
             >
-                <Ionicons name="add" size={32} color="#FFFFFF" />
+                <Ionicons name="add" size={30} color="#FFFFFF" />
             </TouchableOpacity>
 
         </View>
     );
 }
 
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
 function getStyles({ s, vs, ms }: { s: (n: number) => number; vs: (n: number) => number; ms: (n: number) => number }) {
     return StyleSheet.create({
         container: { flex: 1 },
         scrollContent: { flex: 1 },
-        scrollInner: { paddingTop: vs(8), paddingBottom: vs(120), paddingHorizontal: s(16) },
+        scrollInner: { paddingTop: vs(16), paddingBottom: vs(120), paddingHorizontal: s(16), gap: 12 },
+        chips: { flexDirection: 'row', gap: 8, marginBottom: 2 },
+        chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 7, borderRadius: Radius.pill, borderWidth: 1 },
+        chipText: { fontSize: 12.5, fontWeight: '700' },
+        chipCount: { fontSize: 12, fontWeight: '800', opacity: 0.7 },
         fab: {
             position: 'absolute',
             bottom: vs(40),
-            right: s(24),
+            right: s(22),
             width: ms(60),
             height: ms(60),
-            borderRadius: ms(30),
+            borderRadius: ms(20),
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 50,
+            shadowColor: '#E4572E',
+            shadowOpacity: 0.4,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 8,
         },
-        statGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: s(16), gap: s(10), marginTop: vs(14) },
-        statTile: {
-            width: '48.4%',
-            borderRadius: Radius.lg,
-            borderWidth: 1,
-            paddingVertical: ms(14),
-            paddingRight: ms(14),
-            paddingLeft: ms(18),
-            overflow: 'hidden',
-            minHeight: ms(108),
-            justifyContent: 'space-between',
-        },
-        statAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
-        statTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: s(6) },
-        statLabel: { fontSize: ms(10), fontWeight: '800', letterSpacing: 0.7, flexShrink: 1 },
-        statValue: { fontSize: ms(28), fontWeight: '900', letterSpacing: -0.5 },
-        statNote: { fontSize: ms(11), fontWeight: '700' },
-        section: { paddingHorizontal: s(20), marginTop: vs(22) },
-        sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: s(10), marginBottom: vs(18) },
-        sectionAccent: { width: 5, height: ms(18), borderRadius: 3 },
-        sectionTitle: { fontSize: ms(16), fontWeight: '900', letterSpacing: -0.3 },
-        loadingBox: { padding: ms(50), alignItems: 'center', gap: 12 },
-        loadingText: { fontSize: ms(13), fontWeight: '600' },
-        errorBox: { padding: ms(32), alignItems: 'center', gap: 14, backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: Radius.lg },
-        errorText: { fontSize: ms(13), color: '#EF4444', textAlign: 'center', fontWeight: '500' },
-        retryBtn: { paddingHorizontal: s(22), paddingVertical: vs(11), backgroundColor: '#EF4444', borderRadius: Radius.md },
-        retryText: { color: '#FFF', fontWeight: '700' },
-        visitCard: { borderWidth: 1, borderRadius: Radius.lg, padding: 14, gap: 6, marginBottom: 12 },
-        visitHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        visitTitle: { fontSize: 15, fontWeight: '800' },
-        visitSub: { fontSize: 12, fontWeight: '600' },
-        doneBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-        doneText: { fontSize: 11, fontWeight: '800' },
+        visitCard: { borderWidth: 1, borderRadius: Radius.lg, padding: 14, paddingLeft: 18, gap: 10, overflow: 'hidden' },
+        edge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+        visitHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+        dateTile: { width: 46, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+        dateDay: { color: '#FFF', fontSize: 18, fontWeight: '800', lineHeight: 20 },
+        dateMon: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginTop: 2 },
+        visitTitle: { fontSize: 14.5, fontWeight: '800' },
+        visitSub: { fontSize: 12, fontWeight: '500', marginTop: 2 },
         emptyText: { fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 40 },
-        reportBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, paddingVertical: 10, marginTop: 8 },
-        reportBtnText: { color: '#FFF', fontWeight: '800', fontSize: 13 },
+        reportBtn: { flexDirection: 'row', gap: 8, alignItems: 'center', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 },
+        reportBtnText: { flex: 1, fontWeight: '800', fontSize: 13 },
     });
 }
-

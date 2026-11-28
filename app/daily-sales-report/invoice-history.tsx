@@ -104,7 +104,7 @@ function formatDisPct(value: number | null | undefined, listPrice: number | null
     return (value || 0) > 0 ? '+' + out : out;
 }
 function disPctColor(value: number | null | undefined, listPrice: number | null | undefined, colors: { text: string; danger: string; success: string }) {
-    if (isDisNil(value, listPrice)) return '#7C3AED';
+    if (isDisNil(value, listPrice)) return '#8E5BB5';
     if (!value) return colors.text;
     return value < 0 ? colors.danger : colors.success;
 }

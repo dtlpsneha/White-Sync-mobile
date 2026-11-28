@@ -7,8 +7,9 @@ import * as SecureStore from 'expo-secure-store';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { SectionCard } from '@/components/ui/Midnight';
 import { apiGet, apiPost, apiPut, uploadFile } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
 import { searchItemsByBrand, RequestItem } from '@/services/quotationRequest';
@@ -218,15 +219,14 @@ export default function CreateSalesOrderScreen() {
         }
     };
 
-    const field = [styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }];
-    const label = [styles.label, { color: colors.textSecondary }];
-    const card = [styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }];
+    const field = [styles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }];
 
     return (
         <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
-                title={edit_id ? 'Edit Purchase Order' : 'Customer Purchase Order'}
-                subtitle={edit_id ? undefined : 'New order'}
+                title={edit_id ? 'Edit Customer PO' : 'New Customer PO'}
+                subtitle="Saved as a Sales Order in ERPNext"
+                align="left"
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/sales-orders'))}
             />
 
@@ -235,11 +235,10 @@ export default function CreateSalesOrderScreen() {
             ) : (
                 <ScrollView contentContainerStyle={[styles.pad, { paddingBottom: 320 + insets.bottom }]} keyboardShouldPersistTaps="handled">
                     {/* 1. Customer */}
-                    <View style={card}>
-                        <Text style={label}>1. Customer</Text>
+                    <SectionCard number={1} title="Customer">
                         {customer ? (
                             <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => { setCustomer(null); setCustomerQuery(''); }}>
-                                <Text style={[styles.selectedText, { color: colors.primary }]}>{customer.customer_name || customer.name}</Text>
+                                <Text style={[styles.selectedText, { color: colors.primaryVariant }]}>{customer.customer_name || customer.name}</Text>
                                 <Ionicons name="close-circle" size={18} color={colors.primary} />
                             </TouchableOpacity>
                         ) : (
@@ -252,15 +251,16 @@ export default function CreateSalesOrderScreen() {
                                 ))}
                             </>
                         )}
-                    </View>
+                    </SectionCard>
 
                     {/* 2. Attachments */}
-                    <View style={card}>
-                        <Text style={label}>2. Attachments</Text>
+                    <SectionCard number={2} title="Attachments" subtitle="Customer's PO copy">
                         {existingAttach ? <Text style={[styles.hint, { color: colors.textSecondary }]}>Existing file: {existingAttach.split('/').pop()}</Text> : null}
                         {attachments.map((f, i) => (
                             <View key={`${f.uri}-${i}`} style={[styles.fileRow, { borderColor: colors.border }]}>
-                                <Ionicons name={f.type.includes('pdf') ? 'document-text-outline' : 'image-outline'} size={20} color={colors.primary} />
+                                <View style={[styles.fileTile, { backgroundColor: colors.primary }]}>
+                                    <Ionicons name={f.type.includes('pdf') ? 'document-text-outline' : 'image-outline'} size={16} color="#FFF" />
+                                </View>
                                 <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>{f.name}</Text>
                                 <TouchableOpacity onPress={() => removeAttachment(i)} hitSlop={8}>
                                     <Ionicons name="close-circle" size={20} color={colors.danger} />
@@ -277,11 +277,10 @@ export default function CreateSalesOrderScreen() {
                                 <Text style={[styles.addText, { color: colors.primary }]}>Add PDF</Text>
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    </SectionCard>
 
                     {/* 3. Customer PO number and date */}
-                    <View style={card}>
-                        <Text style={label}>3. Customer PO No & date</Text>
+                    <SectionCard number={3} title="Customer PO No & date">
                         <TextInput
                             style={field}
                             placeholder="Customer's PO number (as on their PO)"
@@ -293,7 +292,7 @@ export default function CreateSalesOrderScreen() {
                         <Text style={[styles.hint, { color: colors.textSecondary, marginTop: -4 }]}>
                             Used to track this order to its invoice in My Orders.
                         </Text>
-                        <Pressable style={[styles.dateBox, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={() => setShowDate(true)}>
+                        <Pressable style={[styles.dateBox, { borderColor: colors.border, backgroundColor: colors.background }]} onPress={() => setShowDate(true)}>
                             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
                             <Text style={[styles.dateText, { color: colors.text }]}>{dmy(orderDate)}</Text>
                         </Pressable>
@@ -308,11 +307,10 @@ export default function CreateSalesOrderScreen() {
                                 }}
                             />
                         )}
-                    </View>
+                    </SectionCard>
 
                     {/* 4. Special Instruction */}
-                    <View style={card}>
-                        <Text style={label}>4. Special Instruction</Text>
+                    <SectionCard number={4} title="Special Instruction" subtitle="Optional">
                         <TextInput
                             style={[...field, styles.longText]}
                             placeholder="Anything the order desk should know (optional)"
@@ -322,11 +320,10 @@ export default function CreateSalesOrderScreen() {
                             multiline
                             textAlignVertical="top"
                         />
-                    </View>
+                    </SectionCard>
 
                     {/* 5. Items */}
-                    <View style={card}>
-                        <Text style={label}>5. Items</Text>
+                    <SectionCard number={5} title="Items" subtitle="One brand for all items">
                         <Text style={[styles.sub, { color: colors.textSecondary }]}>Brand (for all items)</Text>
                         <TouchableOpacity
                             style={[styles.selected, { borderColor: colors.border, backgroundColor: colors.surface }]}
@@ -368,7 +365,7 @@ export default function CreateSalesOrderScreen() {
                                         <Text style={[styles.sub, { color: colors.textSecondary }]}>Item name</Text>
                                         {l.item ? (
                                             <TouchableOpacity style={[styles.selected, { borderColor: colors.primary, backgroundColor: colors.primarySoft }]} onPress={() => patchLine(l.key, { item: null, query: '', results: [] })}>
-                                                <Text style={[styles.selectedText, { color: colors.primary }]}>{l.item.item_name}</Text>
+                                                <Text style={[styles.selectedText, { color: colors.primaryVariant }]}>{l.item.item_name}</Text>
                                                 <Ionicons name="close-circle" size={18} color={colors.primary} />
                                             </TouchableOpacity>
                                         ) : (
@@ -393,7 +390,7 @@ export default function CreateSalesOrderScreen() {
                             <Ionicons name="add" size={18} color={colors.primary} />
                             <Text style={[styles.addText, { color: colors.primary }]}>Add item</Text>
                         </TouchableOpacity>
-                    </View>
+                    </SectionCard>
 
                     <TouchableOpacity style={[styles.saveWide, { backgroundColor: colors.primary }]} onPress={handleSave} disabled={saving}>
                         {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveWideText}>{edit_id ? 'Update order' : 'Save order in ERP'}</Text>}
@@ -433,8 +430,6 @@ const styles = StyleSheet.create({
     pad: { padding: 16, gap: 12 },
     saveBtn: { minWidth: 44, height: 40, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
     saveText: { fontWeight: '900', fontSize: 14, color: '#FFF' },
-    card: { padding: 14, borderRadius: Radius.lg, borderWidth: 1, gap: 8 },
-    label: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
     sub: { fontSize: 12, fontWeight: '700', marginTop: 6 },
     hint: { fontSize: 12, fontWeight: '600' },
     longText: { minHeight: 110 },
@@ -444,9 +439,10 @@ const styles = StyleSheet.create({
     resultRow: { paddingVertical: 10, borderBottomWidth: 1, gap: 2 },
     resultText: { fontSize: 14, fontWeight: '600' },
     row: { flexDirection: 'row', gap: 10 },
-    addBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12 },
+    addBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12 },
     addText: { fontSize: 14, fontWeight: '800' },
-    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 8 },
+    fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 8 },
+    fileTile: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
     fileName: { flex: 1, fontSize: 13, fontWeight: '600' },
     dateBox: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
     dateText: { fontSize: 15, fontWeight: '700' },
@@ -454,7 +450,7 @@ const styles = StyleSheet.create({
     lineHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     lineTitle: { fontSize: 14, fontWeight: '800' },
     dropdown: { maxHeight: 220, borderWidth: 1, borderRadius: Radius.md },
-    addItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12, marginTop: 6 },
-    saveWide: { borderRadius: Radius.md, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
-    saveWideText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
+    addItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md, paddingVertical: 12, marginTop: 6 },
+    saveWide: { borderRadius: 16, height: 54, alignItems: 'center', justifyContent: 'center', marginTop: 4, shadowColor: '#E4572E', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+    saveWideText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
 });

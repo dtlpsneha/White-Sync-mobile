@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
@@ -8,7 +8,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import { useResponsive } from '@/hooks/useResponsive';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { enterRow } from '@/constants/motion';
 
 const IMAGE_HOST = API_BASE_URL;
 
@@ -36,9 +37,32 @@ interface SalesOrderListProps {
     filter?: string;
     searchQuery?: string;
     scrollEnabled?: boolean;
+    /** Hands the whole fetched list to the parent (filter pills and header figures). */
+    onLoaded?: (orders: SalesOrder[]) => void;
 }
 
-export default function SalesOrderList({ filter = 'All', searchQuery = '', scrollEnabled = true }: SalesOrderListProps) {
+export type { SalesOrder };
+
+/** Edge / pill colour for an ERPNext Sales Order status (Midnight x Ember). */
+export function orderStatusColor(status: string): string {
+    const s = (status || '').toUpperCase();
+    if (s.includes('CANCEL')) return '#C8423B';
+    if (s.includes('DRAFT')) return '#8C8173';
+    if (s.includes('COMPLETED') || s.includes('APPROVED') || s.includes('CLOSED')) return '#2F7D5B';
+    if (s.includes('TO DELIVER AND BILL')) return '#D99A14';
+    if (s.includes('TO BILL')) return '#3E7CB1';
+    if (s.includes('TO DELIVER')) return '#8E5BB5';
+    return '#D99A14';
+}
+
+/** Two letters for the avatar tile: Demo Textiles -> DT. */
+function initials(name: string): string {
+    const words = (name || '').replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+    if (!words.length) return '?';
+    return (words[0][0] + (words[1]?.[0] || words[0][1] || '')).toUpperCase();
+}
+
+export default function SalesOrderList({ filter = 'All', searchQuery = '', scrollEnabled = true, onLoaded }: SalesOrderListProps) {
     const router = useRouter();
     const colorScheme = useColorScheme();
     const theme = colorScheme ?? 'light';
@@ -77,6 +101,7 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
                 });
 
                 setAllSalesOrders(deduped);
+                onLoaded?.(deduped);
             }
         } catch (error) {
             console.error('Error fetching sales orders:', error);
@@ -114,28 +139,10 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
         return filtered;
     }, [allSalesOrders, filter, searchQuery]);
 
-    const getStatusColors = (status: string) => {
-        const s = (status || '').toUpperCase();
-        switch (s) {
-            case 'COMPLETED':
-            case 'APPROVED':
-                return { bg: 'rgba(0, 191, 165, 0.1)', text: colors.success, border: 'rgba(0, 191, 165, 0.2)' };
-            case 'DRAFT':
-                return { bg: 'rgba(148, 163, 184, 0.1)', text: '#64748B', border: 'rgba(148, 163, 184, 0.2)' };
-            case 'CANCELLED':
-                return { bg: 'rgba(198, 40, 40, 0.1)', text: '#C62828', border: 'rgba(198, 40, 40, 0.2)' };
-            default:
-                return { bg: 'rgba(245, 158, 11, 0.1)', text: colors.warning, border: 'rgba(245, 158, 11, 0.2)' };
-        }
-    };
-
     const renderItem = ({ item, index }: { item: SalesOrder; index: number }) => {
-        const statusConfig = getStatusColors(item.workflow_state || item.status);
-        const amount = Number(item.grand_total).toLocaleString('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-            maximumFractionDigits: 0
-        }).replace('INR', '₹');
+        const status = item.workflow_state || item.status || 'Draft';
+        const tone = orderStatusColor(status);
+        const amount = '₹' + Number(item.grand_total || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
         // The list call returns the date as `date`; the detail call uses `transaction_date`.
         const rawDate = (item as any).date || item.transaction_date || '';
         const [y, m, d] = rawDate.split('-');
@@ -143,40 +150,35 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
         const hasFile = !!(item.attach || (item as any).attach_image);
 
         return (
-            <Animated.View entering={FadeInDown.delay(100 + (index % 5) * 50).springify()}>
+            <Animated.View entering={enterRow(index)}>
                 <TouchableOpacity
-                    style={[styles.card, { flexDirection: 'column', padding: 16 }]}
-                    activeOpacity={0.7}
+                    style={styles.card}
+                    activeOpacity={0.8}
                     onPress={() => router.push(`/sales-orders/${item.name}` as any)}
                 >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>{item.name}</Text>
-                        <View style={[styles.statusPill, { backgroundColor: statusConfig.bg + '10', borderColor: statusConfig.border }]}>
-                            <View style={[styles.statusDot, { backgroundColor: statusConfig.text }]} />
-                            <Text style={[styles.statusText, { color: statusConfig.text }]}>
-                                {item.workflow_state || item.status}
-                            </Text>
+                    <View style={[styles.edge, { backgroundColor: tone }]} />
+                    <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{initials(item.customer)}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.customerName} numberOfLines={1}>{item.customer}</Text>
+                        <Text style={styles.metaText} numberOfLines={1}>{item.name}</Text>
+                        <View style={styles.metaRow}>
+                            <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} />
+                            <Text style={styles.metaText}>{dateText || 'No date'}</Text>
+                            {hasFile ? (
+                                <>
+                                    <Ionicons name="attach" size={13} color={colors.primaryVariant} />
+                                    <Text style={[styles.metaText, { color: colors.primaryVariant, fontWeight: '700' }]}>PO attached</Text>
+                                </>
+                            ) : null}
                         </View>
                     </View>
-
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text, marginTop: 10 }} numberOfLines={2}>
-                        {item.customer}
-                    </Text>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                        <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>{dateText || 'No date'}</Text>
-                        {hasFile && (
-                            <>
-                                <Ionicons name="attach" size={13} color={colors.textSecondary} />
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>Attached</Text>
-                            </>
-                        )}
-                    </View>
-
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary, letterSpacing: 0.5 }}>TOTAL VALUE</Text>
-                        <Text style={{ fontSize: 18, fontWeight: '900', color: statusConfig.text }}>{amount}</Text>
+                    <View style={styles.right}>
+                        <Text style={styles.amountText}>{amount}</Text>
+                        <View style={[styles.pill, { backgroundColor: tone + '1F' }]}>
+                            <Text style={[styles.pillText, { color: tone }]} numberOfLines={1}>{status}</Text>
+                        </View>
                     </View>
                 </TouchableOpacity>
             </Animated.View>
@@ -222,38 +224,32 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
     return StyleSheet.create({
         container: { flex: 1 },
         center: { padding: 40, alignItems: 'center', justifyContent: 'center' },
-        listContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
+        listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 120 },
         card: {
             backgroundColor: colors.surface,
             borderRadius: Radius.lg,
-            marginBottom: 16,
+            marginBottom: 12,
             borderWidth: 1,
             borderColor: colors.border,
             ...Shadow.card(theme),
             flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            paddingVertical: 12,
+            paddingLeft: 16,
+            paddingRight: 14,
             overflow: 'hidden',
         },
-        statusAccent: { width: 5, height: '100%' },
-        cardContent: { flex: 1, padding: 16 },
-        cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-        idBadge: { backgroundColor: colors.primarySoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-        idText: { fontSize: 10, color: colors.primary, fontWeight: '800' },
-        statusPill: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
-        statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
-        statusText: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-        cardBody: { marginBottom: 16, backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, padding: 12 },
-        customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-        thumbnailContainer: { width: 44, height: 44, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceSecondary },
-        thumbnail: { width: '100%', height: '100%', resizeMode: 'cover' },
-        iconContainer: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.primarySoft, justifyContent: 'center', alignItems: 'center' },
-        customerName: { fontSize: ms(16), fontWeight: '900', color: colors.text, textTransform: 'uppercase' },
-        dateRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-        dateText: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
-        cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-        amountContainer: { gap: 2 },
-        amountLabel: { fontSize: 10, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase' },
-        amountText: { fontSize: ms(20), fontWeight: '900', color: colors.success },
-        emptyText: { marginTop: 16, fontSize: 16, fontWeight: '600', color: colors.textSecondary }
+        edge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+        avatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+        avatarText: { color: '#FFF', fontWeight: '800', fontSize: 13 },
+        customerName: { fontSize: ms(14.5), fontWeight: '800', color: colors.text },
+        metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+        metaText: { fontSize: 11.5, color: colors.textSecondary, fontWeight: '500', marginTop: 1 },
+        right: { alignItems: 'flex-end', gap: 6, maxWidth: '38%' },
+        amountText: { fontSize: ms(15), fontWeight: '800', color: colors.text },
+        pill: { borderRadius: Radius.pill, paddingHorizontal: 9, paddingVertical: 3 },
+        pillText: { fontSize: 10.5, fontWeight: '800' },
+        emptyText: { marginTop: 16, fontSize: 16, fontWeight: '600', color: colors.textSecondary },
     });
 }
-

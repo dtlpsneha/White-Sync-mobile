@@ -16,11 +16,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { dmy, inr } from '@/components/orders/format';
+import { orderTone } from '@/components/orders/tones';
 import { PickerSheet } from '@/components/team/PickerSheet';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { Colors, Radius } from '@/constants/theme';
+import { BandStats } from '@/components/ui/Midnight';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { MyOrders, ORDER_COLORS, ORDER_ICONS, OrderRow, OrderStatus, team } from '@/services/teamApi';
+import { MyOrders, OrderRow, OrderStatus, team } from '@/services/teamApi';
 
 
 export default function MyOrdersScreen() {
@@ -67,53 +69,56 @@ export default function MyOrdersScreen() {
         ...(data?.statuses ?? []).map(s => ({ key: s.key, label: s.label })),
     ];
 
+    const count = (k: string) => data?.counts[k] ?? 0;
+
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <ScreenHeader
                 title="My Orders"
-                subtitle={data ? `${data.counts.all ?? 0} since ${dmy(data.since)} · ${whose}` : 'Orders and invoices'}
+                subtitle={data ? `${count('all')} since ${dmy(data.since)} · ${whose}` : 'Orders and invoices'}
+                align="left"
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
-            />
+                right={data?.can_see_all && people.length > 0 ? (
+                    <TouchableOpacity onPress={() => setPicking(true)} activeOpacity={0.85}
+                        style={[styles.scope, salesperson ? { backgroundColor: colors.primary } : null]}>
+                        <Ionicons name={salesperson ? 'person' : 'people'} size={15} color="#FFF" />
+                        <Text style={styles.scopeText} numberOfLines={1}>{picked ? picked.label : 'All'}</Text>
+                        <Ionicons name="chevron-down" size={13} color={colors.onInk} />
+                    </TouchableOpacity>
+                ) : undefined}
+            >
+                <BandStats items={[
+                    { label: 'To invoice', value: data ? String(count('invoice_pending')) : '—', color: colors.amber },
+                    { label: 'To dispatch', value: data ? String(count('invoice_generated') + count('delivery_pending')) : '—', color: '#C9A6E3' },
+                    { label: 'Dispatched', value: data ? String(count('dispatched')) : '—', color: colors.mint },
+                ]} />
+            </ScreenHeader>
 
             <View style={styles.top}>
-                <View style={styles.searchRow}>
-                    <View style={[styles.search, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        <Ionicons name="search" size={18} color={colors.textSecondary} />
-                        <TextInput style={[styles.searchInput, { color: colors.text }]} value={query} onChangeText={setQuery}
-                            placeholder="Customer, invoice no., PO no." placeholderTextColor={colors.placeholder}
-                            autoCorrect={false} />
-                        {!!query && (
-                            <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
-                                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                    {data?.can_see_all && people.length > 0 && (
-                        <TouchableOpacity onPress={() => setPicking(true)}
-                            style={[styles.scope, {
-                                borderColor: colors.primary,
-                                backgroundColor: salesperson ? colors.primary : colors.surface,
-                            }]}>
-                            <Ionicons name={salesperson ? 'person' : 'people'} size={16} color={salesperson ? '#FFF' : colors.primary} />
-                            <Text style={[styles.scopeText, { color: salesperson ? '#FFF' : colors.primary }]} numberOfLines={1}>
-                                {picked ? picked.label : 'All'}
-                            </Text>
-                            <Ionicons name="chevron-down" size={14} color={salesperson ? '#FFF' : colors.primary} />
+                <View style={[styles.search, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Ionicons name="search" size={18} color={colors.textSecondary} />
+                    <TextInput style={[styles.searchInput, { color: colors.text }]} value={query} onChangeText={setQuery}
+                        placeholder="Customer, invoice no., PO no." placeholderTextColor={colors.placeholder}
+                        autoCorrect={false} />
+                    {!!query && (
+                        <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+                            <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
                         </TouchableOpacity>
                     )}
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipBar}>
                     {chips.map(c => {
                         const on = c.key === status;
-                        const tint = c.key ? ORDER_COLORS[c.key] : colors.primary;
-                        const n = data?.counts[c.key ?? 'all'] ?? 0;
+                        const n = count(c.key ?? 'all');
                         return (
                             <TouchableOpacity key={c.key ?? 'all'} onPress={() => { setLoading(true); setStatus(c.key); }}
                                 activeOpacity={0.8}
-                                style={[styles.chip, { backgroundColor: on ? tint : colors.surface, borderColor: on ? tint : colors.border }]}>
-                                {c.key && <Ionicons name={ORDER_ICONS[c.key] as any} size={14} color={on ? '#FFF' : tint} />}
+                                style={[styles.chip, on
+                                    ? { backgroundColor: colors.ink, borderColor: colors.ink }
+                                    : { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                {c.key && <View style={[styles.chipDot, { backgroundColor: on ? '#FFF' : orderTone(c.key).edge }]} />}
                                 <Text style={[styles.chipText, { color: on ? '#FFF' : colors.text }]}>{c.label}</Text>
-                                <Text style={[styles.chipCount, { color: on ? '#FFF' : colors.textSecondary }]}>{n}</Text>
+                                <Text style={[styles.chipCount, { color: on ? 'rgba(255,255,255,0.6)' : colors.textSecondary }]}>{n}</Text>
                             </TouchableOpacity>
                         );
                     })}
@@ -145,7 +150,7 @@ export default function MyOrdersScreen() {
                             </Text>
                         </View>
                     }
-                    renderItem={({ item }) => <Row row={item} colors={colors} showSeller={!!data?.can_see_all && !salesperson}
+                    renderItem={({ item }) => <Row row={item} colors={colors} theme={theme} showSeller={!!data?.can_see_all && !salesperson}
                         onPress={() => router.push(item.kind === 'invoice'
                             ? { pathname: '/my-orders/[name]', params: { name: item.name } }
                             : { pathname: '/sales-orders/[id]', params: { id: item.name } } as any)} />}
@@ -167,41 +172,44 @@ export default function MyOrdersScreen() {
     );
 }
 
-function Row({ row, colors, onPress, showSeller }: { row: OrderRow; colors: typeof Colors.light; onPress: () => void; showSeller?: boolean }) {
-    const tint = ORDER_COLORS[row.status];
-    const sub = [row.kind === 'invoice' ? `Invoice ${row.number}` : `Order ${row.number}`,
-        row.po_no ? `PO ${row.po_no}` : '', dmy(row.date)].filter(Boolean).join(' · ');
+function Row({ row, colors, theme, onPress, showSeller }: {
+    row: OrderRow; colors: typeof Colors.light; theme: 'light' | 'dark'; onPress: () => void; showSeller?: boolean;
+}) {
+    const tone = orderTone(row.status, theme);
+    const sub = [row.kind === 'invoice' ? `Inv ${row.number}` : row.number,
+        row.po_no ? row.po_no : '', dmy(row.date)].filter(Boolean).join(' · ');
     return (
         <TouchableOpacity activeOpacity={0.85} onPress={onPress}
-            style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.icon, { backgroundColor: `${tint}1A` }]}>
-                <Ionicons name={ORDER_ICONS[row.status] as any} size={22} color={tint} />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-                <Text style={[styles.customer, { color: colors.text }]} numberOfLines={1}>{row.customer_name}</Text>
-                <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>{sub}</Text>
-                {showSeller && (
-                    <Text style={[styles.meta, { color: colors.primary }]} numberOfLines={1}>
-                        {row.salesperson || 'No salesperson'}
-                    </Text>
-                )}
-                <View style={styles.tags}>
-                    <View style={[styles.tag, { backgroundColor: `${tint}1A` }]}>
-                        <Text style={[styles.tagText, { color: tint }]}>{row.status_label}</Text>
-                    </View>
-                    {row.lr_count > 1 && (
-                        <View style={[styles.tag, { backgroundColor: `${tint}1A` }]}>
-                            <Text style={[styles.tagText, { color: tint }]}>{row.lr_count} LRs</Text>
-                        </View>
+            style={[styles.row, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.edge, { backgroundColor: tone.edge }]} />
+            <View style={styles.rowBody}>
+                <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[styles.customer, { color: colors.text }]} numberOfLines={1}>{row.customer_name}</Text>
+                    <Text style={[styles.meta, { color: colors.textSecondary }]} numberOfLines={1}>{sub}</Text>
+                    {showSeller && (
+                        <Text style={[styles.meta, { color: colors.primaryVariant }]} numberOfLines={1}>
+                            {row.salesperson || 'No salesperson'}
+                        </Text>
                     )}
+                    <View style={styles.tags}>
+                        <View style={[styles.tag, { backgroundColor: tone.soft }]}>
+                            <Text style={[styles.tagText, { color: tone.text }]}>{row.status_label}</Text>
+                        </View>
+                        {row.lr_count > 1 && (
+                            <View style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>
+                                <Text style={[styles.tagText, { color: colors.textSecondary }]}>{row.lr_count} LRs</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 3 }}>
+                    <Text style={[styles.amount, { color: colors.text }]}>{inr(row.amount)}</Text>
                     {!!row.paid && row.kind === 'invoice' && (
-                        <Text style={[styles.meta, { color: row.paid === 'Paid' ? colors.success : colors.textSecondary }]}>{row.paid}</Text>
+                        <Text style={[styles.meta, { color: row.paid === 'Paid' ? colors.success : row.paid === 'Overdue' ? colors.danger : colors.textSecondary }]}>
+                            {row.paid}
+                        </Text>
                     )}
                 </View>
-            </View>
-            <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Text style={[styles.amount, { color: colors.text }]}>{inr(row.amount)}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
             </View>
         </TouchableOpacity>
     );
@@ -209,24 +217,26 @@ function Row({ row, colors, onPress, showSeller }: { row: OrderRow; colors: type
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    top: { paddingHorizontal: 14, paddingTop: 12, gap: 10 },
-    searchRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-    search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 14, height: 44 },
-    searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
-    scope: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, height: 44, maxWidth: 150 },
-    scopeText: { fontSize: 13, fontWeight: '800' },
-    chips: { gap: 8, paddingBottom: 4 },
+    top: { paddingHorizontal: 16, paddingTop: 14, gap: 12, paddingBottom: 2 },
+    search: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, height: 46 },
+    searchInput: { flex: 1, fontSize: 14, fontWeight: '600', paddingVertical: 0 },
+    scope: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 12, height: 38, maxWidth: 150, backgroundColor: '#2A302C' },
+    scopeText: { fontSize: 12.5, fontWeight: '800', color: '#FFF', flexShrink: 1 },
+    chipBar: { marginHorizontal: -16, flexGrow: 0 },
+    chips: { gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
-    chipText: { fontSize: 13, fontWeight: '700' },
+    chipDot: { width: 6, height: 6, borderRadius: 3 },
+    chipText: { fontSize: 12.5, fontWeight: '700' },
     chipCount: { fontSize: 12, fontWeight: '800' },
-    list: { padding: 14, gap: 10, paddingBottom: 40 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: Radius.lg, padding: 12 },
-    icon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    customer: { fontSize: 15, fontWeight: '800' },
-    meta: { fontSize: 12.5, fontWeight: '600' },
-    tags: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-    tag: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
-    tagText: { fontSize: 11.5, fontWeight: '800' },
+    list: { padding: 16, paddingTop: 10, gap: 10, paddingBottom: 40 },
+    row: { flexDirection: 'row', borderWidth: 1, borderRadius: 18, overflow: 'hidden' },
+    edge: { width: 4 },
+    rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
+    customer: { fontSize: 14.5, fontWeight: '800' },
+    meta: { fontSize: 12, fontWeight: '600' },
+    tags: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+    tag: { borderRadius: Radius.pill, paddingHorizontal: 9, paddingVertical: 3 },
+    tagText: { fontSize: 11, fontWeight: '800' },
     amount: { fontSize: 14, fontWeight: '800' },
     empty: { alignItems: 'center', gap: 10, marginTop: 60 },
     emptyText: { fontSize: 14, fontWeight: '600' },
