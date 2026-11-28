@@ -530,7 +530,7 @@ export function shortTime(iso: string): string {
     const d = new Date(iso);
     const today = new Date();
     const sameDay = d.toDateString() === today.toDateString();
-    const hh = d.getHours().toString().padStart(2, '0');
-    const mm = d.getMinutes().toString().padStart(2, '0');
-    return sameDay ? `${hh}:${mm}` : `${d.getDate()}/${d.getMonth() + 1} ${hh}:${mm}`;
+    const h = d.getHours();
+    const clock = `${h % 12 === 0 ? 12 : h % 12}:${d.getMinutes().toString().padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+    return sameDay ? clock : `${d.getDate()}/${d.getMonth() + 1} ${clock}`;
 }
