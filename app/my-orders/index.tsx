@@ -1,7 +1,7 @@
 /**
  * My Orders -- every order and invoice of my customers, and where each one stands:
  *
- *   Sales Order Pending → Invoice Pending → Invoice Generated → Delivery Pending → Dispatched
+ *   Sales Order Pending → Invoice Pending → Invoice Generated → Dispatched → Delivered
  *
  * Worked out by SmartOps from ERPNext (app/web/my_orders.py). A salesperson sees their own
  * customers; the desk and managers see everyone's, and can pick one salesperson's -- or the
@@ -16,6 +16,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { dmy, inr } from '@/components/orders/format';
+import { orderLabel } from '@/components/orders/labels';
 import { orderTone } from '@/components/orders/tones';
 import { PickerSheet } from '@/components/team/PickerSheet';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -66,7 +67,7 @@ export default function MyOrdersScreen() {
 
     const chips: { key: OrderStatus | null; label: string }[] = [
         { key: null, label: 'All' },
-        ...(data?.statuses ?? []).map(s => ({ key: s.key, label: s.label })),
+        ...(data?.statuses ?? []).map(s => ({ key: s.key, label: orderLabel(s.key, s.label) })),
     ];
 
     const count = (k: string) => data?.counts[k] ?? 0;
@@ -89,8 +90,8 @@ export default function MyOrdersScreen() {
             >
                 <BandStats items={[
                     { label: 'To invoice', value: data ? String(count('invoice_pending')) : '—', color: colors.amber },
-                    { label: 'To dispatch', value: data ? String(count('invoice_generated') + count('delivery_pending')) : '—', color: '#C9A6E3' },
-                    { label: 'Dispatched', value: data ? String(count('dispatched')) : '—', color: colors.mint },
+                    { label: 'To dispatch', value: data ? String(count('invoice_generated')) : '—', color: '#C9A6E3' },
+                    { label: 'Delivered', value: data ? String(count('dispatched')) : '—', color: colors.mint },
                 ]} />
             </ScreenHeader>
 
@@ -193,7 +194,7 @@ function Row({ row, colors, theme, onPress, showSeller }: {
                     )}
                     <View style={styles.tags}>
                         <View style={[styles.tag, { backgroundColor: tone.soft }]}>
-                            <Text style={[styles.tagText, { color: tone.text }]}>{row.status_label}</Text>
+                            <Text style={[styles.tagText, { color: tone.text }]}>{orderLabel(row.status, row.status_label)}</Text>
                         </View>
                         {row.lr_count > 1 && (
                             <View style={[styles.tag, { backgroundColor: colors.surfaceSecondary }]}>

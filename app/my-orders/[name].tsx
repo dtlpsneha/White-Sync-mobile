@@ -1,6 +1,6 @@
 /**
  * One invoice in My Orders: where it stands, every LR filed for it in Team Chat, and the two
- * things to do with it -- "Ready to dispatch" (the desk: packed, waiting for a lorry) and
+ * things to do with it -- "Mark as Dispatched" (by hand, confirmed; Team Chat is told) and
  * "Add LR" (opens Team Chat's attach sheet with this invoice already picked).
  */
 
@@ -9,13 +9,16 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacit
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { ConfirmDispatch } from '@/components/orders/ConfirmDispatch';
+import { tellTeamDispatched, tellTeamUndone } from '@/components/orders/dispatchPost';
 import { dmy, inr } from '@/components/orders/format';
+import { orderLabel } from '@/components/orders/labels';
 import { OrderSteps } from '@/components/orders/OrderSteps';
 import { orderTone } from '@/components/orders/tones';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius, Shadow, StatusColors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { InvoiceDetail, team } from '@/services/teamApi';
+import { InvoiceDetail, OrderRow, team } from '@/services/teamApi';
 
 export default function InvoiceScreen() {
     const { name } = useLocalSearchParams<{ name: string }>();
@@ -40,11 +43,40 @@ export default function InvoiceScreen() {
         setBusy(true);
         const r = await team.readyToDispatch(String(name), ready);
         setBusy(false);
-        if (!r.ok) { Alert.alert('Not changed', r.error); return; }
+        if (!r.ok) { Alert.alert('Not changed', r.error); return false; }
         setData(r.data);
+        return true;
+    };
+
+    const [asking, setAsking] = useState(false);
+    /** The status is saved first; Team Chat is told only once that has worked. */
+    const dispatch = async () => {
+        const sent = data?.row;
+        if (!sent || !(await setReady(true))) return;
+        setAsking(false);
+        await tellTeam(sent);
+    };
+    /** Undo: the status is saved first; Team Chat is told the earlier post was wrong. */
+    const undoDispatch = async () => {
+        const undone = data?.row;
+        if (!undone || !(await setReady(false))) return;
+        if (!(await tellTeamUndone(undone))) {
+            Alert.alert('Team Chat', 'Undone, but the correction did not reach Team Chat.', [
+                { text: 'Skip', style: 'cancel' },
+                { text: 'Try again', onPress: () => tellTeamUndone(undone) },
+            ]);
+        }
+    };
+    const tellTeam = async (sent: OrderRow) => {
+        if (await tellTeamDispatched(sent)) return;
+        Alert.alert('Team Chat', 'Marked as Dispatched, but the message did not reach Team Chat.', [
+            { text: 'Skip', style: 'cancel' },
+            { text: 'Try again', onPress: () => tellTeam(sent) },
+        ]);
     };
 
     const row = data?.row;
+
     const tone = row ? orderTone(row.status, theme) : null;
     const DONE = StatusColors.approved;
     const PLUM = StatusColors.reopen;
@@ -69,7 +101,7 @@ export default function InvoiceScreen() {
                     <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <View style={styles.cardTop}>
                             <View style={[styles.status, { backgroundColor: tone!.soft }]}>
-                                <Text style={[styles.statusText, { color: tone!.text }]}>{row.status_label}</Text>
+                                <Text style={[styles.statusText, { color: tone!.text }]}>{orderLabel(row.status, row.status_label)}</Text>
                             </View>
                             <Text style={[styles.total, { color: colors.text }]}>{inr(row.amount)}</Text>
                         </View>
@@ -84,19 +116,19 @@ export default function InvoiceScreen() {
 
                     <View style={styles.actions}>
                         {row.status === 'invoice_generated' && (
-                            <TouchableOpacity disabled={busy} onPress={() => setReady(true)}
+                            <TouchableOpacity disabled={busy} onPress={() => setAsking(true)}
                                 style={[styles.action, { backgroundColor: PLUM }]}>
                                 {busy ? <ActivityIndicator color="#FFF" /> : <>
                                     <Ionicons name="cube" size={18} color="#FFF" />
-                                    <Text style={styles.actionText}>Ready to dispatch</Text>
+                                    <Text style={styles.actionText}>Mark as Dispatched</Text>
                                 </>}
                             </TouchableOpacity>
                         )}
                         {row.status === 'delivery_pending' && (
-                            <TouchableOpacity disabled={busy} onPress={() => setReady(false)}
+                            <TouchableOpacity disabled={busy} onPress={undoDispatch}
                                 style={[styles.action, styles.outline, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                                 <Ionicons name="arrow-undo" size={18} color={colors.textSecondary} />
-                                <Text style={[styles.actionText, { color: colors.text }]}>Not ready yet</Text>
+                                <Text style={[styles.actionText, { color: colors.text }]}>Undo dispatch</Text>
                             </TouchableOpacity>
                         )}
                         <TouchableOpacity onPress={() => router.push({ pathname: '/team', params: { lr: row.name, lrNumber: row.number } } as any)}
@@ -133,6 +165,10 @@ export default function InvoiceScreen() {
                         );
                     })}
                 </ScrollView>
+            )}
+            {row && (
+                <ConfirmDispatch visible={asking} row={row} busy={busy}
+                    onCancel={() => setAsking(false)} onConfirm={dispatch} />
             )}
         </View>
     );
