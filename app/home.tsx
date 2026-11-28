@@ -14,6 +14,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionHeader } from '@/components/dashboard/SectionHeader';
 import { Colors, Gradients } from '@/constants/theme';
 import { enterItem } from '@/constants/motion';
+import { clearSessionCaches, sessionCache } from '@/utils/sessionCache';
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications, type PersistentNotification } from '@/context/NotificationsContext';
@@ -150,20 +151,7 @@ const DonutChart = ({ data, colors, centerText, strokeWidth = 12 }: { data: numb
     );
 };
 
-type HomeSnapshot = {
-    userName: string | null;
-    isManager: boolean;
-    statsMap: Record<string, any>;
-    summaryStats: { totalValue: string; totalQuotes: number; totalCustomers: number; conversionRate: string; avgQuoteValue: string };
-    lastUpdated: string;
-};
 
-/**
- * Last figures Home showed, kept for the life of the app. Coming back to Home
- * draws these at once and refreshes in the background, instead of a blank
- * loading screen every time.
- */
-let homeCache: HomeSnapshot | null = null;
 
 export default function HomeScreen() {
     const router = useRouter();
@@ -178,15 +166,15 @@ export default function HomeScreen() {
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
     // First visit this app session? Only then do the sections animate in.
-    const firstVisit = useRef(!homeCache).current;
-    const [userName, setUserName] = useState<string | null>(homeCache?.userName ?? null);
-    const [loading, setLoading] = useState(!homeCache);
-    const [statsReady, setStatsReady] = useState(!!homeCache);
+    const firstVisit = useRef(!sessionCache.home).current;
+    const [userName, setUserName] = useState<string | null>(sessionCache.home?.userName ?? null);
+    const [loading, setLoading] = useState(!sessionCache.home);
+    const [statsReady, setStatsReady] = useState(!!sessionCache.home?.statsLoaded);
     const [refreshing, setRefreshing] = useState(false);
     const [permissionDenied, setPermissionDenied] = useState(false);
 
-    const [statsMap, setStatsMap] = useState<Record<string, any>>(homeCache?.statsMap ?? {});
-    const [summaryStats, setSummaryStats] = useState(homeCache?.summaryStats ?? {
+    const [statsMap, setStatsMap] = useState<Record<string, any>>(sessionCache.home?.statsMap ?? {});
+    const [summaryStats, setSummaryStats] = useState(sessionCache.home?.summaryStats ?? {
         totalValue: '₹0',
         totalQuotes: 0,
         totalCustomers: 0,
@@ -194,11 +182,11 @@ export default function HomeScreen() {
         avgQuoteValue: '₹0',
     });
     const pendingQuotes = Object.entries(statsMap).find(([k]) => k.toUpperCase() === 'PENDING')?.[1]?.quotes ?? 0;
-    const [lastUpdated, setLastUpdated] = useState<string>(homeCache?.lastUpdated ?? '…');
+    const [lastUpdated, setLastUpdated] = useState<string>(sessionCache.home?.lastUpdated ?? '…');
 
     const [lastSeenPendingIds, setLastSeenPendingIds] = useState<string[]>([]);
     const lastSeenPendingIdsRef = useRef<string[]>([]);
-    const [isManager, setIsManager] = useState(homeCache?.isManager ?? false);
+    const [isManager, setIsManager] = useState(sessionCache.home?.isManager ?? false);
     const [hasSession, setHasSession] = useState(false);
 
     useEffect(() => { loadData(); }, []);
@@ -285,11 +273,12 @@ export default function HomeScreen() {
             setUserName(name || 'User');
             const isManagerStr = await SecureStore.getItemAsync('is_manager');
             setIsManager(isManagerStr === 'true');
-            homeCache = {
+            sessionCache.home = {
+                statsLoaded: false,
                 statsMap: {},
                 summaryStats: { totalValue: '₹0', totalQuotes: 0, totalCustomers: 0, conversionRate: '0%', avgQuoteValue: '₹0' },
                 lastUpdated: '…',
-                ...homeCache,
+                ...sessionCache.home,
                 userName: name || 'User',
                 isManager: isManagerStr === 'true',
             };
@@ -306,6 +295,7 @@ export default function HomeScreen() {
             if (res.status === 401 || res.status === 403) {
                 console.log('[Home] Session expired, logging out...');
                 await SecureStore.deleteItemAsync('session_cookies');
+                clearSessionCaches();
                 router.replace('/');
                 return;
             }
@@ -371,10 +361,11 @@ export default function HomeScreen() {
                 };
                 setLastUpdated(stamp);
                 setStatsReady(true);
-                homeCache = {
-                    userName: homeCache?.userName ?? null,
-                    isManager: homeCache?.isManager ?? false,
-                    ...homeCache,
+                sessionCache.home = {
+                    userName: sessionCache.home?.userName ?? null,
+                    isManager: sessionCache.home?.isManager ?? false,
+                    ...sessionCache.home,
+                    statsLoaded: true,
                     statsMap: newStatsMap,
                     summaryStats: nextSummary,
                     lastUpdated: stamp,
@@ -437,6 +428,7 @@ export default function HomeScreen() {
                     // profile fetch failed.
                     await Promise.all([
                         SecureStore.deleteItemAsync('session_cookies'),
+                        Promise.resolve(clearSessionCaches()),
                         SecureStore.deleteItemAsync('user_name'),
                         SecureStore.deleteItemAsync('is_manager'),
                         SecureStore.deleteItemAsync('show_all_quotes'),

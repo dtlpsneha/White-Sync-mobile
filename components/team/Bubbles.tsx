@@ -120,7 +120,7 @@ export function JobBubble({ job, mine, showAuthor, meId, theme, colors, onPress,
     job: Job; mine: boolean; showAuthor: boolean; meId?: string; theme: 'light' | 'dark';
     colors: ThemeColors; onPress: () => void; onLongPress?: () => void;
 }) {
-    const width = useBubbleWidth() - 16;
+    const width = useBubbleWidth() - 27;
     const forMe = !!meId && job.assignee?.id === meId && job.status === 'open';
     const customer = job.customer_name || job.customer_hint;
     if (job.deleted) {
@@ -183,7 +183,7 @@ export function ReplyBubble({ reply, mine, showAuthor, theme, colors, onRetryRea
     /** Holding my own message offers Delete. */
     onLongPress?: () => void;
 }) {
-    const width = useBubbleWidth() - 16;
+    const width = useBubbleWidth() - 27;
     if (!reply.author) return <SystemNote text={reply.body} colors={colors} />;
     if (reply.deleted) {
         return (

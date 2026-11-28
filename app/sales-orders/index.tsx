@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import SalesOrderList, { SalesOrder, orderStatusColor } from '@/components/SalesOrderList';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius, Shadow, toneFor } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { BandStats } from '@/components/ui/Midnight';
 
@@ -117,7 +117,7 @@ export default function SalesOrderScreen() {
                                 onPress={() => setFilter(item)}
                                 activeOpacity={0.85}
                             >
-                                {item !== 'All' ? <View style={[styles.chipDot, { backgroundColor: on ? '#FFF' : orderStatusColor(item) }]} /> : null}
+                                {item !== 'All' ? <View style={[styles.chipDot, { backgroundColor: on ? '#FFF' : toneFor(theme, orderStatusColor(item)) }]} /> : null}
                                 <Text style={[styles.chipText, on && styles.chipTextOn]}>{item}</Text>
                             </TouchableOpacity>
                         );

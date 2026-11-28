@@ -35,6 +35,8 @@ export const Colors = {
     placeholder: '#A79C8E',
     /** Charcoal header band, dark icon tiles and their raised steps. */
     ink: '#1F2421',
+    /** Big dark cards (quotation total, calculator price). */
+    inkDeep: '#1F2421',
     ink2: '#2A302C',
     ink3: '#3A413C',
     onInk: '#E9DFCF',
@@ -70,9 +72,12 @@ export const Colors = {
     onPrimary: '#FFFFFF',
     cardShadow: 'rgba(0, 0, 0, 0.6)',
     placeholder: '#8C8173',
-    ink: '#0B0D0C',
-    ink2: '#1F2421',
-    ink3: '#2A302C',
+    // On the dark page, "ink" pieces (selected chips, avatars, icon tiles) sit one step
+    // above the cards so they still read as dark tiles, not holes.
+    ink: '#3A413C',
+    inkDeep: '#0B0D0C',
+    ink2: '#2A302C',
+    ink3: '#4A524C',
     onInk: '#E9DFCF',
     onInkMuted: '#A79C8E',
     amber: '#F2B134',
@@ -90,6 +95,25 @@ export const Gradients = {
   danger: ['#E4572E', '#C8423B'] as const,
   info: ['#5B95C6', '#3E7CB1'] as const,
 };
+
+/**
+ * Status colours are dark enough to read on white; on dark cards they would be too
+ * dim. toneFor() swaps each for a brighter partner in dark mode.
+ */
+const DARK_TONES: Record<string, string> = {
+  '#2F7D5B': '#5FBF8F', // approved / dispatched / synced
+  '#3E7CB1': '#6FA6D6', // pending / invoice generated
+  '#D99A14': '#F2B134', // review / invoice pending
+  '#8E5BB5': '#B48AD6', // re-open / delivery pending
+  '#C8423B': '#E8766F', // cancelled
+  '#8C8173': '#B5AA9C', // draft
+  '#2F5D50': '#5FA58C', // SmartOps green
+  '#E4572E': '#F07A55', // terracotta
+};
+
+export function toneFor(theme: 'light' | 'dark', hex: string): string {
+  return theme === 'dark' ? DARK_TONES[(hex || '').toUpperCase()] ?? hex : hex;
+}
 
 /** Status colours shared by quotations, orders and visits. */
 export const StatusColors = {

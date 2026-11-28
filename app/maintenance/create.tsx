@@ -99,7 +99,7 @@ export default function CustomerVisitScreen() {
             <Stack.Screen options={{ headerShown: false }} />
             <ScreenHeader title="New visit" subtitle="Customer Visit · saved on this phone" align="left" onBack={() => router.back()} />
 
-            <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
+            <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
                 <SectionCard icon="person" title="Who & when">
                     <View style={{ gap: 8 }}>
                         <Text style={label}>Executive Name</Text>

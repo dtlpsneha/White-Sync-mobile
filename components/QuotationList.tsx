@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Radius, Shadow, StatusColors } from '@/constants/theme';
+import { Colors, Radius, Shadow, StatusColors, toneFor } from '@/constants/theme';
 import { useResponsive } from '../hooks/useResponsive';
 import Animated from 'react-native-reanimated';
 import { enterRow } from '@/constants/motion';
@@ -249,7 +249,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
 
     const renderItem = useCallback(({ item, index }: { item: Quotation; index?: number }) => {
         const displayStatus = item.display_status || item.workflow_state || item.status || 'Draft';
-        const tone = quoteStatusColor(displayStatus, item.color);
+        const tone = toneFor(theme, quoteStatusColor(displayStatus, item.color));
         const amount = quoteAmount(item);
         const formattedAmount = '₹' + amount.toLocaleString('en-IN', { maximumFractionDigits: 0 });
         const date = formatDate(item.transaction_date) || formatDate(item.posting_date || '') || formatDate(item.date || '') || formatDate(item.creation || '');
@@ -301,7 +301,7 @@ export default function QuotationList({ filter = 'All', searchQuery = '', scroll
                 </TouchableOpacity>
             </Animated.View>
         );
-    }, [styles, colors, router]);
+    }, [styles, colors, router, theme]);
 
     if (loading) {
         return (
@@ -366,9 +366,9 @@ function getStyles(theme: 'light' | 'dark', { s, vs, ms }: any) {
         cardBody: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, gap: 6 },
         topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
         qid: { flexShrink: 1, fontSize: 11, fontWeight: '800', color: colors.primaryVariant, letterSpacing: 0.2 },
-        pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: Radius.pill },
+        pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: Radius.pill, flexShrink: 1, maxWidth: '65%' },
         pillDot: { width: 6, height: 6, borderRadius: 3 },
-        pillText: { fontSize: ms(11), fontWeight: '800' },
+        pillText: { fontSize: ms(11), fontWeight: '800', flexShrink: 1 },
         midRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
         customerName: { fontSize: ms(15), fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
         metaText: { fontSize: 12, color: colors.textSecondary, fontWeight: '500', marginTop: 2 },

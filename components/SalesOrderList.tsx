@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { apiPost } from '@/utils/api';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius, Shadow, toneFor } from '@/constants/theme';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import { useResponsive } from '@/hooks/useResponsive';
 import Animated from 'react-native-reanimated';
@@ -141,7 +141,7 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
 
     const renderItem = ({ item, index }: { item: SalesOrder; index: number }) => {
         const status = item.workflow_state || item.status || 'Draft';
-        const tone = orderStatusColor(status);
+        const tone = toneFor(theme, orderStatusColor(status));
         const amount = '₹' + Number(item.grand_total || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
         // The list call returns the date as `date`; the detail call uses `transaction_date`.
         const rawDate = (item as any).date || item.transaction_date || '';

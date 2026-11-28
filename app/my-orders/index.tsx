@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     top: { paddingHorizontal: 16, paddingTop: 14, gap: 12, paddingBottom: 2 },
     search: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, height: 46 },
     searchInput: { flex: 1, fontSize: 14, fontWeight: '600', paddingVertical: 0 },
-    scope: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 12, height: 38, maxWidth: 150, backgroundColor: '#2A302C' },
+    scope: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 12, height: 38, maxWidth: 110, backgroundColor: '#2A302C' },
     scopeText: { fontSize: 12.5, fontWeight: '800', color: '#FFF', flexShrink: 1 },
     chipBar: { marginHorizontal: -16, flexGrow: 0 },
     chips: { gap: 8, paddingHorizontal: 16, paddingBottom: 4 },

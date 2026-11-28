@@ -1,7 +1,7 @@
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { BandStats, SectionCard, StatusPill } from '@/components/ui/Midnight';
 import { quoteStatusColor } from '@/components/QuotationList';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius, Shadow, toneFor } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { apiPost } from '@/utils/api';
 import { Ionicons } from '@expo/vector-icons';
@@ -178,7 +178,7 @@ export default function QuotationDetailScreen() {
     }
 
     const currentStatus = quote.workflow_state || quote.status || 'Draft';
-    const tone = quoteStatusColor(currentStatus);
+    const tone = toneFor(theme, quoteStatusColor(currentStatus));
     const items = quote.items || [];
     const totalQty = items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
     const itemsTotal = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
@@ -368,7 +368,7 @@ const getStyles = (theme: 'light' | 'dark') => {
         footChip: { fontSize: 11, fontWeight: '700', color: c.textSecondary, backgroundColor: c.background, borderWidth: 1, borderColor: c.border, borderRadius: Radius.pill, paddingHorizontal: 9, paddingVertical: 3, maxWidth: '100%' },
         footChipGood: { color: c.success, borderColor: c.success + '55' },
 
-        total: { backgroundColor: c.ink, borderRadius: 24, padding: 18, overflow: 'hidden', ...Shadow.raised(theme) },
+        total: { backgroundColor: c.inkDeep, borderRadius: 24, padding: 18, overflow: 'hidden', ...Shadow.raised(theme), ...(theme === 'dark' ? { borderWidth: 1, borderColor: c.border } : null) },
         totalGlow: { position: 'absolute', width: 170, height: 170, borderRadius: 85, right: -50, top: -60, backgroundColor: 'rgba(127,209,168,0.12)' },
         totalLabel: { fontSize: 10.5, fontWeight: '800', letterSpacing: 1, color: c.onInkMuted },
         totalValue: { fontSize: 34, fontWeight: '800', color: c.mint, letterSpacing: -0.5, marginTop: 4 },

@@ -139,7 +139,7 @@ export function FileTypeSheet({ types, initial, fileName, saving, onSave, onClos
                 style={[styles.save, { backgroundColor: !type || missing || (withFile && !file) ? colors.surfaceVariant : colors.primary }]}>
                 {saving
                     ? <ActivityIndicator color="#FFF" />
-                    : <Text style={styles.saveText}>
+                    : <Text style={[styles.saveText, (!type || missing || (withFile && !file)) && { color: colors.textSecondary }]}>
                         {!type ? 'Pick a document type'
                             : missing ? `Enter ${missing.label}`
                             : withFile && !file ? 'Add the file (camera, gallery or PDF)'

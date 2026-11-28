@@ -168,9 +168,9 @@ const MaintenanceList = ({ records, loading }: MaintenanceListProps) => {
 
                         <View style={styles.badgeGroup}>
                             {isFollowUp && (
-                                <View style={[styles.followUpBadge, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
-                                    <Ionicons name="notifications" size={10} color="#EA580C" />
-                                    <Text style={[styles.badgeTextText, { color: '#EA580C' }]}>Follow-up</Text>
+                                <View style={[styles.followUpBadge, { backgroundColor: colors.warning + '1F', borderColor: colors.warning + '55' }]}>
+                                    <Ionicons name="notifications" size={10} color={colors.warning} />
+                                    <Text style={[styles.badgeTextText, { color: colors.warning }]}>Follow-up</Text>
                                 </View>
                             )}
                             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.surfaceSecondary }]}>
