@@ -7,7 +7,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Customer, searchCustomers } from '@/services/frappeSearch';
-import { saveVisit, syncVisitToErp } from '@/services/visitExtras';
+import { saveVisit, syncVisitToErp, tellTeam } from '@/services/visitExtras';
 
 const ALONG_WITH_OPTIONS = ['Alone', 'HOS', 'Precitex', 'Habasit', 'Inspiron'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,7 +74,7 @@ export default function CustomerVisitScreen() {
                 saved_at: new Date().toISOString(),
             };
             await saveVisit(visit);
-            const synced = await syncVisitToErp(visit);
+            const synced = await tellTeam(await syncVisitToErp(visit));
             await saveVisit(synced);
             const message = synced.erp_name
                 ? 'Saved to ERP.'

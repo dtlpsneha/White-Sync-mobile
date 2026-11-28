@@ -13,7 +13,7 @@ import {
     ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, RefreshControl, StyleSheet, Text,
     TouchableOpacity, View,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 
@@ -26,7 +26,7 @@ import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { notificationService } from '@/services/NotificationService';
-import { age, erpSession, Job, JobView, People, PickedFile, PickedVoice, team } from '@/services/teamApi';
+import { age, erpSession, Filing, Job, JobView, People, PickedFile, PickedVoice, team } from '@/services/teamApi';
 
 type Tab = 'chat' | 'mine' | 'open' | 'sent';
 const TABS: { tab: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -48,6 +48,11 @@ export default function TeamScreen() {
     const colors = Colors[theme];
     const { ms } = useResponsive();
 
+    // My Orders' "Add LR": open the attach sheet with this invoice picked.
+    const { lr, lrNumber } = useLocalSearchParams<{ lr?: string; lrNumber?: string }>();
+    const startWith = useMemo<Filing | null>(
+        () => (lr ? { doc_type: 'dispatch_lr', details: { invoices: String(lr), invoice_numbers: String(lrNumber || '') } } : null),
+        [lr, lrNumber]);
     const [tab, setTab] = useState<Tab>('chat');
     const [chat, setChat] = useState<Job[]>([]);          // newest first
     const [older, setOlder] = useState<string | null>(null);
@@ -121,8 +126,8 @@ export default function TeamScreen() {
         setOlder(page.length ? r.data.next_before ?? page[page.length - 1].created_at : null);
     };
 
-    const post = async (text: string, file: PickedFile | null, voice?: PickedVoice | null) => {
-        const r = await team.post(text, file, voice);
+    const post = async (text: string, file: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) => {
+        const r = await team.post(text, file, voice, filing);
         if (!r.ok) {
             Alert.alert('Not posted', r.error);
             return false;
@@ -166,6 +171,8 @@ export default function TeamScreen() {
                 title="Team Chat"
                 subtitle={people ? `${people.people.length} people · ${waiting ? `${waiting} waiting for you` : 'nothing waiting for you'}` : 'Office team'}
                 onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+                rightIcon="folder-open-outline"
+                onRightPress={() => router.push('/team/documents')}
             >
                 <View style={[styles.tabs, { backgroundColor: 'rgba(255,255,255,0.14)' }]}>
                     {TABS.map(t => {
@@ -232,6 +239,8 @@ export default function TeamScreen() {
                     )}
                     <Composer
                         onSend={post}
+                        startWith={startWith}
+                        onStarted={() => router.setParams({ lr: undefined, lrNumber: undefined } as any)}
                         placeholder="Name, then what's needed…"
                         chips={chips}
                         chipsTitle="To:"

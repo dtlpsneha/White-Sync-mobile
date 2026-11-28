@@ -6,7 +6,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Colors, Radius, Shadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Customer, searchCustomers } from '@/services/frappeSearch';
-import { CompletionEntry, CustomerVisit, getVisit, saveVisit, syncVisitToErp } from '@/services/visitExtras';
+import { CompletionEntry, CustomerVisit, getVisit, saveVisit, syncVisitToErp, tellTeam } from '@/services/visitExtras';
 
 const COMPLETION_TYPES = ['Courtesy visit', 'Complaint visit', 'Follow up visit', 'Measurement', 'Sample trial followup'];
 
@@ -68,7 +68,7 @@ export default function CompletionReportScreen() {
             if (!visit) return;
             const customers = entries.map(e => e.customer);
             const customerIds = entries.map(e => e.customer_id).filter((x): x is string => !!x);
-            const synced = await syncVisitToErp({ ...visit, customer_planned: customers, customer_ids: customerIds, completion: entries, dirty: true });
+            const synced = await tellTeam(await syncVisitToErp({ ...visit, customer_planned: customers, customer_ids: customerIds, completion: entries, dirty: true }));
             await saveVisit(synced);
             setVisit(synced);
             setEditing(false);

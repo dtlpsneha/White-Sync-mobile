@@ -8,9 +8,12 @@
  * With nothing typed or attached, the send button is a mic: speak instead of typing. SmartOps
  * writes out what was said -- in English, or Tamil with the EN/த switch -- into the box, to
  * check, correct and send as an ordinary text message. No recording is posted.
+ *
+ * Attaching a file asks what it is (FileTypeSheet): the document type and that type's few
+ * fields. A file is not sent until it has a type -- unless SmartOps is too old to ask.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
@@ -22,8 +25,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { PickedFile, PickedVoice, team } from '@/services/teamApi';
-import { pickAttachment, takePhoto } from './Attach';
+import { DocType, documentTypeChoices, Filing, PickedFile, PickedVoice, team } from '@/services/teamApi';
+import { takePhoto } from './Attach';
+import { FileTypeSheet } from './FileTypeSheet';
 import { isImageAttachment } from './chatUi';
 
 export interface ComposerChip {
@@ -35,17 +39,52 @@ export interface ComposerChip {
     color?: string;
 }
 
-export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
-    onSend: (text: string, file: PickedFile | null, voice?: PickedVoice | null) => Promise<boolean>;
+export function Composer({ onSend, placeholder, chips = [], chipsTitle, startWith, onStarted }: {
+    onSend: (text: string, file: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) => Promise<boolean>;
     placeholder: string;
     chips?: ComposerChip[];
     chipsTitle?: string;
+    /** Open the attach sheet at once, already filled in (My Orders' "Add LR"). */
+    startWith?: Filing | null;
+    onStarted?: () => void;
 }) {
     const theme = useColorScheme() ?? 'light';
     const colors = Colors[theme];
     const [text, setText] = useState('');
     const [file, setFile] = useState<PickedFile | null>(null);
+    const [filing, setFiling] = useState<Filing | null>(null);
+    const [types, setTypes] = useState<DocType[]>([]);
+    const [supported, setSupported] = useState(true);
+    const [asking, setAsking] = useState(false);
+    const [preset, setPreset] = useState<Filing | null>(null);
     const [sending, setSending] = useState(false);
+
+    /** The attach sheet: what it is first, then the file (camera, gallery or PDF). */
+    const openAttach = async (picked?: PickedFile) => {
+        if (picked) setFile(picked);
+        if (!types.length) {
+            const got = await documentTypeChoices();
+            setTypes(got.types);
+            setSupported(got.supported);
+        }
+        setAsking(true);
+    };
+    const dropFile = () => { setFile(null); setFiling(null); };
+
+    // "Add LR" from My Orders: once per request, open the sheet with it filled in.
+    const started = useRef<string | null>(null);
+    useEffect(() => {
+        if (!startWith) return;
+        const key = JSON.stringify(startWith);
+        if (started.current === key) return;
+        started.current = key;
+        setPreset(startWith);
+        openAttach();
+        onStarted?.();
+        // openAttach and onStarted change every render; startWith is what asks.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [startWith]);
+    const typeLabel = filing ? types.find(t => t.key === filing.doc_type)?.label ?? filing.doc_type : null;
 
     const canSend = !sending && (!!text.trim() || !!file);
     const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -93,15 +132,16 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
         const withFile = chipText ? null : file;
         if (sending || (!body && !withFile)) return;
         setSending(true);
-        const ok = await onSend(body, withFile);
+        // A file goes with its type -- unless SmartOps is too old to keep it.
+        const ok = await onSend(body, withFile, null, withFile && supported ? filing : null);
         setSending(false);
-        if (ok && !chipText) { setText(''); setFile(null); }
+        if (ok && !chipText) { setText(''); dropFile(); }
     };
 
     const camera = async () => {
         try {
             const f = await takePhoto();
-            if (f) setFile(f);
+            if (f) await openAttach(f);
         } catch {
             // the picker explains itself
         }
@@ -136,8 +176,20 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
                     {isImageAttachment(file.mimeType, file.name)
                         ? <Image source={{ uri: file.uri }} style={styles.thumb} />
                         : <View style={[styles.thumb, styles.pdf]}><Ionicons name="document-text" size={24} color="#FFF" /></View>}
-                    <Text style={[styles.previewName, { color: colors.text }]} numberOfLines={1}>{file.name || 'Photo'}</Text>
-                    <TouchableOpacity onPress={() => setFile(null)} hitSlop={10}>
+                    <View style={{ flex: 1, gap: 4 }}>
+                        <Text style={[styles.previewName, { color: colors.text }]} numberOfLines={1}>{file.name || 'Photo'}</Text>
+                        {types.length > 0 && (
+                            <TouchableOpacity onPress={() => { openAttach(); }} hitSlop={6}
+                                style={[styles.typeChip, { borderColor: filing ? colors.primary : colors.warning }]}>
+                                <Ionicons name={filing ? 'pricetag' : 'help-circle-outline'} size={12}
+                                    color={filing ? colors.primary : colors.warning} />
+                                <Text style={[styles.typeChipText, { color: filing ? colors.primary : colors.warning }]} numberOfLines={1}>
+                                    {typeLabel ? `${typeLabel}${filing?.details.customer || filing?.details.supplier ? ` · ${filing.details.customer || filing.details.supplier}` : ''}` : 'Pick the document type'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    <TouchableOpacity onPress={dropFile} hitSlop={10}>
                         <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
                     </TouchableOpacity>
                 </View>
@@ -162,7 +214,7 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
             ) : (
             <View style={styles.row}>
                 <View style={[styles.box, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <TouchableOpacity onPress={() => pickAttachment(setFile)} hitSlop={8} style={styles.boxIcon}>
+                    <TouchableOpacity onPress={() => { openAttach(); }} hitSlop={8} style={styles.boxIcon}>
                         <Ionicons name="attach" size={24} color={colors.textSecondary} style={{ transform: [{ rotate: '45deg' }] }} />
                     </TouchableOpacity>
                     <TextInput
@@ -208,11 +260,19 @@ export function Composer({ onSend, placeholder, chips = [], chipsTitle }: {
                 )}
             </View>
             )}
+            {asking && (
+                <FileTypeSheet withFile types={types} initial={filing ?? preset} file={file} onFile={setFile}
+                    preview={!supported}
+                    onClose={() => { setAsking(false); setPreset(null); if (!filing) setFile(null); }}
+                    onSave={f => { setFiling(f); setPreset(null); setAsking(false); }} />
+            )}
         </View>
     );
 }
 
 const styles = StyleSheet.create({
+    typeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2, maxWidth: '100%' },
+    typeChipText: { fontSize: 12, fontWeight: '800' },
     wrap: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10, borderTopWidth: StyleSheet.hairlineWidth, gap: 8 },
     chips: { gap: 8, paddingHorizontal: 2, alignItems: 'center' },
     chipsTitle: { fontSize: 12, fontWeight: '700', marginRight: 2 },
@@ -221,7 +281,7 @@ const styles = StyleSheet.create({
     preview: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, padding: 8 },
     thumb: { width: 44, height: 44, borderRadius: 8 },
     pdf: { backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
-    previewName: { flex: 1, fontSize: 13, fontWeight: '600' },
+    previewName: { fontSize: 13, fontWeight: '600' },
     row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
     box: {
         flex: 1, flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, borderWidth: 1,

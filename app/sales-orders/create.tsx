@@ -41,6 +41,8 @@ export default function CreateSalesOrderScreen() {
     const [existingAttach, setExistingAttach] = useState('');
     const [orderDate, setOrderDate] = useState(todayIso());
     const [showDate, setShowDate] = useState(false);
+    const [instructions, setInstructions] = useState('');
+    const [poNo, setPoNo] = useState('');
     const [brands, setBrands] = useState<string[]>([]);
     const [lines, setLines] = useState<Line[]>([{ key: 1, item: null, query: '', results: [], qty: '' }]);
     const [nextKey, setNextKey] = useState(2);
@@ -83,6 +85,8 @@ export default function CreateSalesOrderScreen() {
                 setCustomerQuery(doc.customer_name || doc.customer);
                 setOrderDate(doc.transaction_date || todayIso());
                 setBrand(doc.items?.[0]?.brand || '');
+                setInstructions(doc.special_instructions || '');
+                setPoNo(doc.po_no || '');
                 setExistingAttach(doc.attach || '');
                 const loaded: Line[] = (doc.items || []).map((it: any, i: number) => ({
                     key: i + 1,
@@ -180,6 +184,10 @@ export default function CreateSalesOrderScreen() {
                 // ERP asks for a delivery date; the app sets it one week after the order date.
                 delivery_date: addDaysIso(orderDate, 7),
                 company: 'White & Co.',
+                // The Sales Order's own Special Instructions field.
+                special_instructions: instructions.trim(),
+                // The customer's PO number: how My Orders finds this order's invoice from Tally.
+                po_no: poNo.trim(),
                 items,
             };
             // A order with no items still saves: zero totals, as the ERP quotation needs.
@@ -271,9 +279,20 @@ export default function CreateSalesOrderScreen() {
                         </View>
                     </View>
 
-                    {/* 3. Date */}
+                    {/* 3. Customer PO number and date */}
                     <View style={card}>
-                        <Text style={label}>3. Date</Text>
+                        <Text style={label}>3. Customer PO No & date</Text>
+                        <TextInput
+                            style={field}
+                            placeholder="Customer's PO number (as on their PO)"
+                            placeholderTextColor={colors.textSecondary}
+                            value={poNo}
+                            onChangeText={setPoNo}
+                            autoCapitalize="characters"
+                        />
+                        <Text style={[styles.hint, { color: colors.textSecondary, marginTop: -4 }]}>
+                            Used to track this order to its invoice in My Orders.
+                        </Text>
                         <Pressable style={[styles.dateBox, { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={() => setShowDate(true)}>
                             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
                             <Text style={[styles.dateText, { color: colors.text }]}>{dmy(orderDate)}</Text>
@@ -291,9 +310,23 @@ export default function CreateSalesOrderScreen() {
                         )}
                     </View>
 
-                    {/* 4. Items */}
+                    {/* 4. Special Instruction */}
                     <View style={card}>
-                        <Text style={label}>4. Items</Text>
+                        <Text style={label}>4. Special Instruction</Text>
+                        <TextInput
+                            style={[...field, styles.longText]}
+                            placeholder="Anything the order desk should know (optional)"
+                            placeholderTextColor={colors.textSecondary}
+                            value={instructions}
+                            onChangeText={setInstructions}
+                            multiline
+                            textAlignVertical="top"
+                        />
+                    </View>
+
+                    {/* 5. Items */}
+                    <View style={card}>
+                        <Text style={label}>5. Items</Text>
                         <Text style={[styles.sub, { color: colors.textSecondary }]}>Brand (for all items)</Text>
                         <TouchableOpacity
                             style={[styles.selected, { borderColor: colors.border, backgroundColor: colors.surface }]}
@@ -404,6 +437,7 @@ const styles = StyleSheet.create({
     label: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.5 },
     sub: { fontSize: 12, fontWeight: '700', marginTop: 6 },
     hint: { fontSize: 12, fontWeight: '600' },
+    longText: { minHeight: 110 },
     input: { borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, borderWidth: 1 },
     selected: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
     selectedText: { fontSize: 14, fontWeight: '700', flex: 1 },

@@ -94,6 +94,64 @@ export async function searchCustomers(query: string): Promise<SearchResult<Custo
     }
 }
 
+export interface Supplier { name: string; supplier_name?: string }
+
+/** Tally's invoice as it reaches ERPNext: an External Sales Invoice. `name` is the ERPNext
+ * record, `voucher_number` Tally's invoice no. (1764/2026-27). */
+export interface SalesInvoiceHit { name: string; voucher_number: string; customer: string; date?: string; sales_invoice?: string }
+
+/** Tally's invoices by invoice no. or customer, newest first -- including those not yet made
+ * into a Sales Invoice, so an LR can be filed the moment the goods go. Cancelled ones are left out. */
+export async function searchSalesInvoices(query: string): Promise<SearchResult<SalesInvoiceHit>> {
+    const trimmed = query.trim();
+    if (!trimmed) return { ok: true, data: [] };
+    try {
+        const like = `%${escapeLike(trimmed)}%`;
+        const fields = ['name', 'invoice_number', 'buyer_name', 'customer', 'invoice_date', 'sales_invoice_linked'];
+        const filters = JSON.stringify([['status', 'not in', ['Cancelled', 'Ignore']]]);
+        const orFilters = JSON.stringify([['invoice_number', 'like', like], ['buyer_name', 'like', like], ['customer', 'like', like]]);
+        const res = await apiGet(apiUrl(
+            `/api/resource/External Sales Invoice?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+            `&filters=${encodeURIComponent(filters)}&or_filters=${encodeURIComponent(orFilters)}` +
+            `&order_by=${encodeURIComponent('invoice_date desc')}&limit_page_length=12`
+        ), await session());
+        if (!res.ok) return failure(`Server error (${res.status}). Please try again.`);
+        const rows: any[] = res.data?.data || [];
+        return {
+            ok: true, data: rows.map(r => ({
+                name: String(r.name), voucher_number: String(r.invoice_number || ''),
+                customer: String(r.buyer_name || r.customer || ''), date: r.invoice_date || undefined,
+                sales_invoice: r.sales_invoice_linked || undefined,
+            })),
+        };
+    } catch {
+        return failure('Network error. Please check your connection.');
+    }
+}
+
+/** Search suppliers (principals) by name or ID. */
+export async function searchSuppliers(query: string): Promise<SearchResult<Supplier>> {
+    const trimmed = query.trim();
+    if (!trimmed) return { ok: true, data: [] };
+    try {
+        const fields = ['name', 'supplier_name'];
+        const filters = JSON.stringify([['disabled', '=', 0]]);
+        const orFilters = JSON.stringify([
+            ['supplier_name', 'like', `%${escapeLike(trimmed)}%`],
+            ['name', 'like', `%${escapeLike(trimmed)}%`],
+        ]);
+        const res = await apiGet(apiUrl(
+            `/api/resource/Supplier?fields=${encodeURIComponent(JSON.stringify(fields))}` +
+            `&filters=${encodeURIComponent(filters)}` +
+            `&or_filters=${encodeURIComponent(orFilters)}&limit_page_length=20`
+        ), await session());
+        if (!res.ok) return failure(`Server error (${res.status}). Please try again.`);
+        return { ok: true, data: res.data?.data || res.data?.message || [] };
+    } catch {
+        return failure('Network error. Please check your connection.');
+    }
+}
+
 /**
  * Fetch full Customer/Item records for a known list of names/codes — used to
  * populate the "browse" list shown when a filter field is tapped with no

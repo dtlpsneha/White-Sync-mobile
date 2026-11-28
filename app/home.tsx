@@ -521,6 +521,7 @@ export default function HomeScreen() {
                                 { label: 'QUOTATION / PROFORMA REQUEST', sub: 'Brand, customer, item & quantity', icon: 'create', from: '#FCD34D', to: '#EA580C', route: '/quotation-request', mode: 'push' as const },
                                 { label: 'QUOTATION CREATED', sub: 'Create & track quotations', icon: 'document-text', from: '#FBBF24', to: '#F97316', route: '/quotations', mode: 'replace' as const },
                                 { label: 'CUSTOMER PURCHASE ORDER', sub: 'Orders from customers', icon: 'cart', from: '#2DD4BF', to: '#0D9488', route: '/sales-orders', mode: 'replace' as const },
+                                { label: 'MY ORDERS', sub: 'Order → invoice → dispatch, with LRs', icon: 'git-network', from: '#4ADE80', to: '#16A34A', route: '/my-orders', mode: 'push' as const },
                                 { label: 'SALES INVOICE HISTORY (DETAILED)', sub: 'Line-item invoice detail', icon: 'receipt', from: '#38BDF8', to: '#0284C7', route: '/daily-sales-report/invoice-history', mode: 'push' as const },
                                 { label: 'SERVICE INVOICES', sub: 'LC service invoices', icon: 'construct', from: '#F472B6', to: '#BE185D', route: '/daily-sales-report/invoice-history?service=1', mode: 'push' as const },
                                 { label: 'DAILY SALES INVOICE (CUMULATIVE)', sub: 'Brand-wise daily totals', icon: 'bar-chart', from: '#FB7185', to: '#E11D48', route: '/daily-sales-report', mode: 'push' as const },

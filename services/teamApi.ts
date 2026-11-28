@@ -22,6 +22,10 @@ const TOKEN_KEY = 'smartops_token';
 
 // ─────────────────────────── shapes (mirror app/bff/team.py) ───────────────────────────
 
+/** SmartOps' own colour and icon, for the posts it writes (a customer's payment, for one). */
+export const SMARTOPS_TINT = '#059669';
+export const SMARTOPS_ICON = 'cash-outline';
+
 export type JobKind = 'proforma' | 'place_order' | 'quotation' | 'dispatch' | 'payment' | 'general';
 export type JobStatus = 'open' | 'done' | 'cancelled';
 export type JobAction = 'quotation' | 'order_ref' | 'dispatch' | 'payment' | 'none';
@@ -41,7 +45,127 @@ export interface Attachment {
      * Absent from an older SmartOps, which is treated as "not failed". */
     read_failed?: boolean;
     file_url: string;
+    /** How the person who posted it filed it ("customer_po", ...). Absent while not filed, and
+     * from an older SmartOps. */
+    doc_type?: string | null;
+    doc_type_label?: string | null;
+    doc_details?: Record<string, string> | null;
 }
+
+// ─────────────────────────── files filed by type ───────────────────────────
+
+export type DocFieldType = 'text' | 'longtext' | 'amount' | 'date' | 'customer' | 'supplier' | 'invoices';
+
+/** One field a document type asks for. A customer / supplier field also carries the ERPNext
+ * id it was picked as, under "<key>_id". */
+export interface DocField { key: string; label: string; type: DocFieldType; required: boolean }
+
+/** What a file can be filed as. The list comes from SmartOps, so a new type needs no app build. */
+export interface DocType { key: string; label: string; icon: string; fields: DocField[] }
+
+/** What the person said the file is. */
+export interface Filing { doc_type: string; details: Record<string, string> }
+
+/** A file in the Documents list: filed or not. */
+export interface TeamFile {
+    job_id: string;
+    reply_id?: string | null;
+    document_id: string;
+    filename?: string | null;
+    mime?: string | null;
+    file_url: string;
+    posted_by?: Person | null;
+    posted_at: string;
+    message: string;
+    doc_type?: string | null;
+    doc_type_label?: string | null;
+    doc_details?: Record<string, string> | null;
+    party?: string | null;
+    ref?: string | null;
+    doc_date?: string | null;
+    amount?: number | null;
+    filed_by?: string | null;
+    read_party?: string | null;
+    read_ref?: string | null;
+}
+
+export interface TeamFiles { files: TeamFile[]; counts: Record<string, number>; next_before?: string | null }
+
+// ─────────────────────────── My Orders ───────────────────────────
+
+export type OrderStatus = 'so_pending' | 'invoice_pending' | 'invoice_generated' | 'delivery_pending' | 'dispatched';
+
+/** One order or invoice, and where it stands (SmartOps app/web/my_orders.py). */
+export interface OrderRow {
+    kind: 'order' | 'invoice';
+    name: string;
+    /** What people call it: the Tally invoice no., or the Sales Order name. */
+    number: string;
+    customer: string;
+    customer_name: string;
+    date?: string | null;
+    amount: number;
+    status: OrderStatus;
+    status_label: string;
+    po_no: string;
+    /** An invoice's Sales Order, when the customer's PO number matched one. */
+    order: string;
+    lr_count: number;
+    /** Paid / Unpaid / Overdue, from its Sales Invoice. */
+    paid: string;
+    /** The Sales Invoice made from Tally's invoice, once there is one. `name` is the
+     * External Sales Invoice. Absent from an older SmartOps. */
+    sales_invoice?: string;
+    /** The customer's salesperson, by name; "" when none is set. */
+    salesperson?: string;
+}
+
+/** A salesperson the desk can narrow My Orders to; key "none" is customers with none. */
+export interface SalespersonPick { key: string; label: string; count: number }
+
+export interface MyOrders {
+    rows: OrderRow[];
+    counts: Record<string, number>;
+    statuses: { key: OrderStatus; label: string }[];
+    scope: 'mine' | 'all';
+    can_see_all: boolean;
+    since: string;
+    /** For the desk and managers: whose orders to show. Empty for a salesperson. */
+    salespeople?: SalespersonPick[];
+    salesperson?: string | null;
+}
+
+/** One LR filed for an invoice in Team Chat. */
+export interface LrEntry {
+    lr_no: string;
+    transporter: string;
+    lr_date?: string | null;
+    invoices: string[];
+    filename?: string | null;
+    mime?: string | null;
+    file_url: string;
+    job_id: string;
+    filed_by?: string | null;
+    filed_at: string;
+}
+
+export interface InvoiceDetail { row: OrderRow; lrs: LrEntry[] }
+
+export const ORDER_COLORS: Record<OrderStatus, string> = {
+    so_pending: '#64748B',
+    invoice_pending: '#F59E0B',
+    invoice_generated: '#2563EB',
+    delivery_pending: '#8B5CF6',
+    dispatched: '#16A34A',
+};
+
+export const ORDER_ICONS: Record<OrderStatus, string> = {
+    so_pending: 'create-outline',
+    invoice_pending: 'hourglass-outline',
+    invoice_generated: 'receipt-outline',
+    delivery_pending: 'cube-outline',
+    dispatched: 'car-outline',
+};
 
 /** A voice note: the recording (play it via `team.voiceSource`), what it says in English
  * (also the post's text), and the words as spoken. `text` is null when it could not be
@@ -74,6 +198,9 @@ export interface Job {
     reference?: string | null;
     reference_date?: string | null;
     erpnext_missing: boolean;
+    /** Written by SmartOps itself (e.g. "Payment received: ..."), not by a person. Absent
+     * from an older SmartOps, which is treated as false. */
+    by_smartops?: boolean;
     created_at: string;
     done_at?: string | null;
     age_minutes: number;
@@ -220,9 +347,13 @@ async function call<T>(send: (headers: Record<string, string>) => Promise<{ ok: 
 const get = <T>(path: string) => call<T>(h => apiGet(smartopsUrl(path), null, h));
 const post = <T>(path: string, body: unknown = {}) => call<T>(h => apiPost(smartopsUrl(path), body, null, h));
 
-function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null): FormData {
+function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null): FormData {
     const f = new FormData();
     f.append('body', body);
+    if (file?.uri && filing) {
+        f.append('doc_type', filing.doc_type);
+        f.append('doc_details', JSON.stringify(filing.details));
+    }
     if (voice?.uri) {
         f.append('voice', { uri: voice.uri, name: 'voice.m4a', type: 'audio/m4a' } as any);
     }
@@ -235,15 +366,54 @@ function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null
 
 // ─────────────────────────── the Team calls ───────────────────────────
 
+let docTypes: DocType[] | null = null;
+
 export const team = {
     people: () => get<People>('/bff/v1/team/people'),
     jobs: (view: JobView, before?: string | null) =>
         get<Jobs>(`/bff/v1/team/jobs?view=${view}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
     job: (id: string) => get<JobDetail>(`/bff/v1/team/jobs/${id}`),
-    post: (body: string, file?: PickedFile | null, voice?: PickedVoice | null) =>
-        call<JobDetail>(h => apiPostForm(smartopsUrl('/bff/v1/team/jobs'), form(body, file, voice), h)),
-    reply: (id: string, body: string, file?: PickedFile | null, voice?: PickedVoice | null) =>
-        call<JobDetail>(h => apiPostForm(smartopsUrl(`/bff/v1/team/jobs/${id}/replies`), form(body, file, voice), h)),
+    post: (body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) =>
+        call<JobDetail>(h => apiPostForm(smartopsUrl('/bff/v1/team/jobs'), form(body, file, voice, filing), h)),
+    reply: (id: string, body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null) =>
+        call<JobDetail>(h => apiPostForm(smartopsUrl(`/bff/v1/team/jobs/${id}/replies`), form(body, file, voice, filing), h)),
+    /** What a file can be filed as. Kept after the first answer; an older SmartOps answers 404,
+     * and then files are simply posted without a type. */
+    documentTypes: async (): Promise<DocType[]> => {
+        if (docTypes) return docTypes;
+        try {
+            const r = await get<{ types: DocType[] }>('/bff/v1/team/document-types');
+            if (r.ok) docTypes = r.data.types;
+            return r.ok ? r.data.types : [];
+        } catch {
+            return [];   // no sign-in, no network: the sheet falls back to its preview list
+        }
+    },
+    /** Every file in the chat, newest first: by type ("unfiled" for the ones nobody filed) and any word. */
+    files: (p: { type?: string | null; q?: string; before?: string | null } = {}) => {
+        const qs = [
+            p.type ? `type=${encodeURIComponent(p.type)}` : '',
+            p.q?.trim() ? `q=${encodeURIComponent(p.q.trim())}` : '',
+            p.before ? `before=${encodeURIComponent(p.before)}` : '',
+        ].filter(Boolean).join('&');
+        return get<TeamFiles>(`/bff/v1/team/files${qs ? `?${qs}` : ''}`);
+    },
+    /** My Orders: orders and invoices of my customers (or everybody's, for the desk). */
+    myOrders: (p: { status?: OrderStatus | null; q?: string; salesperson?: string | null } = {}) => {
+        const qs = [
+            p.status ? `status=${p.status}` : '',
+            p.q?.trim() ? `q=${encodeURIComponent(p.q.trim())}` : '',
+            p.salesperson ? `salesperson=${encodeURIComponent(p.salesperson)}` : '',
+        ].filter(Boolean).join('&');
+        return get<MyOrders>(`/bff/v1/my-orders${qs ? `?${qs}` : ''}`);
+    },
+    invoice: (name: string) => get<InvoiceDetail>(`/bff/v1/my-orders/invoices/${encodeURIComponent(name)}`),
+    /** "Ready to dispatch" (Delivery Pending), or back. */
+    readyToDispatch: (name: string, ready: boolean) =>
+        post<InvoiceDetail>(`/bff/v1/my-orders/invoices/${encodeURIComponent(name)}/ready`, { ready }),
+    /** File (or re-file) a file already in the chat. */
+    fileAttachment: (jobId: string, replyId: string | null | undefined, filing: Filing) =>
+        post<JobDetail>('/bff/v1/team/files', { job_id: jobId, reply_id: replyId ?? null, ...filing }),
     done: (id: string) => post<JobDetail>(`/bff/v1/team/jobs/${id}/done`),
     /** Read a photo/PDF on this job again, after a read that failed. */
     reread: (id: string, documentId: string) =>
@@ -281,6 +451,48 @@ export const team = {
             h => apiPostForm(smartopsUrl('/bff/v1/team/transcribe'), f, h));
     },
 };
+
+/** Shown only while SmartOps is too old to give its own list (nothing is saved from them). */
+const PREVIEW_TYPES: DocType[] = [
+    { key: 'customer_po', label: 'Customer PO', icon: 'cart-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'po_no', label: 'PO no', type: 'text', required: false },
+        { key: 'po_date', label: 'PO date', type: 'date', required: false },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false }] },
+    { key: 'principal_invoice', label: 'Principal invoice', icon: 'receipt-outline', fields: [
+        { key: 'supplier', label: 'Supplier', type: 'supplier', required: true },
+        { key: 'invoice_no', label: 'Invoice no', type: 'text', required: false },
+        { key: 'invoice_date', label: 'Invoice date', type: 'date', required: false },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false }] },
+    { key: 'quotation', label: 'Quotation / PI', icon: 'pricetag-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'quotation_no', label: 'Quotation no', type: 'text', required: false },
+        { key: 'date', label: 'Date', type: 'date', required: false },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false }] },
+    { key: 'payment_proof', label: 'Payment proof', icon: 'cash-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'amount', label: 'Amount', type: 'amount', required: false },
+        { key: 'utr', label: 'UTR / Cheque no', type: 'text', required: false },
+        { key: 'payment_date', label: 'Payment date', type: 'date', required: false }] },
+    { key: 'dispatch_lr', label: 'Dispatch / LR', icon: 'car-outline', fields: [
+        { key: 'invoices', label: 'Invoices', type: 'invoices', required: true },
+        { key: 'transporter', label: 'Transporter', type: 'text', required: false },
+        { key: 'lr_no', label: 'LR no', type: 'text', required: false },
+        { key: 'lr_date', label: 'LR date', type: 'date', required: false }] },
+    { key: 'delivery_challan', label: 'Delivery challan', icon: 'clipboard-outline', fields: [
+        { key: 'customer', label: 'Customer', type: 'customer', required: true },
+        { key: 'dc_no', label: 'DC no', type: 'text', required: false },
+        { key: 'date', label: 'Date', type: 'date', required: false }] },
+    { key: 'other', label: 'Other', icon: 'document-outline', fields: [
+        { key: 'description', label: 'Description', type: 'longtext', required: true }] },
+];
+
+/** The types for the attach sheet. `supported` is false while SmartOps is too old to store
+ * them: the sheet still shows (so it can be seen), says so, and the post goes without them. */
+export async function documentTypeChoices(): Promise<{ types: DocType[]; supported: boolean }> {
+    const types = await team.documentTypes();
+    return types.length ? { types, supported: true } : { types: PREVIEW_TYPES, supported: false };
+}
 
 // ─────────────────────────── small display helpers ───────────────────────────
 
