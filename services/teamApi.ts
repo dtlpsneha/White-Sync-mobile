@@ -382,6 +382,9 @@ async function call<T>(send: (headers: Record<string, string>) => Promise<{ ok: 
 const get = <T>(path: string) => call<T>(h => apiGet(smartopsUrl(path), null, { ...h, 'Cache-Control': 'no-cache' }));
 const post = <T>(path: string, body: unknown = {}) => call<T>(h => apiPost(smartopsUrl(path), body, null, h));
 
+/** The signed-in SmartOps calls, for other screens that talk to SmartOps as this person. */
+export const smartopsAs = { get, post };
+
 function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null): FormData {
     const f = new FormData();
     f.append('body', body);
@@ -562,7 +565,7 @@ export function shortTime(iso: string): string {
     const d = new Date(iso);
     const today = new Date();
     const sameDay = d.toDateString() === today.toDateString();
-    const hh = d.getHours().toString().padStart(2, '0');
-    const mm = d.getMinutes().toString().padStart(2, '0');
-    return sameDay ? `${hh}:${mm}` : `${d.getDate()}/${d.getMonth() + 1} ${hh}:${mm}`;
+    const h = d.getHours();
+    const clock = `${h % 12 === 0 ? 12 : h % 12}:${d.getMinutes().toString().padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+    return sameDay ? clock : `${d.getDate()}/${d.getMonth() + 1} ${clock}`;
 }

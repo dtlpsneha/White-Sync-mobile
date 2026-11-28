@@ -62,9 +62,15 @@ export function displayName(name: string | null | undefined): string {
     return local.replace(/^dtlp/i, '').replace(/\b\w/g, c => c.toUpperCase()).trim() || name;
 }
 
+/** 12-hour clock: "3:05 pm", "12:30 am". */
+export function clock12(d: Date): string {
+    const h = d.getHours();
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${d.getMinutes().toString().padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
 export function timeOnly(iso: string): string {
-    const d = new Date(iso);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    return clock12(new Date(iso));
 }
 
 export function sameDay(a: string, b: string): boolean {

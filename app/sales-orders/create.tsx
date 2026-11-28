@@ -14,6 +14,8 @@ import { apiGet, apiPost, apiPut, uploadFile } from '@/utils/api';
 import { apiUrl } from '@/constants/config';
 import { searchItemsByBrand, RequestItem } from '@/services/quotationRequest';
 import { Customer, searchCustomers } from '@/services/frappeSearch';
+import { getOrderFiles, type OrderFile } from '@/services/orderFiles';
+import { readAttachment } from '@/services/attachmentsApi';
 
 type Attachment = { uri: string; name: string; type: string };
 type Line = { key: number; item: RequestItem | null; query: string; results: RequestItem[]; qty: string };
@@ -39,7 +41,8 @@ export default function CreateSalesOrderScreen() {
     const [customerQuery, setCustomerQuery] = useState('');
     const [customerResults, setCustomerResults] = useState<Customer[]>([]);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
-    const [existingAttach, setExistingAttach] = useState('');
+    // Files already on the order being edited.
+    const [existingFiles, setExistingFiles] = useState<OrderFile[]>([]);
     const [orderDate, setOrderDate] = useState(todayIso());
     const [showDate, setShowDate] = useState(false);
     const [instructions, setInstructions] = useState('');
@@ -88,7 +91,7 @@ export default function CreateSalesOrderScreen() {
                 setBrand(doc.items?.[0]?.brand || '');
                 setInstructions(doc.special_instructions || '');
                 setPoNo(doc.po_no || '');
-                setExistingAttach(doc.attach || '');
+                setExistingFiles((await getOrderFiles(edit_id, doc.attach)) || []);
                 const loaded: Line[] = (doc.items || []).map((it: any, i: number) => ({
                     key: i + 1,
                     item: { item_code: it.item_code, item_name: it.item_name || it.item_code, stock_uom: it.uom || '' },
@@ -105,9 +108,19 @@ export default function CreateSalesOrderScreen() {
     }, [edit_id]);
 
     // ---- attachments: pick any number of images or PDFs
+    // The same file picked twice (or already on the order) is attached only once.
     const addFiles = (files: Attachment[]) => {
         if (!files.length) return;
-        setAttachments(prev => [...prev, ...files]);
+        const onOrder = new Set(existingFiles.map(f => f.fileName));
+        const have = new Set(attachments.map(f => f.name));
+        const skipped: string[] = [];
+        const fresh = files.filter(f => {
+            if (have.has(f.name) || onOrder.has(f.name)) { skipped.push(f.name); return false; }
+            have.add(f.name);
+            return true;
+        });
+        if (fresh.length) setAttachments(prev => [...prev, ...fresh]);
+        if (skipped.length) Alert.alert('Already added', `${skipped.join(', ')} ${skipped.length === 1 ? 'is' : 'are'} already attached.`);
     };
 
     const pickImages = async () => {
@@ -208,7 +221,10 @@ export default function CreateSalesOrderScreen() {
             const failed: string[] = [];
             for (const f of attachments) {
                 const up: any = await uploadFile(apiUrl('/api/method/upload_file'), f, cookies, { doctype: 'Sales Order', docname: name });
-                if (!up.ok) failed.push(f.name);
+                if (!up.ok) { failed.push(f.name); continue; }
+                // SmartOps reads the PO copy (OCR) and keeps what it says against this order.
+                const url = up.data?.message?.file_url;
+                if (url) readAttachment('Sales Order', name, url);
             }
             const fileNote = failed.length ? `\nThese files were not attached: ${failed.join(', ')}` : '';
             Alert.alert('Saved in ERP', `Customer Purchase Order ${name} was saved.${fileNote}`, [{ text: 'OK', onPress: () => router.back() }]);
@@ -255,7 +271,16 @@ export default function CreateSalesOrderScreen() {
 
                     {/* 2. Attachments */}
                     <SectionCard number={2} title="Attachments" subtitle="Customer's PO copy">
-                        {existingAttach ? <Text style={[styles.hint, { color: colors.textSecondary }]}>Existing file: {existingAttach.split('/').pop()}</Text> : null}
+                        {existingFiles.length ? (
+                            <Text style={[styles.hint, { color: colors.textSecondary }]}>
+                                Already on this order ({existingFiles.length}): {existingFiles.map(f => f.fileName).join(', ')}
+                            </Text>
+                        ) : null}
+                        {attachments.length ? (
+                            <Text style={[styles.hint, { color: colors.textSecondary }]}>
+                                {attachments.length} new file{attachments.length === 1 ? '' : 's'} to attach
+                            </Text>
+                        ) : null}
                         {attachments.map((f, i) => (
                             <View key={`${f.uri}-${i}`} style={[styles.fileRow, { borderColor: colors.border }]}>
                                 <View style={[styles.fileTile, { backgroundColor: colors.primary }]}>

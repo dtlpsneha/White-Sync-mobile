@@ -10,6 +10,7 @@ import { API_BASE_URL, apiUrl } from '@/constants/config';
 import { useResponsive } from '@/hooks/useResponsive';
 import Animated from 'react-native-reanimated';
 import { enterRow } from '@/constants/motion';
+import { getOrderFileCounts } from '@/services/orderFiles';
 
 const IMAGE_HOST = API_BASE_URL;
 
@@ -74,6 +75,8 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
     const [allSalesOrders, setAllSalesOrders] = useState<SalesOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    // Files on each order, read from ERPNext after the list (the list call does not carry them).
+    const [fileCounts, setFileCounts] = useState<Map<string, number>>(new Map());
 
     // Fetch once; `filter`/`searchQuery` are applied client-side below, so
     // having them here re-downloaded the whole list on every keystroke.
@@ -102,6 +105,7 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
 
                 setAllSalesOrders(deduped);
                 onLoaded?.(deduped);
+                getOrderFileCounts(deduped).then(c => { if (c) setFileCounts(c); });
             }
         } catch (error) {
             console.error('Error fetching sales orders:', error);
@@ -147,7 +151,7 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
         const rawDate = (item as any).date || item.transaction_date || '';
         const [y, m, d] = rawDate.split('-');
         const dateText = y && m && d ? `${d}-${m}-${y}` : rawDate;
-        const hasFile = !!(item.attach || (item as any).attach_image);
+        const fileCount = fileCounts.get(item.name) ?? ((item.attach || (item as any).attach_image) ? 1 : 0);
 
         return (
             <Animated.View entering={enterRow(index)}>
@@ -166,10 +170,12 @@ export default function SalesOrderList({ filter = 'All', searchQuery = '', scrol
                         <View style={styles.metaRow}>
                             <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} />
                             <Text style={styles.metaText}>{dateText || 'No date'}</Text>
-                            {hasFile ? (
+                            {fileCount ? (
                                 <>
                                     <Ionicons name="attach" size={13} color={colors.primaryVariant} />
-                                    <Text style={[styles.metaText, { color: colors.primaryVariant, fontWeight: '700' }]}>PO attached</Text>
+                                    <Text style={[styles.metaText, { color: colors.primaryVariant, fontWeight: '700' }]}>
+                                        {fileCount} file{fileCount === 1 ? '' : 's'}
+                                    </Text>
                                 </>
                             ) : null}
                         </View>
