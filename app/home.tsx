@@ -562,11 +562,12 @@ export default function HomeScreen() {
                             ))}
                         </View>
 
-                        <SectionHeader title="Stock & Payments" subtitle="Tally stock list and bank receipts" accentBar />
+                        <SectionHeader title="Stock & Payments" subtitle="Tally stock, bank receipts and credit" accentBar />
                         <View style={styles.navSection}>
                             {([
                                 { label: 'STOCK LIST', sub: 'Tally stock by brand and item', icon: 'cube', from: '#3F8F6B', to: '#2F5D50', route: '/stock-list' },
                                 { label: 'PAYMENT DETAILS', sub: 'ICICI bank receipts by date', icon: 'card', from: '#5B95C6', to: '#3E7CB1', route: '/payment-details' },
+                                { label: 'CREDIT CONTROL', sub: 'Who owes what, and how late', icon: 'wallet', from: '#F07A55', to: '#E4572E', route: '/credit-control' },
                             ]).map((item, i) => (
                                 <Animated.View key={item.route} entering={firstVisit ? enterItem(6) : undefined}>
                                     <Tappable
