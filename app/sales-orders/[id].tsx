@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, Alert, Modal } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,9 @@ import { Colors, Radius, Shadow } from '@/constants/theme';
 import { apiGet } from '@/utils/api';
 import { API_BASE_URL, apiUrl } from '@/constants/config';
 import { pdfViewerHtml, saveStatementToDownloads } from '@/services/customerStatements';
+import { getOrderFiles, type OrderFile } from '@/services/orderFiles';
+import { attachmentReads, stillReading, type FileRead } from '@/services/attachmentsApi';
+import { FileReadView } from '@/components/FileReadView';
 
 const IMAGE_HOST = API_BASE_URL;
 
@@ -56,6 +59,12 @@ export default function SalesOrderDetailScreen() {
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [viewer, setViewer] = useState<Attached | null>(null);
+    // Every file on the order (the app attaches each chosen file separately); null = could not load.
+    const [files, setFiles] = useState<OrderFile[] | null>([]);
+    const [busyFile, setBusyFile] = useState<string | null>(null);
+    // What SmartOps read from each file (OCR); null = SmartOps could not be asked.
+    const [reads, setReads] = useState<FileRead[] | null>(null);
+    const polls = useRef(0);
 
     const orderId = Array.isArray(id) ? id[0] : id;
 
@@ -74,12 +83,27 @@ export default function SalesOrderDetailScreen() {
             const res = await apiGet(apiUrl(`/api/resource/Sales Order/${encodeURIComponent(name)}`), cookies);
             const doc: any = (res.data as any)?.data;
             setOrder(res.ok && doc ? doc : null);
+            if (res.ok && doc) {
+                setFiles(await getOrderFiles(name, doc.attach));
+                polls.current = 0;
+                attachmentReads('Sales Order', name).then(setReads);
+            }
         } catch {
             setOrder(null);
         } finally {
             setLoading(false);
         }
     };
+
+    // While a file is still being read, look again every 5 s (for up to 3 minutes).
+    useEffect(() => {
+        if (!orderId || !stillReading(reads) || polls.current >= 36) return;
+        const t = setTimeout(() => {
+            polls.current += 1;
+            attachmentReads('Sales Order', orderId).then(r => { if (r) setReads(r); });
+        }, 5000);
+        return () => clearTimeout(t);
+    }, [reads, orderId]);
 
     const statusText = (o: OrderDoc) => o.workflow_state || o.status || (o.docstatus === 0 ? 'Draft' : o.docstatus === 1 ? 'Submitted' : 'Cancelled');
 
@@ -104,33 +128,40 @@ export default function SalesOrderDetailScreen() {
         return { uri, fileName, isPdf, base64 };
     };
 
-    const runWithAttachment = async (action: (a: Attached) => Promise<void> | void) => {
-        if (!order?.attach) return;
+    // Opens one file in the viewer (downloaded with the login cookie).
+    const viewAttachment = async (f: OrderFile) => {
+        if (busy) return;
         setBusy(true);
+        setBusyFile(f.name);
         try {
-            const a = await fetchAttachment(order.attach);
-            await action(a);
+            setViewer(await fetchAttachment(f.url));
         } catch {
             Alert.alert('Error', 'Could not open the attachment.');
         } finally {
             setBusy(false);
+            setBusyFile(null);
         }
     };
 
-    const viewAttachment = () => runWithAttachment(a => setViewer(a));
+    // Download and share work on the file open in the viewer.
+    const downloadAttachment = () => {
+        const a = viewer;
+        if (!a) return;
+        const saved = (() => { try { return saveStatementToDownloads({ fileName: a.fileName, uri: a.uri, base64: a.base64 }); } catch { return ''; } })();
+        if (saved) Alert.alert('Saved', `${a.fileName} was saved to Downloads.`);
+        else Alert.alert('Not saved', 'Could not save the file to Downloads.');
+    };
 
-    const downloadAttachment = () =>
-        runWithAttachment(a => {
-            const saved = (() => { try { return saveStatementToDownloads({ fileName: a.fileName, uri: a.uri, base64: a.base64 }); } catch { return ''; } })();
-            if (saved) Alert.alert('Saved', `${a.fileName} was saved to Downloads.`);
-            else Alert.alert('Not saved', 'Could not save the file to Downloads.');
-        });
-
-    const shareAttachment = () =>
-        runWithAttachment(async a => {
+    const shareAttachment = async () => {
+        const a = viewer;
+        if (!a) return;
+        try {
             if (!(await Sharing.isAvailableAsync())) { Alert.alert('Not available', 'Sharing is not available on this device.'); return; }
             await Sharing.shareAsync(a.uri, { mimeType: a.isPdf ? 'application/pdf' : undefined, dialogTitle: a.fileName });
-        });
+        } catch {
+            Alert.alert('Error', 'Could not share the file.');
+        }
+    };
 
     if (loading) {
         return (
@@ -156,8 +187,7 @@ export default function SalesOrderDetailScreen() {
     const isDraft = (order.docstatus ?? 0) === 0 && !status.toLowerCase().includes('cancel');
     const taxes = (order.taxes || []).filter(t => Number(t.tax_amount || 0) !== 0 || Number(t.rate || 0) !== 0);
     const taxTotal = Number(order.total_taxes_and_charges || 0);
-    const attach = order.attach || '';
-    const attachIsPdf = attach.toLowerCase().endsWith('.pdf');
+    const fileCount = files?.length ?? 0;
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -245,20 +275,39 @@ export default function SalesOrderDetailScreen() {
                     </View>
                 </View>
 
-                {/* Attachment: tap to view, then download or share */}
-                {attach ? (
-                    <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Attachment</Text>
-                        <TouchableOpacity style={[styles.fileRow, { borderColor: colors.border }]} onPress={viewAttachment} disabled={busy}>
-                            <Ionicons name={attachIsPdf ? 'document-text' : 'image'} size={26} color={colors.primary} />
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{attach.split('/').pop()}</Text>
-                                <Text style={[styles.muted, { color: colors.textSecondary }]}>{attachIsPdf ? 'PDF' : 'Image'} · Tap to view</Text>
-                            </View>
-                            {busy ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="eye-outline" size={20} color={colors.textSecondary} />}
-                        </TouchableOpacity>
+                {/* Attachments: every file on the order, tap one to view, then download or share */}
+                <View style={[styles.card, Shadow.card(theme), { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.rowBetween}>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Attachments</Text>
+                        <View style={[styles.countPill, { backgroundColor: colors.primarySoft }]}>
+                            <Ionicons name="attach" size={13} color={colors.primaryVariant} />
+                            <Text style={[styles.countText, { color: colors.primaryVariant }]}>{files ? fileCount : '—'}</Text>
+                        </View>
                     </View>
-                ) : null}
+                    {files === null ? (
+                        <TouchableOpacity onPress={() => orderId && load(orderId)}>
+                            <Text style={[styles.muted, { color: colors.danger }]}>Could not load the files. Tap to try again.</Text>
+                        </TouchableOpacity>
+                    ) : fileCount === 0 ? (
+                        <Text style={[styles.muted, { color: colors.textSecondary }]}>No files attached to this order.</Text>
+                    ) : files.map(f => (
+                        <View key={f.name} style={[styles.fileBlock, { borderColor: colors.border }]}>
+                            <TouchableOpacity style={styles.fileHead} onPress={() => viewAttachment(f)} disabled={busy}>
+                                <Ionicons name={f.isPdf ? 'document-text' : 'image'} size={26} color={colors.primary} />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{f.fileName}</Text>
+                                    <Text style={[styles.muted, { color: colors.textSecondary }]}>{f.isPdf ? 'PDF' : 'Image'} · Tap to view</Text>
+                                </View>
+                                {busyFile === f.name ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="eye-outline" size={20} color={colors.textSecondary} />}
+                            </TouchableOpacity>
+                            {reads !== null && (
+                                <View style={[styles.readBox, { borderTopColor: colors.border }]}>
+                                    <FileReadView read={reads.find(r => r.file_url === f.url)} theme={theme} />
+                                </View>
+                            )}
+                        </View>
+                    ))}
+                </View>
             </ScrollView>
 
             {/* Viewer for the attachment */}
@@ -312,6 +361,11 @@ const styles = StyleSheet.create({
     grandLabel: { fontSize: 15, fontWeight: '900' },
     grandValue: { fontSize: 20, fontWeight: '900' },
     fileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: Radius.md, padding: 12 },
+    fileBlock: { borderWidth: 1, borderRadius: Radius.md, overflow: 'hidden' },
+    fileHead: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
+    readBox: { borderTopWidth: 1, padding: 12 },
+    countPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999 },
+    countText: { fontSize: 12, fontWeight: '800' },
     actionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
     actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: Radius.md, paddingVertical: 10 },
     actionText: { fontSize: 14, fontWeight: '800' },
