@@ -1,6 +1,6 @@
 /**
  * Where an order stands, as five steps:
- *   Sales Order → Confirmed → Invoice → Ready → Dispatched
+ *   Sales Order → SO Confirmed → Invoiced → Dispatched → Delivered
  * Used by My Orders' invoice screen and by the Sales Order screen when opened from My Orders.
  */
 
@@ -13,10 +13,10 @@ import type { OrderStatus } from '@/services/teamApi';
 
 const STEPS: { key: OrderStatus; label: string }[] = [
     { key: 'so_pending', label: 'Sales Order' },
-    { key: 'invoice_pending', label: 'Confirmed' },
-    { key: 'invoice_generated', label: 'Invoice' },
-    { key: 'delivery_pending', label: 'Ready' },
-    { key: 'dispatched', label: 'Dispatched' },
+    { key: 'invoice_pending', label: 'SO Confirmed' },
+    { key: 'invoice_generated', label: 'Invoiced' },
+    { key: 'delivery_pending', label: 'Dispatched' },
+    { key: 'dispatched', label: 'Delivered' },
 ];
 
 export const isOrderStatus = (v: unknown): v is OrderStatus => STEPS.some(s => s.key === v);
