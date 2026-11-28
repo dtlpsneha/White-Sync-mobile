@@ -10,6 +10,7 @@ import { notificationService } from '../services/NotificationService';
 import { apiPost } from '../utils/api';
 import { apiUrl } from '../constants/config';
 import { notificationTarget } from '../utils/notificationTarget';
+import { useNotifications } from '@/context/NotificationsContext';
 
 /**
  * Registers this device's Expo push token against the logged-in ERPNext
@@ -94,6 +95,9 @@ export async function registerPushTokenForCurrentUser(): Promise<boolean> {
 }
 
 export const usePushNotifications = () => {
+    const { markAsRead } = useNotifications();
+    const markReadRef = useRef(markAsRead);
+    markReadRef.current = markAsRead;
     const [expoPushToken, setExpoPushToken] = useState<string | undefined>(undefined);
     const [notification, setNotification] = useState<Notifications.Notification | undefined>(undefined);
     const notificationListener = useRef<Notifications.Subscription | undefined>(undefined);
@@ -153,10 +157,13 @@ export const usePushNotifications = () => {
             const key = response.notification.request.identifier;
             if (key === handledResponseId) return;
             const target = notificationTarget(response.notification.request.content.data);
+            markReadRef.current(key);
             if (target) {
                 handledResponseId = key;
                 router.push(target);
             }
+            // A later JS reload must not replay this old tap.
+            Notifications.clearLastNotificationResponseAsync?.().catch(() => { });
         };
         responseListener.current = Notifications.addNotificationResponseReceivedListener(openFromResponse);
 

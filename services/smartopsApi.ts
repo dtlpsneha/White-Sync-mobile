@@ -188,8 +188,23 @@ async function smartopsFetch(path: string, init?: RequestInit): Promise<Response
         'X-Client': 'mobile',
         ...((init?.headers as Record<string, string>) ?? {}),
     };
+    // GETs give up after 15 s; a chat send (the model thinking) after 60 s.
+    const timeoutMs = (init?.method ?? 'GET') === 'GET' ? 15000 : 60000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        return await fetch(smartopsUrl(path), { ...init, headers });
+        return await fetch(smartopsUrl(path), { ...init, headers, signal: controller.signal });
+    } catch (cause) {
+        throw new SmartOpsUnreachableError(cause);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/** The body as JSON; an HTML error page or empty body counts as "unreachable", not a crash. */
+async function readJson<T>(response: Response): Promise<T> {
+    try {
+        return (await response.json()) as T;
     } catch (cause) {
         throw new SmartOpsUnreachableError(cause);
     }
@@ -198,7 +213,7 @@ async function smartopsFetch(path: string, init?: RequestInit): Promise<Response
 async function smartopsGet<T>(path: string): Promise<T> {
     const response = await smartopsFetch(path);
     if (!response.ok) throw await toApiError(response);
-    return (await response.json()) as T;
+    return readJson<T>(response);
 }
 
 async function smartopsPost<T>(path: string, body?: unknown): Promise<T> {
@@ -208,7 +223,7 @@ async function smartopsPost<T>(path: string, body?: unknown): Promise<T> {
         body: JSON.stringify(body ?? {}),
     });
     if (!response.ok) throw await toApiError(response);
-    return (await response.json()) as T;
+    return readJson<T>(response);
 }
 
 // ─────────────────────────── endpoints ───────────────────────────

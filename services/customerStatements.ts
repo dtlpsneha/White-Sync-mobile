@@ -162,7 +162,7 @@ export async function prepareStatement(kind: StatementKind, customer: string, fr
 }
 
 function jobHtml(payload: object) {
-    const data = JSON.stringify(payload).replace(/</g, '\u003c');
+    const data = JSON.stringify(payload).replace(/</g, '\\u003c');
     return `<!doctype html><html><head><meta charset="utf-8"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>

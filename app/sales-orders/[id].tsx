@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, Alert, Modal } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -59,9 +59,13 @@ export default function SalesOrderDetailScreen() {
 
     const orderId = Array.isArray(id) ? id[0] : id;
 
-    useEffect(() => {
-        if (orderId) load(orderId);
-    }, [orderId]);
+    // On every focus, so returning from "Edit" shows the saved changes.
+    useFocusEffect(
+        useCallback(() => {
+            if (orderId) load(orderId);
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [orderId])
+    );
 
     const load = async (name: string) => {
         setLoading(true);
@@ -140,7 +144,7 @@ export default function SalesOrderDetailScreen() {
         return (
             <View style={[styles.center, { backgroundColor: colors.background }]}>
                 <Text style={{ color: colors.textSecondary }}>Customer Purchase Order not found</Text>
-                <TouchableOpacity onPress={() => router.back()} style={[styles.btn, { backgroundColor: colors.primary, marginTop: 14 }]}>
+                <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace('/sales-orders'))} style={[styles.btn, { backgroundColor: colors.primary, marginTop: 14 }]}>
                     <Text style={styles.btnText}>Back</Text>
                 </TouchableOpacity>
             </View>

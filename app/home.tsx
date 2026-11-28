@@ -15,6 +15,7 @@ import { SectionHeader } from '@/components/dashboard/SectionHeader';
 import { Colors, Gradients } from '@/constants/theme';
 import { enterItem } from '@/constants/motion';
 import { clearSessionCaches, sessionCache } from '@/utils/sessionCache';
+import { signOut } from '@/utils/signOut';
 import { useTheme } from '@/context/ThemeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNotifications, type PersistentNotification } from '@/context/NotificationsContext';
@@ -426,15 +427,7 @@ export default function HomeScreen() {
                     // user_id behind, so the next account to sign in on this
                     // device inherited the previous user's permissions if its
                     // profile fetch failed.
-                    await Promise.all([
-                        SecureStore.deleteItemAsync('session_cookies'),
-                        Promise.resolve(clearSessionCaches()),
-                        SecureStore.deleteItemAsync('user_name'),
-                        SecureStore.deleteItemAsync('is_manager'),
-                        SecureStore.deleteItemAsync('show_all_quotes'),
-                        SecureStore.deleteItemAsync('user_id'),
-                        SecureStore.deleteItemAsync('last_seen_pending_ids'),
-                    ]);
+                    await signOut();
                     router.replace('/');
                 }
             }

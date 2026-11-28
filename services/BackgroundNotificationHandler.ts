@@ -21,6 +21,26 @@ function getNotifee() {
     return notifeeModule;
 }
 
+/** Notifee only accepts string values in `data`; drop empty and nested values. */
+function stringData(obj: Record<string, any>): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(obj ?? {})
+            .filter(([, v]) => v !== undefined && v !== null && typeof v !== 'object')
+            .map(([k, v]) => [k, String(v)]),
+    );
+}
+
+// "Dismiss" on a tray entry must work even when the app is closed, so this is registered
+// here at module scope (it used to be registered inside a screen component).
+try {
+    const notifeeMod = getNotifee();
+    notifeeMod?.default.onBackgroundEvent(async ({ detail }: any) => {
+        if (detail?.pressAction?.id === 'dismiss' && detail.notification?.notificationId) {
+            await notifeeMod.default.cancelNotification(detail.notification.notificationId);
+        }
+    });
+} catch { /* Notifee unavailable (Expo Go) */ }
+
 function safeStringify(value: unknown) {
     try {
         return JSON.stringify(value, (_key, v) => (typeof v === 'function' ? '[fn]' : v));
@@ -63,7 +83,7 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }: any
             const content = notification.request?.content ?? (notification as any);
             title = content?.title;
             body = content?.body;
-            customData = content?.data ?? {};
+            customData = stringData(content?.data ?? {});
         } else if (rawData) {
             let payload: Record<string, any> = {};
             try {
@@ -73,11 +93,12 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }: any
             }
             title = payload.title ?? rawData.title;
             body = payload.message ?? rawData.message;
-            customData = { id: payload.id ?? rawData.id };
+            customData = stringData({ ...payload, id: payload.id ?? rawData.id });
         }
 
         if (!title && !body) return;
-        const quotationId = customData?.id;
+        // The floating card can only open a quotation; a Team alert opens the app.
+        const quotationId = !customData.teamJobId && customData.id ? customData.id : null;
 
         console.log('[BGNotif] Quotation notification in background, id:', quotationId);
 

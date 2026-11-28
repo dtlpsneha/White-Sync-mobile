@@ -120,48 +120,32 @@ export const notifeeService = {
         }
     },
 
-    async getInitialQuotationId(): Promise<string | undefined> {
+    /** The data of the tray entry that launched the app, once. */
+    async getInitialData(): Promise<Record<string, any> | undefined> {
         const mod = getNotifee();
         if (!mod || initialNotificationHandled) return undefined;
         initialNotificationHandled = true;
         try {
             const initial = await mod.default.getInitialNotification();
-            return initial?.notification?.data?.id as string | undefined;
+            return (initial?.notification?.data as Record<string, any> | undefined) ?? undefined;
         } catch (e) {
             console.error('[NotifeeService] getInitialNotification failed:', e);
             return undefined;
         }
     },
 
-    async setupNotificationHandlers(onViewPress: (quotationId: string) => void) {
+    /** Tray taps while the app runs. Returns the unsubscribe. */
+    setupNotificationHandlers(onOpen: (data: Record<string, any>) => void): () => void {
         const mod = getNotifee();
-        if (!mod) return;
-
-        mod.default.onForegroundEvent(({ type, detail }) => {
-            console.log('[NotifeeService] Foreground event:', type, detail);
+        if (!mod) return () => { };
+        return mod.default.onForegroundEvent(({ type, detail }) => {
             const isPress = type === mod.EventType.PRESS || (type === mod.EventType.ACTION_PRESS && detail.pressAction?.id === 'view');
             if (isPress) {
-                const quotationId = detail.notification?.data?.id as string | undefined;
-                if (quotationId) {
-                    onViewPress(quotationId);
-                }
+                const data = detail.notification?.data as Record<string, any> | undefined;
+                if (data) onOpen(data);
             } else if (detail.pressAction?.id === 'dismiss') {
                 if (detail.notification?.notificationId) {
                     this.dismissNotification(detail.notification.notificationId);
-                }
-            }
-        });
-
-        mod.default.onBackgroundEvent(async ({ type, detail }) => {
-            console.log('[NotifeeService] Background event:', type, detail);
-            if (detail.pressAction?.id === 'view') {
-                const quotationId = detail.notification?.data?.id;
-                if (quotationId) {
-                    console.log('[NotifeeService] View pressed from background, quotation id:', quotationId);
-                }
-            } else if (detail.pressAction?.id === 'dismiss') {
-                if (detail.notification?.notificationId) {
-                    await mod!.default.cancelNotification(detail.notification.notificationId);
                 }
             }
         });

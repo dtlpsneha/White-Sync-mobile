@@ -29,6 +29,8 @@ export type CustomerVisit = {
     /** Team Chat could not be reached: post it on the next sync. */
     team_pending?: boolean;
     saved_at: string;
+    /** user_id of the person who saved it, so the next person on this phone does not get it. */
+    owner?: string;
 };
 
 const FILE = `${FileSystem.documentDirectory}customer_visits.json`;
@@ -45,19 +47,29 @@ async function writeAll(all: CustomerVisit[]) {
     await FileSystem.writeAsStringAsync(FILE, JSON.stringify(all));
 }
 
+async function currentUser(): Promise<string> {
+    return (await SecureStore.getItemAsync('user_id')) || '';
+}
+
+/** Visits of the person signed in (and older visits saved before owners were recorded). */
+const mine = (v: CustomerVisit, me: string) => !v.owner || !me || v.owner === me;
+
 export async function loadVisits(): Promise<CustomerVisit[]> {
-    return readAll();
+    const me = await currentUser();
+    return (await readAll()).filter(v => mine(v, me));
 }
 
 export async function getVisit(id: string): Promise<CustomerVisit | null> {
-    return (await readAll()).find(v => v.id === id) ?? null;
+    const me = await currentUser();
+    return (await readAll()).find(v => v.id === id && mine(v, me)) ?? null;
 }
 
 /** Adds the visit, or replaces the one with the same id. */
 export async function saveVisit(visit: CustomerVisit) {
+    const owned = visit.owner ? visit : { ...visit, owner: (await currentUser()) || undefined };
     const all = await readAll();
-    const exists = all.some(v => v.id === visit.id);
-    await writeAll(exists ? all.map(v => (v.id === visit.id ? visit : v)) : [visit, ...all]);
+    const exists = all.some(v => v.id === owned.id);
+    await writeAll(exists ? all.map(v => (v.id === owned.id ? owned : v)) : [owned, ...all]);
 }
 
 export async function updateVisit(id: string, patch: Partial<CustomerVisit>) {
@@ -127,6 +139,21 @@ export async function tellTeam(v: CustomerVisit): Promise<CustomerVisit> {
  * Returns the visit with its ERP name, or with the reason it could not be sent.
  */
 export async function syncVisitToErp(v: CustomerVisit): Promise<CustomerVisit> {
+    // Already on its way (e.g. Save was tapped and the list screen's sync started too):
+    // sending it again would create a second ERP visit. It stays marked to send.
+    if (inFlight.has(v.id)) return { ...v, dirty: true };
+    inFlight.add(v.id);
+    try {
+        return await sendVisit(v);
+    } finally {
+        inFlight.delete(v.id);
+    }
+}
+
+/** Visits being sent right now. */
+const inFlight = new Set<string>();
+
+async function sendVisit(v: CustomerVisit): Promise<CustomerVisit> {
     if (!(v.customer_ids || []).length) {
         return { ...v, dirty: true, sync_error: 'Pick at least one existing customer to send this visit to ERP.' };
     }
@@ -146,16 +173,35 @@ export async function syncVisitToErp(v: CustomerVisit): Promise<CustomerVisit> {
     }
 }
 
-/** Sends every visit that is waiting to reach ERP. */
-export async function syncPendingVisits(): Promise<void> {
-    const all = await readAll();
-    const pending = all.filter(v => v.dirty || v.team_pending);
+let syncRun: Promise<void> | null = null;
+
+/**
+ * Sends every visit of this person that is waiting to reach ERP. Only one run at a time
+ * (the list screen starts one on every focus); a second call waits for the first.
+ */
+export function syncPendingVisits(): Promise<void> {
+    if (!syncRun) syncRun = runSync().finally(() => { syncRun = null; });
+    return syncRun;
+}
+
+async function runSync(): Promise<void> {
+    const me = await currentUser();
+    const pending = (await readAll()).filter(v => mine(v, me) && (v.dirty || v.team_pending));
     if (!pending.length) return;
-    const updated: CustomerVisit[] = [];
-    for (const v of all) {
+    const results = new Map<string, { before: CustomerVisit; after: CustomerVisit }>();
+    for (const v of pending) {
         let next = v.dirty ? await syncVisitToErp(v) : v;
         if (next.team_pending) next = await tellTeam(next);
-        updated.push(next);
+        results.set(v.id, { before: v, after: next });
     }
-    await writeAll(updated);
+    // Re-read and change only the visits sent here: a visit saved meanwhile must not be
+    // put back to the copy read at the start.
+    const now = await readAll();
+    await writeAll(now.map(v => {
+        const r = results.get(v.id);
+        if (!r) return v;
+        if (v.saved_at === r.before.saved_at) return r.after;
+        // Edited while it was being sent: keep the edit, remember the ERP record it now has.
+        return { ...v, erp_name: v.erp_name || r.after.erp_name, team_posted: r.after.team_posted ?? v.team_posted };
+    }));
 }

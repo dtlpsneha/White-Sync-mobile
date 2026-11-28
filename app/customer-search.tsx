@@ -57,7 +57,7 @@ export default function CustomerSearchScreen() {
                 </View>
             </ScreenHeader>
 
-            <View style={{ padding: 16 }}>
+            <View style={{ flex: 1, padding: 16 }}>
                 <CustomerSearchResults
                     state={state}
                     onSelect={(item) => {

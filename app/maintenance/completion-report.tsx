@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -22,12 +22,24 @@ export default function CompletionReportScreen() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Customer[]>([]);
     const [editing, setEditing] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         getVisit(String(id)).then(v => {
+            setLoaded(true);
             if (!v) return;
             setVisit(v);
-            setEntries(v.completion ?? v.customer_planned.map(c => ({ customer: c, visited: '' as const, types: [] })));
+            // When every planned customer is an ERP customer the id list lines up with the
+            // names, so each entry keeps its ERP id (the first save used to drop them all).
+            const ids = v.customer_ids ?? [];
+            const aligned = ids.length === v.customer_planned.length;
+            setEntries(v.completion ?? v.customer_planned.map((c, i) => ({
+                customer: c,
+                customer_id: aligned ? ids[i] : undefined,
+                visited: '' as const,
+                types: [],
+            })));
             setEditing(!v.completion);
         });
     }, [id]);
@@ -44,11 +56,12 @@ export default function CompletionReportScreen() {
     useEffect(() => {
         const q = query.trim();
         if (q.length < 2) { setResults([]); return; }
+        let cancelled = false; // a late answer for an older query must not repaint the list
         const handle = setTimeout(async () => {
             const r = await searchCustomers(q);
-            setResults(r.ok ? r.data : []);
+            if (!cancelled) setResults(r.ok ? r.data : []);
         }, 300);
-        return () => clearTimeout(handle);
+        return () => { cancelled = true; clearTimeout(handle); };
     }, [query]);
 
     const addCustomer = (name: string, customerId?: string) => {
@@ -64,16 +77,21 @@ export default function CompletionReportScreen() {
     };
 
     const save = async () => {
+        if (!visit || saving) return; // a double tap must not create two ERP visits
+        setSaving(true);
         try {
-            if (!visit) return;
             const customers = entries.map(e => e.customer);
-            const customerIds = entries.map(e => e.customer_id).filter((x): x is string => !!x);
-            const synced = await tellTeam(await syncVisitToErp({ ...visit, customer_planned: customers, customer_ids: customerIds, completion: entries, dirty: true }));
+            const fromEntries = entries.map(e => e.customer_id).filter((x): x is string => !!x);
+            // Never wipe the ERP customers the visit already had.
+            const customerIds = fromEntries.length ? Array.from(new Set(fromEntries)) : (visit.customer_ids ?? []);
+            const synced = await tellTeam(await syncVisitToErp({ ...visit, customer_planned: customers, customer_ids: customerIds, completion: entries, dirty: true, saved_at: new Date().toISOString() }));
             await saveVisit(synced);
             setVisit(synced);
             setEditing(false);
         } catch {
             Alert.alert('Save failed', 'Could not save the completion report.');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -88,11 +106,14 @@ export default function CompletionReportScreen() {
             <ScreenHeader
                 title={headerTitle}
                 subtitle={visit ? `${visit.date_of_visit} · ${visit.executive || '-'}` : ''}
-                onBack={() => router.back()}
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/maintenance'))}
             />
 
-            <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
-                {!visit ? (
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+                {!loaded ? (
+                    <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
+                ) : !visit ? (
                     <Text style={[styles.hint, { color: colors.textSecondary }]}>Visit not found on this phone.</Text>
                 ) : !editing ? (
                     <>
@@ -205,12 +226,13 @@ export default function CompletionReportScreen() {
                             )}
                         </View>
 
-                        <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary }]} onPress={save}>
-                            <Text style={styles.saveText}>Save</Text>
+                        <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary, opacity: saving ? 0.6 : 1 }]} onPress={save} disabled={saving}>
+                            {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveText}>Save</Text>}
                         </TouchableOpacity>
                     </>
                 )}
             </ScrollView>
+            </KeyboardAvoidingView>
         </View>
     );
 }

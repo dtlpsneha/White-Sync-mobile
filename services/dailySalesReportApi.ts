@@ -236,8 +236,9 @@ export async function getDailySummary(params: {
             sales_executive: params.salesExecutive || '',
         });
         const res = await apiGet(apiUrl(`/api/method/get_daily_report_summary?${qs.toString()}`), await session());
-        if (!res.ok) return failure(`Server error (${res.status})`);
-        return { ok: true, data: res.data?.message };
+        if (!res.ok) return failure(res.status === 0 ? 'No connection. Check the network and try again.' : `Server error (${res.status})`);
+        if (!res.data?.message) return failure('ERPNext sent an empty answer. Please try again.');
+        return { ok: true, data: res.data.message };
     } catch {
         return failure('Network error');
     }
@@ -267,8 +268,9 @@ export async function getSalesInvoiceHistory(params: {
             payment_status: params.paymentStatus || '',
         });
         const res = await apiGet(apiUrl(`/api/method/get_sales_invoice_history_data?${qs.toString()}`), await session());
-        if (!res.ok) return failure(`Server error (${res.status})`);
-        return { ok: true, data: res.data?.message };
+        if (!res.ok) return failure(res.status === 0 ? 'No connection. Check the network and try again.' : `Server error (${res.status})`);
+        if (!res.data?.message) return failure('ERPNext sent an empty answer. Please try again.');
+        return { ok: true, data: res.data.message };
     } catch {
         return failure('Network error');
     }
