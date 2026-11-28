@@ -4,8 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, type ScrollViewInstance } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiPost } from '../utils/api';
 import { apiUrl } from '@/constants/config';
@@ -25,18 +24,15 @@ import { useResponsive } from '../hooks/useResponsive';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-/** Card that springs down on press and gives a light haptic tap. */
+/** Card that dips slightly while pressed. No vibration. */
 function Tappable({ onPress, style, children }: { onPress: () => void; style?: any; children: React.ReactNode }) {
     const scale = useSharedValue(1);
     const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
     return (
         <AnimatedPressable
-            onPressIn={() => { scale.value = withSpring(0.96, { damping: 15, stiffness: 320 }); }}
-            onPressOut={() => { scale.value = withSpring(1, { damping: 12, stiffness: 260 }); }}
-            onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
-                onPress();
-            }}
+            onPressIn={() => { scale.value = withTiming(0.97, { duration: 90 }); }}
+            onPressOut={() => { scale.value = withTiming(1, { duration: 140 }); }}
+            onPress={onPress}
             style={[style, pressStyle]}
         >
             {children}

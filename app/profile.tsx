@@ -2,18 +2,29 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { BackHandler, StyleSheet, Text, View, TouchableOpacity, ScrollView, Switch, Alert, Platform } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
-import { Colors, Radius, Shadow } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { BandChips, SectionCard } from '@/components/ui/Midnight';
 import Animated from 'react-native-reanimated';
 import { enterSection } from '@/constants/motion';
+
+/** The real version from app.json, e.g. "1.0.1 (build 3)". */
+function appVersion(): string {
+    const cfg: any = Constants.expoConfig ?? {};
+    const build = Platform.OS === 'android' ? cfg.android?.versionCode : cfg.ios?.buildNumber;
+    return `${cfg.version ?? '—'}${build ? ` (build ${build})` : ''}`;
+}
 
 export default function ProfileScreen() {
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
     const colors = Colors[theme];
     const isDark = theme === 'dark';
+    const insets = useSafeAreaInsets();
 
     // User State
     const [userName, setUserName] = useState('User');
@@ -96,103 +107,110 @@ export default function ProfileScreen() {
     };
 
     const firstLetter = userName ? userName.charAt(0).toUpperCase() : 'U';
+    const role = isManager ? 'Sales Manager' : 'Sales Executive';
+    const scope = showAllQuotes ? 'All quotes' : 'Own quotes only';
+
+    const infoRows: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }[] = [
+        { icon: 'mail-outline', label: 'Email / User ID', value: userId || '—' },
+        { icon: 'shield-checkmark-outline', label: 'Access level', value: isManager ? 'Manager' : 'Executive' },
+        { icon: 'eye-outline', label: 'Scope', value: scope },
+    ];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen options={{ headerShown: false }} />
 
-            <ScreenHeader title="Profile" onBack={() => router.replace('/home')} />
+            <ScreenHeader title="Profile" subtitle="Your account and app settings" align="left" onBack={() => router.replace('/home')}>
+                {/* Who is signed in, on the charcoal band. */}
+                <View style={styles.identity}>
+                    <View style={styles.avatar}>
+                        <Text style={[styles.avatarText, { color: colors.ink }]}>{firstLetter}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.userName} numberOfLines={1} maxFontSizeMultiplier={1.25}>{userName}</Text>
+                        <Text style={[styles.userRole, { color: colors.onInkMuted }]} numberOfLines={1} maxFontSizeMultiplier={1.25}>{role}</Text>
+                        <View style={styles.sessionPill}>
+                            <View style={[styles.onlineDot, { backgroundColor: colors.mint }]} />
+                            <Text style={[styles.sessionText, { color: colors.onInk }]}>Active session</Text>
+                        </View>
+                    </View>
+                </View>
+                <BandChips items={[isManager ? 'Manager' : 'Executive', scope]} />
+            </ScreenHeader>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {/* Header/Avatar Section */}
-                <Animated.View entering={enterSection(0)} style={styles.profileHeader}>
-                    <View style={[styles.avatar, { backgroundColor: colors.primarySoft, borderColor: colors.border }, Shadow.card(theme)]}>
-                        <Text style={[styles.avatarText, { color: colors.primary }]}>{firstLetter}</Text>
-                    </View>
-                    <Text style={[styles.userName, { color: colors.text }]}>{userName}</Text>
-                    <Text style={[styles.userRole, { color: colors.textSecondary }]}>{isManager ? 'Sales Manager' : 'Sales Executive'}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: colors.surfaceSecondary }]}>
-                        <View style={styles.onlineDot} />
-                        <Text style={[styles.statusText, { color: colors.textSecondary }]}>Active Session</Text>
-                    </View>
+            <ScrollView
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}
+                showsVerticalScrollIndicator={false}
+            >
+                <Animated.View entering={enterSection(0)}>
+                    <SectionCard icon="person" title="Account" subtitle="Signed in to ERPNext">
+                        <View>
+                            {infoRows.map((row, i) => (
+                                <View key={row.label} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                                    <View style={styles.infoLabelContainer}>
+                                        <Ionicons name={row.icon} size={16} color={colors.textSecondary} />
+                                        <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{row.label}</Text>
+                                    </View>
+                                    <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                        {row.value}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    </SectionCard>
                 </Animated.View>
 
-                {/* Account Details Card */}
-                <Animated.View entering={enterSection(1)} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}>
-                    <Text style={[styles.sectionTitle, { color: colors.primary }]}>Account Information</Text>
-                    
-                    <View style={styles.infoRow}>
-                        <View style={styles.infoLabelContainer}>
-                            <Ionicons name="mail-outline" size={16} color={colors.textSecondary} />
-                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Email / User ID</Text>
-                        </View>
-                        <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{userId || '---'}</Text>
-                    </View>
-                    
-                    <View style={[styles.infoRow, styles.borderTop, { borderColor: colors.border }]}>
-                        <View style={styles.infoLabelContainer}>
-                            <Ionicons name="shield-checkmark-outline" size={16} color={colors.textSecondary} />
-                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Access Level</Text>
-                        </View>
-                        <Text style={[styles.infoValue, { color: colors.text }]}>{isManager ? 'Manager' : 'Executive'}</Text>
-                    </View>
+                <Animated.View entering={enterSection(1)}>
+                    <SectionCard icon="settings" title="App preferences">
+                        <View>
+                            <View style={styles.settingItem}>
+                                <View style={[styles.iconBox, { backgroundColor: colors.surfaceSecondary }]}>
+                                    <Ionicons name={isDark ? 'moon' : 'moon-outline'} size={18} color={colors.text} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.settingLabel, { color: colors.text }]}>Dark mode</Text>
+                                    <Text style={[styles.settingSub, { color: colors.textSecondary }]}>{isDark ? 'On' : 'Off'}</Text>
+                                </View>
+                                <Switch
+                                    value={isDark}
+                                    onValueChange={toggleTheme}
+                                    trackColor={{ false: colors.surfaceVariant, true: colors.primary }}
+                                    thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
+                                />
+                            </View>
 
-                    <View style={[styles.infoRow, styles.borderTop, { borderColor: colors.border }]}>
-                        <View style={styles.infoLabelContainer}>
-                            <Ionicons name="eye-outline" size={16} color={colors.textSecondary} />
-                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Scope</Text>
+                            <TouchableOpacity
+                                style={[styles.settingItem, { borderTopWidth: 1, borderTopColor: colors.border }]}
+                                onPress={handleClearCache}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.iconBox, { backgroundColor: colors.success + '1A' }]}>
+                                    <Ionicons name="sync-outline" size={18} color={colors.success} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.settingLabel, { color: colors.text }]}>Sync & clear cache</Text>
+                                    <Text style={[styles.settingSub, { color: colors.textSecondary }]}>Re-checks pending quotes</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                            </TouchableOpacity>
                         </View>
-                        <Text style={[styles.infoValue, { color: colors.text }]}>{showAllQuotes ? 'All Quotes' : 'Own Quotes Only'}</Text>
-                    </View>
+                    </SectionCard>
                 </Animated.View>
 
-                {/* Preferences & Actions */}
-                <Animated.View entering={enterSection(2)} style={styles.settingsList}>
-                    <Text style={[styles.sectionTitle, { color: colors.primary, marginLeft: 8, marginBottom: 4 }]}>App Preferences</Text>
-
-                    {/* Dark Mode */}
-                    <View style={[styles.settingItem, { backgroundColor: colors.surface, borderColor: colors.border }, Shadow.card(theme)]}>
-                        <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
-                            <Ionicons name="moon-outline" size={20} color={colors.primary} />
-                        </View>
-                        <Text style={[styles.settingLabel, { color: colors.text }]}>Dark Mode</Text>
-                        <Switch
-                            value={isDark}
-                            onValueChange={toggleTheme}
-                            trackColor={{ false: colors.surfaceVariant, true: colors.primary }}
-                            thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
-                        />
-                    </View>
-
-                    {/* Reset / Sync Cache */}
+                <Animated.View entering={enterSection(2)}>
                     <TouchableOpacity
-                        style={[styles.settingItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                        onPress={handleClearCache}
-                    >
-                        <View style={[styles.iconBox, { backgroundColor: colors.success + '1A' }]}>
-                            <Ionicons name="sync-outline" size={20} color={colors.success} />
-                        </View>
-                        <Text style={[styles.settingLabel, { color: colors.text }]}>Sync & Clear Cache</Text>
-                        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-                    </TouchableOpacity>
-
-                    {/* Logout */}
-                    <TouchableOpacity 
-                        style={[styles.settingItem, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 8 }, Shadow.card(theme)]}
+                        style={[styles.logout, { borderColor: colors.danger, backgroundColor: colors.surface }]}
                         onPress={handleLogout}
+                        activeOpacity={0.8}
                     >
-                        <View style={[styles.iconBox, { backgroundColor: colors.danger + '1A' }]}>
-                            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-                        </View>
-                        <Text style={[styles.settingLabel, { color: colors.danger }]}>Sign Out</Text>
-                        <Ionicons name="chevron-forward" size={18} color={colors.danger} opacity={0.5} />
+                        <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+                        <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
                     </TouchableOpacity>
                 </Animated.View>
 
-                {/* Version Info Footer */}
                 <Animated.View entering={enterSection(3)} style={styles.footer}>
-                    <Text style={[styles.footerText, { color: colors.textSecondary }]}>White Sync App</Text>
-                    <Text style={[styles.versionText, { color: colors.textSecondary }]}>Version 1.0.0 (Build 24)</Text>
+                    <Text style={[styles.footerText, { color: colors.textSecondary }]}>White Sync</Text>
+                    <Text style={[styles.versionText, { color: colors.textSecondary }]}>Version {appVersion()}</Text>
                 </Animated.View>
             </ScrollView>
         </View>
@@ -200,134 +218,50 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingHorizontal: 20,
-        paddingTop: 10,
-        paddingBottom: 30,
-    },
-    profileHeader: {
+    container: { flex: 1 },
+    scrollContent: { padding: 16, gap: 14 },
+
+    identity: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    avatar: { width: 60, height: 60, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+    avatarText: { fontSize: 26, fontWeight: '900' },
+    userName: { color: '#FFFFFF', fontSize: 20, fontWeight: '800', letterSpacing: -0.2 },
+    userRole: { fontSize: 13, fontWeight: '600', marginTop: 2 },
+    sessionPill: {
+        flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 24,
+        alignSelf: 'flex-start',
+        gap: 6,
+        marginTop: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: Radius.pill,
+        backgroundColor: 'rgba(255,255,255,0.1)',
     },
-    avatar: {
-        width: 90,
-        height: 90,
-        borderRadius: Radius.lg,
+    onlineDot: { width: 7, height: 7, borderRadius: 4 },
+    sessionText: { fontSize: 11.5, fontWeight: '700' },
+
+    infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, gap: 12 },
+    infoLabelContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    infoLabel: { fontSize: 13.5, fontWeight: '600' },
+    infoValue: { fontSize: 13.5, fontWeight: '800', flexShrink: 1, textAlign: 'right' },
+
+    settingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
+    iconBox: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    settingLabel: { fontSize: 14.5, fontWeight: '700' },
+    settingSub: { fontSize: 12, marginTop: 1 },
+
+    logout: {
+        flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
+        gap: 8,
+        height: 54,
+        borderRadius: 16,
         borderWidth: 1.5,
     },
-    avatarText: {
-        fontSize: 36,
-        fontWeight: '900',
-    },
-    userName: {
-        fontSize: 22,
-        fontWeight: '900',
-        marginBottom: 4,
-    },
-    userRole: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 10,
-    },
-    statusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    onlineDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#2F7D5B',
-        marginRight: 8,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    card: {
-        borderRadius: Radius.lg,
-        padding: 16,
-        borderWidth: 1,
-        marginBottom: 20,
-    },
-    sectionTitle: {
-        fontSize: 12,
-        fontWeight: '900',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginBottom: 12,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-    },
-    borderTop: {
-        borderTopWidth: 1,
-    },
-    infoLabelContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    infoLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    infoValue: {
-        fontSize: 14,
-        fontWeight: '700',
-        maxWidth: '55%',
-    },
-    settingsList: {
-        gap: 10,
-    },
-    settingItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 14,
-        borderRadius: Radius.lg,
-        borderWidth: 1,
-    },
-    iconBox: {
-        width: 38,
-        height: 38,
-        borderRadius: Radius.sm,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 14,
-    },
-    settingLabel: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: '700',
-    },
-    footer: {
-        alignItems: 'center',
-        marginTop: 32,
-        gap: 4,
-    },
-    footerText: {
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        opacity: 0.6,
-    },
-    versionText: {
-        fontSize: 11,
-        fontWeight: '500',
-        opacity: 0.5,
-    }
+    logoutText: { fontSize: 16, fontWeight: '800' },
+
+    footer: { alignItems: 'center', marginTop: 12, gap: 4 },
+    footerText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, opacity: 0.6 },
+    versionText: { fontSize: 11, fontWeight: '500', opacity: 0.6 },
 });
