@@ -26,6 +26,7 @@ import { Colors, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useResponsive } from '@/hooks/useResponsive';
 import { notificationService } from '@/services/NotificationService';
+import { onSessionEnd } from '@/utils/sessionCache';
 import { age, erpSession, Filing, Job, JobView, People, PickedFile, PickedVoice, team } from '@/services/teamApi';
 import * as Notifications from 'expo-notifications';
 import { isTeamAlert } from '@/utils/notificationTarget';
@@ -69,8 +70,14 @@ export default function TeamScreen() {
     const chatRef = useRef<FlatList<ChatItem>>(null);
     const me = people?.me.id;
 
+    // Bumped on login and logout: answers still on their way from the old session are dropped.
+    const session = useRef(0);
+    const [sessionTick, setSessionTick] = useState(0);
+
     const loadChat = useCallback(async () => {
+        const gen = session.current;
         const r = await team.jobs('feed');
+        if (gen !== session.current) return null;
         if (!r.ok) return r.error;
         const fresh = r.data.jobs;
         setChat(prev => mergeNewestFirst(fresh, prev));
@@ -79,15 +86,18 @@ export default function TeamScreen() {
     }, []);
 
     const loadList = useCallback(async (which: Exclude<Tab, 'chat'>) => {
+        const gen = session.current;
         const r = await team.jobs(which as JobView);
+        if (gen !== session.current) return null;
         if (!r.ok) return r.error;
         if (tabRef.current === which) setList(r.data.jobs);
         return null;
     }, []);
 
     const loadMine = useCallback(async () => {
+        const gen = session.current;
         const r = await team.jobs('mine');
-        if (r.ok) {
+        if (gen === session.current && r.ok) {
             setMine(r.data.jobs);
             await announceNew(r.data.jobs);
         }
@@ -101,7 +111,18 @@ export default function TeamScreen() {
         setRefreshing(false);
     }, [loadChat, loadList, loadMine]);
 
-    useEffect(() => { team.people().then(r => { if (r.ok) setPeople(r.data); }); }, []);
+    // Who I am comes from the people list: loaded again for each session, never kept from the last one.
+    useEffect(() => {
+        const gen = session.current;
+        team.people().then(r => { if (r.ok && gen === session.current) setPeople(r.data); });
+    }, [sessionTick]);
+
+    useEffect(() => onSessionEnd(() => {
+        session.current += 1;
+        setChat([]); setOlder(null); setList([]); setMine(null); setPeople(null); setError(null);
+        setLoading(true);
+        setSessionTick(t => t + 1);
+    }), []);
 
     useFocusEffect(useCallback(() => {
         refresh();
