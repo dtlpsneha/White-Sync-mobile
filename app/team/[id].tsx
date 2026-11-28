@@ -32,6 +32,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
     age, Filing, Job, JobDetail, JobKind, Payments, People, PickedFile, PickedVoice, Reply, team,
 } from '@/services/teamApi';
+import { onSessionEnd } from '@/utils/sessionCache';
 import * as Notifications from 'expo-notifications';
 import { isTeamAlert } from '@/utils/notificationTarget';
 
@@ -65,12 +66,28 @@ export default function JobScreen() {
     const [rereading, setRereading] = useState<string | null>(null);
     const scrollRef = useRef<ScrollViewInstance>(null);
 
+    // Bumped on login and logout: answers still on their way from the old session are dropped.
+    const session = useRef(0);
+    const [sessionTick, setSessionTick] = useState(0);
+
     const load = useCallback(async () => {
+        const gen = session.current;
         const r = await team.job(id);
+        if (gen !== session.current) return;
         if (r.ok) { setDetail(r.data); setError(null); } else setError(r.error);
     }, [id]);
 
-    useEffect(() => { team.people().then(r => { if (r.ok) setPeople(r.data); }); }, []);
+    // Who I am comes from the people list: loaded again for each session, never kept from the last one.
+    useEffect(() => {
+        const gen = session.current;
+        team.people().then(r => { if (r.ok && gen === session.current) setPeople(r.data); });
+    }, [sessionTick]);
+
+    useEffect(() => onSessionEnd(() => {
+        session.current += 1;
+        setDetail(null); setPeople(null); setError(null);
+        setSessionTick(t => t + 1);
+    }), []);
     useFocusEffect(useCallback(() => {
         load();
         const t = setInterval(load, POLL_MS);

@@ -11,6 +11,8 @@
  * times to take effect.
  */
 
+import { refusedPart, showAccessAlert } from '@/utils/accessAlert';
+
 interface ApiResponse<T = any> {
     ok: boolean;
     status: number;
@@ -115,6 +117,10 @@ function request<T = any>({
 
             // The phone sent a session and ERPNext says it is no longer valid.
             if (cookies && sessionExpired(xhr.status, xhr.responseText)) notifySessionExpired();
+            // Signed in, but this ERPNext login may not open this: say so.
+            else if (cookies && xhr.status === 403 && /"exc_type"\s*:\s*"PermissionError"/.test(xhr.responseText || '')) {
+                showAccessAlert(refusedPart(url));
+            }
 
             if (!ok) {
                 console.warn(`[api ${method}] ${xhr.status} response body:`, xhr.responseText?.substring(0, 500));

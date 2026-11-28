@@ -18,6 +18,7 @@
  */
 
 import { smartopsUrl } from '@/constants/config';
+import { authHeaders } from '@/services/teamApi';
 
 // ─────────────────────────── contracts ───────────────────────────
 // Mirrors apps/api/app/bff/chat.py. Only the fields this screen reads are typed.
@@ -166,26 +167,16 @@ export function chatErrorMessage(err: unknown): string {
 // ─────────────────────────── transport ───────────────────────────
 
 /**
- * No `Authorization` header, deliberately.
- *
- * The chat routes do not 401 on a missing caller — they fall back to an anonymous STAFF
- * caller, which is what `ChatOut.me` reports back (`signed_in: false`, `profile: "staff"`,
- * and a `note` saying staff cannot approve anything). So this screen works with no
- * SmartOps sign-in at all, and the app avoids asking for a SECOND set of credentials on
- * top of the ERPNext login it already has.
- *
- * That also means chat history is not per-person here: sessions are scoped to whoever the
- * backend resolved, so every anonymous caller shares one history. If per-user history or
- * approval rights are ever needed, the fix is to sign in against SmartOps' own
- * `/bff/v1/login` with the existing ERPNext credentials and send the returned token as a
- * bearer here — not to build a separate SmartOps login screen.
- *
- * `X-Client: mobile` is what tells the API to skip CSRF for this transport (CSRF defends
- * an ambient browser-attached cookie, which this has none of).
+ * Every call carries this person's own SmartOps token (`authHeaders()` in teamApi), which
+ * also sets `X-Client: mobile`. The chat routes still answer without a token, as an
+ * anonymous staff caller with a shared history -- which is what happens when the sign-in
+ * is refused.
  */
 async function smartopsFetch(path: string, init?: RequestInit): Promise<Response> {
     const headers: Record<string, string> = {
-        'X-Client': 'mobile',
+        // The signed-in person's own token (and X-Client: mobile), so chat history and
+        // rights are theirs and never those of an earlier user of this phone.
+        ...(await authHeaders()),
         ...((init?.headers as Record<string, string>) ?? {}),
     };
     // GETs give up after 15 s; a chat send (the model thinking) after 60 s.

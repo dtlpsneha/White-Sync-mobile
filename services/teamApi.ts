@@ -17,6 +17,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { smartopsUrl } from '@/constants/config';
 import { apiGet, apiPost, apiPostForm } from '@/utils/api';
+import { onSessionEnd } from '@/utils/sessionCache';
+import { showAccessAlert } from '@/utils/accessAlert';
 
 const TOKEN_KEY = 'smartops_token';
 
@@ -287,9 +289,7 @@ async function keptToken(): Promise<string | null> {
     }
 }
 
-async function signIn(): Promise<string | null> {
-    const sid = await erpSession();
-    if (!sid) return null;
+async function signIn(sid: string): Promise<string | null> {
     const res = await apiPost<{ session_token?: string }>(
         smartopsUrl('/bff/v1/login/erpnext'), { sid }, null, { 'X-Client': 'mobile' });
     const token = res.ok ? res.data?.session_token : null;
@@ -297,26 +297,54 @@ async function signIn(): Promise<string | null> {
     // Why sign-in failed is what the person needs to see ("x@y is not linked to a SmartOps
     // staff member yet"), not the 401 of the call that triggered it.
     signInRefusal = token ? null : { status: res.status, error: why(res.status, res.data) };
+    if (res.status === 403) showAccessAlert(why(res.status, res.data));
     return token ?? null;
 }
 
 let signInRefusal: { status: number; error: string } | null = null;
 
-let signingIn: Promise<string | null> | null = null;
+// The sign-in in progress, and the ERPNext session it is for. Another person's sign-in must
+// never be handed to this session's request, so it is shared only with the same session.
+let signingIn: { sid: string; run: Promise<string | null> } | null = null;
 
 async function token(fresh = false): Promise<string | null> {
+    const sid = await erpSession();
+    if (!sid) return null;
     if (!fresh) {
         const kept = await keptToken();
         if (kept) return kept;
     }
-    // One sign-in at a time: the list, the people and the badge all ask at app start.
-    signingIn = signingIn ?? signIn().finally(() => { signingIn = null; });
-    return signingIn;
+    // One sign-in at a time per session: the list, the people and the badge all ask at app start.
+    if (signingIn && signingIn.sid === sid) return signingIn.run;
+    const run = signIn(sid);
+    const entry = { sid, run };
+    signingIn = entry;
+    run.finally(() => { if (signingIn === entry) signingIn = null; });
+    return run;
 }
+
+// Login or logout: nothing from the previous session is kept in memory for Team.
+onSessionEnd(() => {
+    signingIn = null;
+    signInRefusal = null;
+});
 
 export async function authHeaders(): Promise<Record<string, string>> {
     const t = await token();
     return t ? { 'X-Client': 'mobile', Authorization: `Bearer ${t}` } : { 'X-Client': 'mobile' };
+}
+
+/**
+ * Called on sign-out, before the stored token is deleted: ends the session on the server
+ * and lets it clear any cookie left on the phone. Never waits on the network.
+ */
+export async function endSmartOpsSession(): Promise<void> {
+    let headers: Record<string, string> = { 'X-Client': 'mobile' };
+    try {
+        const kept = JSON.parse((await SecureStore.getItemAsync(TOKEN_KEY)) ?? 'null') as { token?: string } | null;
+        if (kept?.token) headers = { ...headers, Authorization: `Bearer ${kept.token}` };
+    } catch { /* an unreadable token: still clear the cookie */ }
+    apiPost(smartopsUrl('/bff/v1/logout'), {}, null, headers).catch(() => undefined);
 }
 
 /** Forget the SmartOps token -- called on logout alongside the ERPNext session. */
@@ -335,7 +363,14 @@ function why(status: number, data: any): string {
 }
 
 async function call<T>(send: (headers: Record<string, string>) => Promise<{ ok: boolean; status: number; data: any }>): Promise<Result<T>> {
-    let res = await send(await authHeaders());
+    const headers = await authHeaders();
+    // Never ask SmartOps anything without this person's own sign-in: the server could take
+    // the request as whoever used the phone before.
+    if (!headers.Authorization) {
+        return { ok: false, ...(signInRefusal ?? { status: 401, error: 'Not signed in to SmartOps.' }) };
+    }
+    let res = await send(headers);
+    if (res.status === 403) showAccessAlert(why(res.status, res.data));
     if (res.status === 401) {
         const t = await token(true);
         if (t) res = await send({ 'X-Client': 'mobile', Authorization: `Bearer ${t}` });

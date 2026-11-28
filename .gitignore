@@ -65,3 +65,8 @@ latest_build_trigger.json
 check_address.js
 check_contact.js
 check_contact2.js
+
+# Local tool output (browser snapshots, screenshots): never upload or commit
+.playwright-mcp/
+.claude/
+kanboard-new-task.png
