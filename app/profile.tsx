@@ -3,6 +3,7 @@ import { BackHandler, StyleSheet, Text, View, TouchableOpacity, ScrollView, Swit
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
@@ -108,6 +109,31 @@ export default function ProfileScreen() {
         );
     };
 
+    /**
+     * A local notification raised by the phone itself (nothing is sent to ERPNext), to see
+     * how alerts look: the system banner, the in-app card and the Notifications list.
+     */
+    const sendTestNotification = async () => {
+        try {
+            let perm = await Notifications.getPermissionsAsync();
+            if (!perm.granted) perm = await Notifications.requestPermissionsAsync();
+            if (!perm.granted) {
+                Alert.alert('Notifications are off', 'Allow notifications for White Sync in the phone settings, then try again.');
+                return;
+            }
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: 'Test notification',
+                    body: 'This is how alerts look in White Sync. Nothing needs doing.',
+                    data: { test: true },
+                },
+                trigger: null,
+            });
+        } catch (e: any) {
+            Alert.alert('Could not send', e?.message || 'The phone did not accept the notification.');
+        }
+    };
+
     const firstLetter = userName ? userName.charAt(0).toUpperCase() : 'U';
     const role = isManager ? 'Sales Manager' : 'Sales Executive';
     const scope = showAllQuotes ? 'All quotes' : 'Own quotes only';
@@ -192,6 +218,21 @@ export default function ProfileScreen() {
                                 <View style={{ flex: 1 }}>
                                     <Text style={[styles.settingLabel, { color: colors.text }]}>Sync & clear cache</Text>
                                     <Text style={[styles.settingSub, { color: colors.textSecondary }]}>Re-checks pending quotes</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.settingItem, { borderTopWidth: 1, borderTopColor: colors.border }]}
+                                onPress={sendTestNotification}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
+                                    <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.settingLabel, { color: colors.text }]}>Send a test notification</Text>
+                                    <Text style={[styles.settingSub, { color: colors.textSecondary }]}>See how alerts look on this phone</Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                             </TouchableOpacity>
