@@ -10,7 +10,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { attachmentReads, readAttachment, rupees, stillReading, type FileRead } from '@/services/attachmentsApi';
+import { FileReadView } from '@/components/FileReadView';
 import {
     ActivityIndicator,
     Alert,
@@ -156,6 +158,27 @@ export default function MaintenanceDetailScreen() {
     const [addresses, setAddresses] = useState<any[]>([]);
     const [isSearchingAddress, setIsSearchingAddress] = useState(false);
     const [activeTab, setActiveTab] = useState<'details' | 'location' | 'expenses' | 'summary'>('details');
+
+    // What SmartOps read from this visit's bill photos (OCR). ERPNext's Maintenance Visit
+    // keeps neither the bills nor the amounts, so this is where a bill can be seen again.
+    const [billReads, setBillReads] = useState<FileRead[] | null>(null);
+    const billPolls = useRef(0);
+    const visitName = Array.isArray(id) ? id[0] : (id as string | undefined);
+    const loadBillReads = () => {
+        if (!visitName) return;
+        billPolls.current = 0;
+        attachmentReads('Maintenance Visit', visitName).then(setBillReads);
+    };
+    useEffect(loadBillReads, [visitName]); // eslint-disable-line react-hooks/exhaustive-deps
+    // While a bill is still being read, look again every 5 s (for up to 3 minutes).
+    useEffect(() => {
+        if (!visitName || !stillReading(billReads) || billPolls.current >= 36) return;
+        const t = setTimeout(() => {
+            billPolls.current += 1;
+            attachmentReads('Maintenance Visit', visitName).then(r => { if (r) setBillReads(r); });
+        }, 5000);
+        return () => clearTimeout(t);
+    }, [billReads, visitName]);
 
     // Sales Executive Search States
     const [salesExecutives, setSalesExecutives] = useState<any[]>([]);
@@ -637,6 +660,7 @@ export default function MaintenanceDetailScreen() {
                     if (p.image && p.image.startsWith('file://')) {
                         const uploadRes = await uploadFile(`${IMAGE_HOST}/api/method/upload_file`, { uri: p.image }, sessionCookies);
                         if (uploadRes.ok && uploadRes.data?.message?.file_url) {
+                            if (visitName) readAttachment('Maintenance Visit', visitName, uploadRes.data.message.file_url, 'Visit photo');
                             return { ...p, image: uploadRes.data.message.file_url };
                         }
                     }
@@ -645,12 +669,14 @@ export default function MaintenanceDetailScreen() {
             };
 
             // 2. Upload Images for Expenses if new
-            const uploadExpenseImages = async (expenses: any[]) => {
+            // `label` is the expense type: SmartOps keeps each bill (and what it says) under it.
+            const uploadExpenseImages = async (expenses: any[], label: string) => {
                 return await Promise.all(expenses.map(async (e) => {
                     const img = e.attach_image || e.image;
                     if (img && img.startsWith('file://')) {
                         const uploadRes = await uploadFile(`${IMAGE_HOST}/api/method/upload_file`, { uri: img }, sessionCookies);
                         if (uploadRes.ok && uploadRes.data?.message?.file_url) {
+                            if (visitName) readAttachment('Maintenance Visit', visitName, uploadRes.data.message.file_url, label);
                             const updatedRow = { ...e };
                             if (e.attach_image !== undefined) updatedRow.attach_image = uploadRes.data.message.file_url;
                             if (e.image !== undefined) updatedRow.image = uploadRes.data.message.file_url;
@@ -663,10 +689,10 @@ export default function MaintenanceDetailScreen() {
             };
 
             const purposes_updated = await uploadPurposeImages(form.purposes);
-            const food_updated = await uploadExpenseImages(form.food_expenses);
-            const travel_updated = await uploadExpenseImages(form.travel_expenses);
-            const stay_updated = await uploadExpenseImages(form.stay_expenses);
-            const other_updated = await uploadExpenseImages(form.other_expenses);
+            const food_updated = await uploadExpenseImages(form.food_expenses, 'Food');
+            const travel_updated = await uploadExpenseImages(form.travel_expenses, 'Travel');
+            const stay_updated = await uploadExpenseImages(form.stay_expenses, 'Stay');
+            const other_updated = await uploadExpenseImages(form.other_expenses, 'Other');
 
             const payload = {
                 doctype: 'Maintenance Visit',
@@ -742,7 +768,7 @@ export default function MaintenanceDetailScreen() {
             }
 
             Alert.alert("Success", "Record synced to ERPNext.", [
-                { text: "OK", onPress: () => { setIsEditing(false); fetchMaintenanceDetails(); } }
+                { text: "OK", onPress: () => { setIsEditing(false); fetchMaintenanceDetails(); loadBillReads(); } }
             ]);
         } catch (err) {
             console.error('Update Error:', err);
@@ -1341,6 +1367,42 @@ export default function MaintenanceDetailScreen() {
                                     </View>
                                 </View>
                             </Section>
+
+                            {/* Bills read by SmartOps (OCR), against what was typed */}
+                            {(() => {
+                                const bills = (billReads || []).filter(r => r.label && r.label !== 'Visit photo');
+                                if (!bills.length) return null;
+                                const typed: Record<string, number> = {
+                                    Food: Number(form.total_food_cost) || 0, Travel: Number(form.total_travel_cost) || 0,
+                                    Stay: Number(form.total_stay_cost) || 0, Other: Number(form.total_other_cost) || 0,
+                                };
+                                const labels = Array.from(new Set(bills.map(b => b.label)));
+                                return (
+                                    <Section title={`Bills read (${bills.length})`} icon="scan">
+                                        <View style={{ gap: 12 }}>
+                                            {labels.map(l => {
+                                                const read = bills.filter(b => b.label === l && b.state === 'read' && b.total);
+                                                const sum = read.reduce((s, b) => s + (b.total || 0), 0);
+                                                const differs = read.length > 0 && l in typed && Math.abs(sum - typed[l]) > 1;
+                                                return (
+                                                    <View key={l} style={[styles.billSum, { borderColor: differs ? '#D99A14' : colors.border }]}>
+                                                        <Text style={[styles.billSumLabel, { color: colors.text }]}>{l}</Text>
+                                                        <Text style={[styles.billSumText, { color: differs ? '#D99A14' : colors.textSecondary }]}>
+                                                            Bills {read.length ? rupees(sum) : '—'}{l in typed ? ` · entered ${rupees(typed[l])}` : ''}
+                                                        </Text>
+                                                    </View>
+                                                );
+                                            })}
+                                            {bills.map((b, i) => (
+                                                <View key={`${b.file_url}-${i}`} style={[styles.billRow, { borderTopColor: colors.border }]}>
+                                                    <Text style={[styles.billSumLabel, { color: colors.text }]}>{b.label} bill</Text>
+                                                    <FileReadView read={b} theme={theme} refLabel="Bill no" partyLabel="Shop / vendor" />
+                                                </View>
+                                            ))}
+                                        </View>
+                                    </Section>
+                                );
+                            })()}
 
                             {/* Food Expenses */}
                             <Section title="Food Expenses" icon="restaurant">
@@ -2602,6 +2664,10 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
     },
+    billSum: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8 },
+    billSumLabel: { fontSize: 13, fontWeight: '800' },
+    billSumText: { fontSize: 12, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
+    billRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10, gap: 6 },
     attachmentRow: {
         flexDirection: 'row',
         alignItems: 'center',

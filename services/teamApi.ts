@@ -347,6 +347,9 @@ async function call<T>(send: (headers: Record<string, string>) => Promise<{ ok: 
 const get = <T>(path: string) => call<T>(h => apiGet(smartopsUrl(path), null, { ...h, 'Cache-Control': 'no-cache' }));
 const post = <T>(path: string, body: unknown = {}) => call<T>(h => apiPost(smartopsUrl(path), body, null, h));
 
+/** The signed-in SmartOps calls, for other screens that talk to SmartOps as this person. */
+export const smartopsAs = { get, post };
+
 function form(body: string, file?: PickedFile | null, voice?: PickedVoice | null, filing?: Filing | null): FormData {
     const f = new FormData();
     f.append('body', body);
